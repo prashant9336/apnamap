@@ -18,16 +18,18 @@ export async function GET(request: Request) {
             return cookieStore.getAll();
           },
           setAll(
-  cookieList: Array<{
-    name: string;
-    value: string;
-    options?: any;
-  }>
-) {
-  cookieList.forEach(({ name, value, options }) => {
-    cookieStore.set(name, value, options);
-  });
-}
+            cookieList: Array<{
+              name: string;
+              value: string;
+              options?: CookieOptions;
+            }>
+          ) {
+            cookieList.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options);
+            });
+          },
+        },
+      }
     );
 
     await supabase.auth.exchangeCodeForSession(code);
