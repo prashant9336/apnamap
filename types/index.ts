@@ -65,6 +65,7 @@ export interface Shop {
   open_days: string[];
   avg_rating: number;
   review_count: number;
+  view_count: number;
   created_at: string;
   // joined
   locality?: Locality;
@@ -139,8 +140,8 @@ export interface WalkShop extends Shop {
 }
 
 export interface GeoState {
-  lat: number;
-  lng: number;
+  lat: number | null;
+  lng: number | null;
   accuracy: number | null;
   loading: boolean;
   error: string | null;
