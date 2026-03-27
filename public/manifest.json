@@ -1,0 +1,17 @@
+{
+  "name": "ApnaMap — Walk Your City",
+  "short_name": "ApnaMap",
+  "description": "Hyperlocal discovery. Walk your city digitally.",
+  "start_url": "/explore",
+  "display": "standalone",
+  "background_color": "#05070C",
+  "theme_color": "#05070C",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Walk View", "url": "/explore", "description": "Walk your city" },
+    { "name": "Offers",    "url": "/offers",  "description": "Live offers nearby" }
+  ]
+}

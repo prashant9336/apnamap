@@ -1,0 +1,176 @@
+"use client";
+import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+import { formatDistance } from "@/lib/geo/distance";
+import type { Shop, Offer } from "@/types";
+
+export default function ShopPage() {
+  const { slug } = useParams<{ slug: string }>();
+  const router   = useRouter();
+  const [shop,    setShop]    = useState<Shop | null>(null);
+  const [offers,  setOffers]  = useState<Offer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saved,   setSaved]   = useState(false);
+
+  useEffect(() => {
+    const sb = createClient();
+    sb.from("shops").select(`
+      *,
+      locality:localities(name, city:cities(name)),
+      category:categories(name, icon, color),
+      offers(*)
+    `).eq("slug", slug).eq("is_approved", true).single()
+      .then(({ data }) => {
+        if (!data) { router.push("/explore"); return; }
+        setShop(data as any);
+        setOffers((data as any).offers?.filter((o: Offer) => o.is_active) ?? []);
+        setLoading(false);
+        // Track view
+        fetch("/api/analytics", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ shop_id: data.id, event_type: "view" }) });
+      });
+  }, [slug, router]);
+
+  function handleAction(type: "call" | "whatsapp" | "direction") {
+    if (!shop) return;
+    fetch("/api/analytics", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ shop_id: shop.id, event_type: type }) });
+    if (type === "call" && shop.phone) window.location.href = `tel:${shop.phone}`;
+    if (type === "whatsapp" && shop.whatsapp) window.open(`https://wa.me/91${shop.whatsapp}?text=Hi, I found you on ApnaMap!`);
+    if (type === "direction") window.open(`https://maps.google.com/?q=${shop.lat},${shop.lng}`);
+  }
+
+  async function toggleSave() {
+    const r = await fetch("/api/favorites", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ shop_id: shop?.id }) });
+    if (r.status === 401) { router.push("/auth/login"); return; }
+    const d = await r.json();
+    setSaved(d.saved);
+  }
+
+  if (loading) return (
+    <div className="min-h-screen p-4 space-y-3" style={{ background: "var(--bg)" }}>
+      <div className="h-48 rounded-2xl shimmer" />
+      <div className="h-10 rounded-xl shimmer w-3/4" />
+      <div className="h-6 rounded-lg shimmer w-1/2" />
+    </div>
+  );
+  if (!shop) return null;
+
+  const cat = (shop as any).category;
+  const loc = (shop as any).locality;
+
+  return (
+    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
+      {/* Back button */}
+      <div className="sticky top-0 z-50 flex items-center gap-3 px-4 py-3"
+        style={{ background: "rgba(5,7,12,0.95)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+        <button onClick={() => router.back()} className="text-xl">←</button>
+        <span className="font-syne font-bold text-base flex-1 truncate">{shop.name}</span>
+        <button onClick={toggleSave} className="text-xl">{saved ? "❤️" : "🤍"}</button>
+      </div>
+
+      {/* Cover */}
+      <div className="relative" style={{ height: 200, background: `linear-gradient(135deg,${cat?.color ?? "#FF5E1A"}22, rgba(5,7,12,0.9) 80%)` }}>
+        <div className="absolute inset-0 flex items-center justify-center text-8xl opacity-20">{cat?.icon ?? "🏪"}</div>
+        <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between">
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl"
+            style={{ background: `${cat?.color ?? "var(--accent)"}22`, border: `1px solid ${cat?.color ?? "var(--accent)"}44` }}>
+            {cat?.icon ?? "🏪"}
+          </div>
+          <span className="text-xs font-bold px-2.5 py-1 rounded-full"
+            style={shop.is_active ? { background: "rgba(31,187,90,0.18)", color: "var(--green)", border: "1px solid rgba(31,187,90,0.3)" }
+              : { background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.4)" }}>
+            {shop.is_active ? "● OPEN" : "○ CLOSED"}
+          </span>
+        </div>
+      </div>
+
+      <div className="px-4 py-4">
+        {/* Name */}
+        <h1 className="font-syne font-black text-2xl leading-tight mb-1" style={{ letterSpacing: "-0.5px" }}>{shop.name}</h1>
+        <div className="flex items-center gap-2 flex-wrap mb-4">
+          <span className="text-sm" style={{ color: cat?.color ?? "var(--accent)" }}>{cat?.name}</span>
+          <span style={{ color: "rgba(255,255,255,0.2)" }}>·</span>
+          <span className="text-sm" style={{ color: "var(--t2)" }}>{loc?.name}</span>
+          {shop.avg_rating > 0 && (
+            <>
+              <span style={{ color: "rgba(255,255,255,0.2)" }}>·</span>
+              <span className="text-sm font-semibold" style={{ color: "var(--gold)" }}>★ {shop.avg_rating.toFixed(1)} ({shop.review_count})</span>
+            </>
+          )}
+        </div>
+
+        {/* Description */}
+        {shop.description && (
+          <p className="text-sm leading-relaxed mb-5" style={{ color: "var(--t2)" }}>{shop.description}</p>
+        )}
+
+        {/* Action buttons */}
+        <div className="grid grid-cols-3 gap-2.5 mb-6">
+          {[
+            { label: "📞 Call",        fn: () => handleAction("call"),      show: !!shop.phone },
+            { label: "💬 WhatsApp",    fn: () => handleAction("whatsapp"),  show: !!shop.whatsapp },
+            { label: "🧭 Directions",  fn: () => handleAction("direction"), show: true },
+          ].filter((a) => a.show).map((a) => (
+            <button key={a.label} onClick={a.fn}
+              className="py-3 rounded-xl text-sm font-bold transition-all"
+              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)", color: "var(--t1)" }}>
+              {a.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Offers */}
+        {offers.length > 0 && (
+          <div className="mb-6">
+            <h2 className="font-syne font-bold text-base mb-3">🎯 Active Offers</h2>
+            <div className="space-y-2.5">
+              {offers.map((offer) => (
+                <div key={offer.id} className="p-3.5 rounded-2xl"
+                  style={{
+                    background: offer.tier === 1 ? "linear-gradient(135deg,rgba(255,60,0,0.16),rgba(255,140,0,0.08))" : "rgba(255,255,255,0.034)",
+                    border: `1px solid ${offer.tier === 1 ? "rgba(255,80,0,0.28)" : "rgba(255,255,255,0.07)"}`,
+                  }}>
+                  {offer.tier === 1 && <p className="text-[9px] font-black uppercase tracking-wide mb-1" style={{ color: "#FF6830" }}>⭐ Big Deal</p>}
+                  <p className="font-bold text-sm mb-1">{offer.title}</p>
+                  {offer.description && <p className="text-xs mb-2" style={{ color: "var(--t2)" }}>{offer.description}</p>}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs" style={{ color: offer.ends_at ? "var(--gold)" : "var(--t3)" }}>
+                      {offer.ends_at ? `⏰ Ends ${new Date(offer.ends_at).toLocaleDateString("en-IN")}` : "Ongoing"}
+                    </span>
+                    {offer.coupon_code && (
+                      <button
+                        onClick={() => { navigator.clipboard.writeText(offer.coupon_code!); }}
+                        className="font-mono text-xs px-2.5 py-1 rounded-lg"
+                        style={{ background: "rgba(255,94,26,0.12)", color: "var(--accent)", border: "1px dashed rgba(255,94,26,0.3)" }}>
+                        {offer.coupon_code} · Copy
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Info */}
+        <div className="space-y-3 pb-8">
+          <h2 className="font-syne font-bold text-base">ℹ️ Info</h2>
+          {[
+            { icon: "📍", label: shop.address },
+            { icon: "🕐", label: shop.open_time ? `${shop.open_time} – ${shop.close_time}` : null },
+            { icon: "📞", label: shop.phone },
+            { icon: "💬", label: shop.whatsapp ? `+91 ${shop.whatsapp}` : null },
+          ].filter((r) => r.label).map((r) => (
+            <div key={r.icon} className="flex items-start gap-3 text-sm">
+              <span className="text-base flex-shrink-0">{r.icon}</span>
+              <span style={{ color: "var(--t2)" }}>{r.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
