@@ -15,57 +15,60 @@ export default function LoginInner() {
   const supabase = createClient();
 
   async function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
+  e.preventDefault();
+  setLoading(true);
+  setError("");
 
-    try {
-      const redirect = searchParams.get("redirect");
+  try {
+    const redirect = searchParams.get("redirect");
 
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
-      if (signInError) {
-        setError(signInError.message);
-        setLoading(false);
-        return;
-      }
-
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError || !user) {
-        setError("Login succeeded, but session could not be loaded.");
-        setLoading(false);
-        return;
-      }
-
-      const role =
-        user.user_metadata?.role ||
-        user.app_metadata?.role ||
-        "customer";
-
-      let destination = "/explore";
-
-      if (redirect) {
-        destination = redirect;
-      } else if (role === "vendor") {
-        destination = "/vendor/dashboard";
-      } else if (role === "admin") {
-        destination = "/admin";
-      }
-
+    if (signInError) {
+      setError(signInError.message);
       setLoading(false);
-      window.location.assign(destination);
-    } catch (err: any) {
-      setError(err?.message || "Something went wrong during login.");
-      setLoading(false);
+      return;
     }
+
+    // 🔥 THIS LINE FIXES YOUR ISSUE
+    const { data: sessionData } = await supabase.auth.getSession();
+
+    if (!sessionData?.session) {
+      setError("Session not created");
+      setLoading(false);
+      return;
+    }
+
+    const user = sessionData.session.user;
+
+    const role =
+      user.user_metadata?.role ||
+      user.app_metadata?.role ||
+      "customer";
+
+    let destination = "/explore";
+
+    if (redirect) {
+      destination = redirect;
+    } else if (role === "vendor") {
+      destination = "/vendor/dashboard";
+    } else if (role === "admin") {
+      destination = "/admin";
+    }
+
+    setLoading(false);
+
+    // 🔥 HARD RELOAD (important)
+    window.location.href = destination;
+
+  } catch (err: any) {
+    setError(err?.message || "Something went wrong during login.");
+    setLoading(false);
   }
+}
 
   return (
     <div
