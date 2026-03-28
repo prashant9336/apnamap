@@ -86,6 +86,16 @@ export default function MapPage() {
     }
   }, [geo.lat, geo.lng]);
 
+  // 🔥 Recenter map when location updates
+useEffect(() => {
+  if (!leafletRef.current || geo.lat === null || geo.lng === null) return;
+
+  const { map } = leafletRef.current;
+
+  map.setView([geo.lat, geo.lng], 15);
+
+}, [geo.lat, geo.lng]);
+
   // Fetch shops whenever location changes, with fallback location
   useEffect(() => {
     if (!leafletRef.current) return;
