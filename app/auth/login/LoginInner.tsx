@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
@@ -11,7 +11,6 @@ export default function LoginInner() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
 
@@ -20,44 +19,54 @@ export default function LoginInner() {
     setLoading(true);
     setError("");
 
-    const redirect = searchParams.get("redirect");
+    try {
+      const redirect = searchParams.get("redirect");
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    if (error) {
-      setError(error.message);
+      if (signInError) {
+        setError(signInError.message);
+        setLoading(false);
+        return;
+      }
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        setError("Login succeeded, but user session could not be loaded.");
+        setLoading(false);
+        return;
+      }
+
+      const role =
+        user.user_metadata?.role ||
+        user.app_metadata?.role ||
+        "customer";
+
+      let destination = "/explore";
+
+      if (redirect) {
+        destination = redirect;
+      } else if (role === "vendor") {
+        destination = "/vendor/dashboard";
+      } else if (role === "admin") {
+        destination = "/admin";
+      }
+
       setLoading(false);
-      return;
+
+      // Hard redirect avoids client-side navigation loops
+      window.location.href = destination;
+    } catch (err: any) {
+      setError(err?.message || "Something went wrong during login.");
+      setLoading(false);
     }
-
-    const role =
-      data.user?.user_metadata?.role ||
-      data.user?.app_metadata?.role ||
-      "customer";
-
-    if (redirect) {
-      router.push(redirect);
-      router.refresh();
-      return;
-    }
-
-    if (role === "vendor") {
-      router.push("/vendor/dashboard");
-      router.refresh();
-      return;
-    }
-
-    if (role === "admin") {
-      router.push("/admin");
-      router.refresh();
-      return;
-    }
-
-    router.push("/explore");
-    router.refresh();
   }
 
   return (
