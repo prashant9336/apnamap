@@ -23,7 +23,6 @@ export default function MapPage() {
       if (!mounted || !mapRef.current || leafletRef.current) return;
 
       delete (L.Icon.Default.prototype as any)._getIconUrl;
-
       L.Icon.Default.mergeOptions({
         iconRetinaUrl:
           "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
@@ -35,25 +34,28 @@ export default function MapPage() {
 
       const map = L.map(mapRef.current, {
         center: [25.442, 81.8517],
-        zoom: 15,
+        zoom: 14,
         zoomControl: true,
       });
-
-      // 🔥 FORCE CENTER FIX
-      map.setView([25.442, 81.8517], 14);
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "© OpenStreetMap contributors",
         maxZoom: 19,
       }).addTo(map);
 
-      shopLayerRef.current = L.layerGroup().addTo(map);
+      const shopLayer = L.layerGroup().addTo(map);
+
+      // hardcoded test marker
+      L.marker([25.442, 81.8517]).addTo(shopLayer).bindPopup("Katra test marker");
+
       leafletRef.current = { map, L };
+      shopLayerRef.current = shopLayer;
 
       setDebug("map ready");
 
       setTimeout(() => {
         map.invalidateSize();
+        map.setView([25.442, 81.8517], 14);
       }, 500);
     }
 
@@ -97,10 +99,11 @@ export default function MapPage() {
 
         shopLayer.clearLayers();
 
+        // hardcoded test marker again after clear
+        L.marker([25.442, 81.8517]).addTo(shopLayer).bindPopup("Katra test marker");
+
         data.forEach((shop: any) => {
-          if (typeof shop.lat !== "number" || typeof shop.lng !== "number") {
-            return;
-          }
+          if (typeof shop.lat !== "number" || typeof shop.lng !== "number") return;
 
           L.marker([shop.lat, shop.lng])
             .addTo(shopLayer)
@@ -110,27 +113,24 @@ export default function MapPage() {
         });
 
         if (data.length > 0) {
-          const points = data
-            .filter((s: any) => typeof s.lat === "number" && typeof s.lng === "number")
-            .map((s: any) => [s.lat, s.lng]);
+          const bounds = L.latLngBounds(
+            data
+              .filter((s: any) => typeof s.lat === "number" && typeof s.lng === "number")
+              .map((s: any) => [s.lat, s.lng])
+          );
 
-          if (points.length > 0) {
-            const bounds = L.latLngBounds(points);
-
+          if (bounds.isValid()) {
             setTimeout(() => {
-              map.fitBounds(bounds, {
-                padding: [50, 50],
-                maxZoom: 17,
-              });
-            }, 500);
+              map.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
+            }, 300);
           }
+        } else {
+          map.setView([25.442, 81.8517], 14);
         }
 
-        // 🔥 FINAL FORCE RENDER
         setTimeout(() => {
           map.invalidateSize();
         }, 800);
-
       } catch (err) {
         console.error("Map load failed:", err);
         setDebug("load failed");
@@ -194,11 +194,39 @@ export default function MapPage() {
           ref={mapRef}
           style={{
             width: "100%",
-            height: "calc(100vh - 80px)",
-            minHeight: 500,
+            height: "55vh",
+            minHeight: 400,
             zIndex: 10,
           }}
         />
+
+        <div
+          style={{
+            padding: 12,
+            borderTop: "1px solid rgba(255,255,255,0.08)",
+            overflowY: "auto",
+          }}
+        >
+          <p style={{ fontWeight: 700, marginBottom: 8 }}>Loaded shops</p>
+          {shops.length === 0 ? (
+            <p style={{ opacity: 0.7 }}>No shops in UI state</p>
+          ) : (
+            shops.slice(0, 10).map((shop) => (
+              <div
+                key={shop.id}
+                style={{
+                  padding: "8px 0",
+                  borderBottom: "1px solid rgba(255,255,255,0.06)",
+                }}
+              >
+                <div>{shop.name}</div>
+                <div style={{ fontSize: 12, opacity: 0.7 }}>
+                  {shop.lat}, {shop.lng}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </AppShell>
   );
