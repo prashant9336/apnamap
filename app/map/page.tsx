@@ -7,19 +7,24 @@ import { useGeo } from "@/hooks/useGeo";
 export default function MapPage() {
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletRef = useRef<any>(null);
-  const markersRef = useRef<any[]>([]);
+  const shopLayerRef = useRef<any>(null);
   const userMarkerRef = useRef<any>(null);
 
   const { geo, detect } = useGeo();
   const [shops, setShops] = useState<any[]>([]);
+  const [debug, setDebug] = useState("initializing");
 
-  // Initialize map once
+  // Init map once
   useEffect(() => {
-    if (leafletRef.current || !mapRef.current) return;
+    let mounted = true;
 
-    import("leaflet").then((L) => {
+    async function init() {
+      if (!mapRef.current || leafletRef.current) return;
+
+      const L = await import("leaflet");
+      if (!mounted || !mapRef.current || leafletRef.current) return;
+
       delete (L.Icon.Default.prototype as any)._getIconUrl;
-
       L.Icon.Default.mergeOptions({
         iconRetinaUrl:
           "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
@@ -32,7 +37,7 @@ export default function MapPage() {
       const startLat = geo.lat ?? 25.442;
       const startLng = geo.lng ?? 81.8517;
 
-      const map = L.map(mapRef.current!, {
+      const map = L.map(mapRef.current, {
         center: [startLat, startLng],
         zoom: 15,
         zoomControl: true,
@@ -43,24 +48,32 @@ export default function MapPage() {
         maxZoom: 19,
       }).addTo(map);
 
+      const shopLayer = L.layerGroup().addTo(map);
+
       leafletRef.current = { map, L };
+      shopLayerRef.current = shopLayer;
+
+      setDebug("map ready");
 
       setTimeout(() => {
         map.invalidateSize();
-      }, 300);
-    });
+      }, 400);
+    }
+
+    init();
 
     return () => {
+      mounted = false;
       if (leafletRef.current?.map) {
         leafletRef.current.map.remove();
         leafletRef.current = null;
       }
-      markersRef.current = [];
+      shopLayerRef.current = null;
       userMarkerRef.current = null;
     };
   }, []);
 
-  // Update user marker and recenter map
+  // Recenter + user marker
   useEffect(() => {
     if (!leafletRef.current) return;
 
@@ -73,75 +86,81 @@ export default function MapPage() {
     if (userMarkerRef.current) {
       userMarkerRef.current.setLatLng([lat, lng]);
     } else {
-      const userIcon = L.divIcon({
-        html: `<div style="width:14px;height:14px;border-radius:50%;background:#FF5E1A;border:2px solid #fff;box-shadow:0 0 10px rgba(255,94,26,0.7)"></div>`,
-        className: "",
-        iconSize: [14, 14],
-        iconAnchor: [7, 7],
-      });
-
-      userMarkerRef.current = L.marker([lat, lng], { icon: userIcon })
-        .addTo(map)
-        .bindPopup("📍 You are here");
+      userMarkerRef.current = L.marker([lat, lng]).addTo(map).bindPopup("📍 You are here");
     }
+
+    setTimeout(() => {
+      map.invalidateSize();
+    }, 150);
   }, [geo.lat, geo.lng]);
 
-  // 🔥 Recenter map when location updates
-useEffect(() => {
-  if (!leafletRef.current || geo.lat === null || geo.lng === null) return;
-
-  const { map } = leafletRef.current;
-
-  map.setView([geo.lat, geo.lng], 15);
-
-}, [geo.lat, geo.lng]);
-
-  // Fetch shops whenever location changes, with fallback location
+  // Load shops
   useEffect(() => {
-    if (!leafletRef.current) return;
+    if (!leafletRef.current || !shopLayerRef.current) return;
 
     const { map, L } = leafletRef.current;
+    const shopLayer = shopLayerRef.current;
+
     const lat = geo.lat ?? 25.442;
     const lng = geo.lng ?? 81.8517;
 
-    fetch(`/api/shops?lat=${lat}&lng=${lng}&radius=10000`, {
-      cache: "no-store",
-    })
-      .then((r) => r.json())
-      .then(({ shops: data }) => {
-        const safeData = Array.isArray(data) ? data : [];
-        setShops(safeData);
+    let cancelled = false;
 
-        // Remove old shop markers
-        markersRef.current.forEach((marker) => {
-          map.removeLayer(marker);
+    async function loadShops() {
+      try {
+        setDebug("loading shops");
+
+        const res = await fetch(
+          `/api/shops?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(
+            lng
+          )}&radius=10000`,
+          { cache: "no-store" }
+        );
+
+        const json = await res.json();
+        const data = Array.isArray(json?.shops) ? json.shops : [];
+
+        if (cancelled) return;
+
+        setShops(data);
+        setDebug(`loaded ${data.length} shops`);
+
+        shopLayer.clearLayers();
+
+        data.forEach((shop: any) => {
+          if (typeof shop.lat !== "number" || typeof shop.lng !== "number") return;
+
+          const marker = L.marker([shop.lat, shop.lng]).addTo(shopLayer);
+
+          marker.bindPopup(
+            `<b>${shop.name ?? "Shop"}</b><br>${shop.address ?? ""}<br><a href="/shop/${
+              shop.slug ?? ""
+            }" style="color:#FF5E1A">View shop →</a>`
+          );
         });
-        markersRef.current = [];
 
-        safeData.forEach((shop: any) => {
-          if (typeof shop.lat !== "number" || typeof shop.lng !== "number") {
-            return;
-          }
+        if (data.length > 0) {
+          const bounds = L.latLngBounds(data.map((s: any) => [s.lat, s.lng]));
+          map.fitBounds(bounds, { padding: [40, 40] });
+        }
 
-          const icon = L.divIcon({
-            html: `<div style="background:#1a1d2a;border:1.5px solid rgba(255,94,26,0.6);border-radius:8px;padding:3px 6px;font-size:11px;font-weight:700;color:#FF7A40;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.5)">${shop.category?.icon ?? "🏪"} ${shop.name?.split(" ")[0] ?? "Shop"}</div>`,
-            className: "",
-            iconAnchor: [0, 0],
-          });
+        setTimeout(() => {
+          map.invalidateSize();
+        }, 150);
+      } catch (e) {
+        if (!cancelled) {
+          setShops([]);
+          setDebug("failed to load shops");
+          console.error(e);
+        }
+      }
+    }
 
-          const marker = L.marker([shop.lat, shop.lng], { icon })
-            .addTo(map)
-            .bindPopup(
-              `<b>${shop.name ?? "Shop"}</b><br>${shop.category?.name ?? ""}<br><a href="/shop/${shop.slug ?? ""}" style="color:#FF5E1A">View shop →</a>`
-            );
+    loadShops();
 
-          markersRef.current.push(marker);
-        });
-      })
-      .catch((err) => {
-        console.error("Failed to load shops:", err);
-        setShops([]);
-      });
+    return () => {
+      cancelled = true;
+    };
   }, [geo.lat, geo.lng]);
 
   return (
@@ -160,6 +179,9 @@ useEffect(() => {
             <p className="font-syne font-black text-base">🗺 Map View</p>
             <p className="text-[10px]" style={{ color: "var(--t3)" }}>
               {shops.length} shops nearby
+            </p>
+            <p className="text-[10px]" style={{ color: "#ff9b73" }}>
+              {debug}
             </p>
           </div>
 
@@ -192,8 +214,12 @@ useEffect(() => {
 
         <div
           ref={mapRef}
-          className="flex-1"
-          style={{ zIndex: 10, minHeight: "500px" }}
+          className="w-full"
+          style={{
+            height: "calc(100vh - 80px)",
+            minHeight: 500,
+            zIndex: 10,
+          }}
         />
       </div>
     </AppShell>
