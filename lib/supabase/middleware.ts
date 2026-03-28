@@ -38,19 +38,35 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
+  const role =
+    user?.user_metadata?.role ||
+    user?.app_metadata?.role ||
+    "customer";
 
-  if (path.startsWith("/vendor") && !user) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/auth/login";
-    url.searchParams.set("redirect", path);
-    return NextResponse.redirect(url);
+  if (path.startsWith("/vendor")) {
+    if (!user) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/auth/login";
+      url.searchParams.set("redirect", path);
+      return NextResponse.redirect(url);
+    }
+
+    if (role !== "vendor" && role !== "admin") {
+      return NextResponse.redirect(new URL("/explore", request.url));
+    }
   }
 
-  if (path.startsWith("/admin") && !user) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/auth/login";
-    url.searchParams.set("redirect", path);
-    return NextResponse.redirect(url);
+  if (path.startsWith("/admin")) {
+    if (!user) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/auth/login";
+      url.searchParams.set("redirect", path);
+      return NextResponse.redirect(url);
+    }
+
+    if (role !== "admin") {
+      return NextResponse.redirect(new URL("/explore", request.url));
+    }
   }
 
   return supabaseResponse;
