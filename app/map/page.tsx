@@ -7,23 +7,16 @@ import { useGeo } from "@/hooks/useGeo";
 export default function MapPage() {
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletRef = useRef<any>(null);
-  const markersLayerRef = useRef<any>(null);
-
   const { geo, detect } = useGeo();
   const [shops, setShops] = useState<any[]>([]);
-  const [mapReady, setMapReady] = useState(false);
-  const [debug, setDebug] = useState<string>("initializing");
 
+  // Init Leaflet
   useEffect(() => {
-    let mounted = true;
+    if (leafletRef.current || !mapRef.current) return;
 
-    async function initMap() {
-      if (!mapRef.current || leafletRef.current) return;
-
-      const L = await import("leaflet");
-      if (!mounted || !mapRef.current || leafletRef.current) return;
-
+    import("leaflet").then((L) => {
       delete (L.Icon.Default.prototype as any)._getIconUrl;
+
       L.Icon.Default.mergeOptions({
         iconRetinaUrl:
           "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
@@ -33,8 +26,8 @@ export default function MapPage() {
           "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
       });
 
-      const map = L.map(mapRef.current, {
-        center: [geo.lat, geo.lng],
+      const map = L.map(mapRef.current!, {
+        center: [geo.lat ?? 25.4358, geo.lng ?? 81.8463],
         zoom: 15,
         zoomControl: true,
       });
@@ -44,134 +37,67 @@ export default function MapPage() {
         maxZoom: 19,
       }).addTo(map);
 
-      const markersLayer = L.layerGroup().addTo(map);
+      leafletRef.current = { map, L };
 
-      leafletRef.current = { L, map };
-      markersLayerRef.current = markersLayer;
-      setMapReady(true);
-      setDebug("map ready");
+      // User marker
+      if (geo.lat !== null && geo.lng !== null) {
+        const userIcon = L.divIcon({
+          html: `<div style="width:14px;height:14px;border-radius:50%;background:#FF5E1A;border:2px solid #fff;box-shadow:0 0 10px rgba(255,94,26,0.7)"></div>`,
+          className: "",
+          iconSize: [14, 14],
+          iconAnchor: [7, 7],
+        });
 
-      setTimeout(() => map.invalidateSize(), 300);
-    }
-
-    initMap();
+        L.marker([geo.lat, geo.lng], { icon: userIcon })
+          .addTo(map)
+          .bindPopup("📍 You are here");
+      }
+    });
 
     return () => {
-      mounted = false;
       if (leafletRef.current?.map) {
         leafletRef.current.map.remove();
         leafletRef.current = null;
       }
-      markersLayerRef.current = null;
     };
-  }, [geo.lat, geo.lng]);
+  }, []);
 
+  // Load shops
   useEffect(() => {
-    if (!leafletRef.current || !markersLayerRef.current || !mapReady) return;
+    if (!leafletRef.current || geo.lat === null || geo.lng === null) return;
 
     const { map, L } = leafletRef.current;
-    const markersLayer = markersLayerRef.current;
 
-    markersLayer.clearLayers();
-
-    map.setView([geo.lat, geo.lng], 15);
-
-    L.marker([geo.lat, geo.lng])
-      .bindPopup("📍 You are here / Katra test location")
-      .addTo(markersLayer);
-
-    setTimeout(() => map.invalidateSize(), 150);
-  }, [geo.lat, geo.lng, mapReady]);
-
-  useEffect(() => {
-    if (!leafletRef.current || !markersLayerRef.current || !mapReady) return;
-
-    let cancelled = false;
-
-    async function loadShops() {
-      try {
-        setDebug("loading shops...");
-
-        const url = `/api/shops?lat=${geo.lat}&lng=${geo.lng}&radius=10000`;
-        console.log("Fetching shops from:", url);
-
-        const res = await fetch(url, { cache: "no-store" });
-        const json = await res.json();
-
-        console.log("Shop API status:", res.status);
-        console.log("Shop API response:", json);
-
-        if (!res.ok) {
-          if (!cancelled) {
-            setShops([]);
-            setDebug(`api failed: ${json?.error || "unknown error"}`);
-          }
-          return;
-        }
-
-        const data = Array.isArray(json?.shops) ? json.shops : [];
-
-        if (cancelled) return;
+    fetch(`/api/shops?lat=${geo.lat}&lng=${geo.lng}&radius=10000`)
+      .then((r) => r.json())
+      .then(({ shops: data }) => {
+        if (!data) return;
 
         setShops(data);
-        setDebug(`loaded ${data.length} shops`);
-
-        const { L, map } = leafletRef.current;
-        const markersLayer = markersLayerRef.current;
-
-        markersLayer.clearLayers();
-
-        L.marker([geo.lat, geo.lng])
-          .bindPopup("📍 You are here / Katra test location")
-          .addTo(markersLayer);
 
         data.forEach((shop: any) => {
-          if (
-            !shop ||
-            typeof shop.lat !== "number" ||
-            typeof shop.lng !== "number"
-          ) {
-            console.log("Skipped invalid shop:", shop);
-            return;
-          }
+          const icon = L.divIcon({
+            html: `<div style="background:#1a1d2a;border:1.5px solid rgba(255,94,26,0.6);border-radius:8px;padding:3px 6px;font-size:11px;font-weight:700;color:#FF7A40;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.5)">
+              ${shop.category?.icon ?? "🏪"} ${shop.name.split(" ")[0]}
+            </div>`,
+            className: "",
+            iconAnchor: [0, 0],
+          });
 
-          const marker = L.marker([shop.lat, shop.lng]).addTo(markersLayer);
-
-          marker.bindPopup(`
-            <div>
-              <b>${shop.name ?? "Shop"}</b><br/>
-              ${shop.address ?? ""}<br/>
-              <small>${shop.slug ?? ""}</small>
-            </div>
-          `);
+          L.marker([shop.lat, shop.lng], { icon })
+            .addTo(map)
+            .bindPopup(
+              `<b>${shop.name}</b><br>${shop.category?.name ?? ""}<br>
+              <a href="/shop/${shop.slug}" style="color:#FF5E1A">View shop →</a>`
+            );
         });
-
-        if (data.length > 0) {
-          const bounds = L.latLngBounds([
-            [geo.lat, geo.lng],
-            ...data.map((shop: any) => [shop.lat, shop.lng]),
-          ]);
-          map.fitBounds(bounds, { padding: [40, 40] });
-        }
-      } catch (err: any) {
-        console.error("Shop fetch/render crash:", err);
-        if (!cancelled) {
-          setShops([]);
-          setDebug(`crash: ${err?.message || "unknown crash"}`);
-        }
-      }
-    }
-
-    loadShops();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [geo.lat, geo.lng, mapReady]);
+      });
+  }, [geo.lat, geo.lng]);
 
   return (
     <AppShell activeTab="walk">
       <div className="flex flex-col h-full" style={{ background: "var(--bg)" }}>
+        {/* Header */}
         <div
           className="flex-shrink-0 flex items-center justify-between px-4 py-3"
           style={{
@@ -185,9 +111,6 @@ export default function MapPage() {
             <p className="font-syne font-black text-base">🗺 Map View</p>
             <p className="text-[10px]" style={{ color: "var(--t3)" }}>
               {shops.length} shops nearby
-            </p>
-            <p className="text-[10px]" style={{ color: "#ff9b73" }}>
-              {debug}
             </p>
           </div>
 
@@ -213,20 +136,14 @@ export default function MapPage() {
           </button>
         </div>
 
+        {/* Leaflet CSS */}
         <link
           rel="stylesheet"
           href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         />
 
-        <div
-          ref={mapRef}
-          className="w-full"
-          style={{
-            height: "calc(100vh - 80px)",
-            minHeight: 500,
-            zIndex: 10,
-          }}
-        />
+        {/* Map */}
+        <div ref={mapRef} className="flex-1" style={{ zIndex: 10 }} />
       </div>
     </AppShell>
   );
