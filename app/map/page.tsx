@@ -8,7 +8,6 @@ export default function MapPage() {
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletRef = useRef<any>(null);
   const shopLayerRef = useRef<any>(null);
-  const userMarkerRef = useRef<any>(null);
 
   const { geo, detect } = useGeo();
   const [shops, setShops] = useState<any[]>([]);
@@ -24,6 +23,7 @@ export default function MapPage() {
       if (!mounted || !mapRef.current || leafletRef.current) return;
 
       delete (L.Icon.Default.prototype as any)._getIconUrl;
+
       L.Icon.Default.mergeOptions({
         iconRetinaUrl:
           "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
@@ -33,11 +33,8 @@ export default function MapPage() {
           "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
       });
 
-      const startLat = geo.lat ?? 25.442;
-      const startLng = geo.lng ?? 81.8517;
-
       const map = L.map(mapRef.current, {
-        center: [startLat, startLng],
+        center: [25.442, 81.8517],
         zoom: 15,
         zoomControl: true,
       });
@@ -52,7 +49,9 @@ export default function MapPage() {
 
       setDebug("map ready");
 
-      setTimeout(() => map.invalidateSize(), 400);
+      setTimeout(() => {
+        map.invalidateSize();
+      }, 500);
     }
 
     initMap();
@@ -64,29 +63,8 @@ export default function MapPage() {
         leafletRef.current = null;
       }
       shopLayerRef.current = null;
-      userMarkerRef.current = null;
     };
   }, []);
-
-  useEffect(() => {
-    if (!leafletRef.current) return;
-
-    const { map, L } = leafletRef.current;
-    const lat = geo.lat ?? 25.442;
-    const lng = geo.lng ?? 81.8517;
-
-    map.setView([lat, lng], 15);
-
-    if (userMarkerRef.current) {
-      userMarkerRef.current.setLatLng([lat, lng]);
-    } else {
-      userMarkerRef.current = L.marker([lat, lng])
-        .addTo(map)
-        .bindPopup("📍 You are here");
-    }
-
-    setTimeout(() => map.invalidateSize(), 150);
-  }, [geo.lat, geo.lng]);
 
   useEffect(() => {
     if (!leafletRef.current || !shopLayerRef.current) return;
@@ -105,6 +83,7 @@ export default function MapPage() {
           `/api/shops?lat=${lat}&lng=${lng}&radius=10000`,
           { cache: "no-store" }
         );
+
         const json = await res.json();
         const data = Array.isArray(json?.shops) ? json.shops : [];
 
@@ -116,7 +95,9 @@ export default function MapPage() {
         shopLayer.clearLayers();
 
         data.forEach((shop: any) => {
-          if (typeof shop.lat !== "number" || typeof shop.lng !== "number") return;
+          if (typeof shop.lat !== "number" || typeof shop.lng !== "number") {
+            return;
+          }
 
           L.marker([shop.lat, shop.lng])
             .addTo(shopLayer)
@@ -126,15 +107,19 @@ export default function MapPage() {
         });
 
         if (data.length > 0) {
-          const bounds = L.latLngBounds(data.map((s: any) => [s.lat, s.lng]));
+          const bounds = L.latLngBounds(
+            data.map((shop: any) => [shop.lat, shop.lng])
+          );
           map.fitBounds(bounds, { padding: [40, 40] });
         }
 
-        setTimeout(() => map.invalidateSize(), 150);
+        setTimeout(() => {
+          map.invalidateSize();
+        }, 200);
       } catch (err) {
-        console.error("Map shop load failed:", err);
+        console.error("Map load failed:", err);
+        setDebug("load failed");
         setShops([]);
-        setDebug("shop load failed");
       }
     }
 
