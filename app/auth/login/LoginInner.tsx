@@ -39,7 +39,7 @@ export default function LoginInner() {
       } = await supabase.auth.getUser();
 
       if (userError || !user) {
-        setError("Login succeeded, but user session could not be loaded.");
+        setError("Login succeeded, but session could not be loaded.");
         setLoading(false);
         return;
       }
@@ -60,9 +60,7 @@ export default function LoginInner() {
       }
 
       setLoading(false);
-
-      // Hard redirect avoids client-side navigation loops
-      window.location.href = destination;
+      window.location.assign(destination);
     } catch (err: any) {
       setError(err?.message || "Something went wrong during login.");
       setLoading(false);
