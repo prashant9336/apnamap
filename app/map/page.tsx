@@ -7,9 +7,13 @@ import { useGeo } from "@/hooks/useGeo";
 export default function MapPage() {
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletRef = useRef<any>(null);
+  const markersRef = useRef<any[]>([]);
+  const userMarkerRef = useRef<any>(null);
+
   const { geo, detect } = useGeo();
   const [shops, setShops] = useState<any[]>([]);
 
+  // Initialize map once
   useEffect(() => {
     if (leafletRef.current || !mapRef.current) return;
 
@@ -25,8 +29,8 @@ export default function MapPage() {
           "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
       });
 
-      const startLat: number = geo.lat ?? 25.4358;
-      const startLng: number = geo.lng ?? 81.8463;
+      const startLat = geo.lat ?? 25.442;
+      const startLng = geo.lng ?? 81.8517;
 
       const map = L.map(mapRef.current!, {
         center: [startLat, startLng],
@@ -41,18 +45,9 @@ export default function MapPage() {
 
       leafletRef.current = { map, L };
 
-      if (geo.lat !== null && geo.lng !== null) {
-        const userIcon = L.divIcon({
-          html: `<div style="width:14px;height:14px;border-radius:50%;background:#FF5E1A;border:2px solid #fff;box-shadow:0 0 10px rgba(255,94,26,0.7)"></div>`,
-          className: "",
-          iconSize: [14, 14],
-          iconAnchor: [7, 7],
-        });
-
-        L.marker([geo.lat, geo.lng], { icon: userIcon })
-          .addTo(map)
-          .bindPopup("📍 You are here");
-      }
+      setTimeout(() => {
+        map.invalidateSize();
+      }, 300);
     });
 
     return () => {
@@ -60,22 +55,60 @@ export default function MapPage() {
         leafletRef.current.map.remove();
         leafletRef.current = null;
       }
+      markersRef.current = [];
+      userMarkerRef.current = null;
     };
   }, []);
 
+  // Update user marker and recenter map
   useEffect(() => {
-    if (!leafletRef.current || geo.lat === null || geo.lng === null) return;
+    if (!leafletRef.current) return;
 
     const { map, L } = leafletRef.current;
+    const lat = geo.lat ?? 25.442;
+    const lng = geo.lng ?? 81.8517;
 
-    fetch(`/api/shops?lat=${geo.lat}&lng=${geo.lng}&radius=10000`)
+    map.setView([lat, lng], 15);
+
+    if (userMarkerRef.current) {
+      userMarkerRef.current.setLatLng([lat, lng]);
+    } else {
+      const userIcon = L.divIcon({
+        html: `<div style="width:14px;height:14px;border-radius:50%;background:#FF5E1A;border:2px solid #fff;box-shadow:0 0 10px rgba(255,94,26,0.7)"></div>`,
+        className: "",
+        iconSize: [14, 14],
+        iconAnchor: [7, 7],
+      });
+
+      userMarkerRef.current = L.marker([lat, lng], { icon: userIcon })
+        .addTo(map)
+        .bindPopup("📍 You are here");
+    }
+  }, [geo.lat, geo.lng]);
+
+  // Fetch shops whenever location changes, with fallback location
+  useEffect(() => {
+    if (!leafletRef.current) return;
+
+    const { map, L } = leafletRef.current;
+    const lat = geo.lat ?? 25.442;
+    const lng = geo.lng ?? 81.8517;
+
+    fetch(`/api/shops?lat=${lat}&lng=${lng}&radius=10000`, {
+      cache: "no-store",
+    })
       .then((r) => r.json())
       .then(({ shops: data }) => {
-        if (!data) return;
+        const safeData = Array.isArray(data) ? data : [];
+        setShops(safeData);
 
-        setShops(data);
+        // Remove old shop markers
+        markersRef.current.forEach((marker) => {
+          map.removeLayer(marker);
+        });
+        markersRef.current = [];
 
-        data.forEach((shop: any) => {
+        safeData.forEach((shop: any) => {
           if (typeof shop.lat !== "number" || typeof shop.lng !== "number") {
             return;
           }
@@ -86,12 +119,18 @@ export default function MapPage() {
             iconAnchor: [0, 0],
           });
 
-          L.marker([shop.lat, shop.lng], { icon })
+          const marker = L.marker([shop.lat, shop.lng], { icon })
             .addTo(map)
             .bindPopup(
               `<b>${shop.name ?? "Shop"}</b><br>${shop.category?.name ?? ""}<br><a href="/shop/${shop.slug ?? ""}" style="color:#FF5E1A">View shop →</a>`
             );
+
+          markersRef.current.push(marker);
         });
+      })
+      .catch((err) => {
+        console.error("Failed to load shops:", err);
+        setShops([]);
       });
   }, [geo.lat, geo.lng]);
 
@@ -141,7 +180,11 @@ export default function MapPage() {
           href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         />
 
-        <div ref={mapRef} className="flex-1" style={{ zIndex: 10 }} />
+        <div
+          ref={mapRef}
+          className="flex-1"
+          style={{ zIndex: 10, minHeight: "500px" }}
+        />
       </div>
     </AppShell>
   );
