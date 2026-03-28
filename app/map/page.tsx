@@ -12,13 +12,12 @@ export default function MapPage() {
 
   const { geo, detect } = useGeo();
   const [shops, setShops] = useState<any[]>([]);
-  const [debug, setDebug] = useState("initializing");
+  const [debug, setDebug] = useState("init");
 
-  // Init map once
   useEffect(() => {
     let mounted = true;
 
-    async function init() {
+    async function initMap() {
       if (!mapRef.current || leafletRef.current) return;
 
       const L = await import("leaflet");
@@ -48,19 +47,15 @@ export default function MapPage() {
         maxZoom: 19,
       }).addTo(map);
 
-      const shopLayer = L.layerGroup().addTo(map);
-
+      shopLayerRef.current = L.layerGroup().addTo(map);
       leafletRef.current = { map, L };
-      shopLayerRef.current = shopLayer;
 
       setDebug("map ready");
 
-      setTimeout(() => {
-        map.invalidateSize();
-      }, 400);
+      setTimeout(() => map.invalidateSize(), 400);
     }
 
-    init();
+    initMap();
 
     return () => {
       mounted = false;
@@ -73,7 +68,6 @@ export default function MapPage() {
     };
   }, []);
 
-  // Recenter + user marker
   useEffect(() => {
     if (!leafletRef.current) return;
 
@@ -86,15 +80,14 @@ export default function MapPage() {
     if (userMarkerRef.current) {
       userMarkerRef.current.setLatLng([lat, lng]);
     } else {
-      userMarkerRef.current = L.marker([lat, lng]).addTo(map).bindPopup("📍 You are here");
+      userMarkerRef.current = L.marker([lat, lng])
+        .addTo(map)
+        .bindPopup("📍 You are here");
     }
 
-    setTimeout(() => {
-      map.invalidateSize();
-    }, 150);
+    setTimeout(() => map.invalidateSize(), 150);
   }, [geo.lat, geo.lng]);
 
-  // Load shops
   useEffect(() => {
     if (!leafletRef.current || !shopLayerRef.current) return;
 
@@ -104,23 +97,18 @@ export default function MapPage() {
     const lat = geo.lat ?? 25.442;
     const lng = geo.lng ?? 81.8517;
 
-    let cancelled = false;
-
     async function loadShops() {
       try {
         setDebug("loading shops");
 
         const res = await fetch(
-          `/api/shops?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(
-            lng
-          )}&radius=10000`,
+          `/api/shops?lat=${lat}&lng=${lng}&radius=10000`,
           { cache: "no-store" }
         );
-
         const json = await res.json();
         const data = Array.isArray(json?.shops) ? json.shops : [];
 
-        if (cancelled) return;
+        console.log("LIVE SHOPS:", data);
 
         setShops(data);
         setDebug(`loaded ${data.length} shops`);
@@ -130,13 +118,11 @@ export default function MapPage() {
         data.forEach((shop: any) => {
           if (typeof shop.lat !== "number" || typeof shop.lng !== "number") return;
 
-          const marker = L.marker([shop.lat, shop.lng]).addTo(shopLayer);
-
-          marker.bindPopup(
-            `<b>${shop.name ?? "Shop"}</b><br>${shop.address ?? ""}<br><a href="/shop/${
-              shop.slug ?? ""
-            }" style="color:#FF5E1A">View shop →</a>`
-          );
+          L.marker([shop.lat, shop.lng])
+            .addTo(shopLayer)
+            .bindPopup(
+              `<b>${shop.name ?? "Shop"}</b><br>${shop.address ?? ""}`
+            );
         });
 
         if (data.length > 0) {
@@ -144,23 +130,15 @@ export default function MapPage() {
           map.fitBounds(bounds, { padding: [40, 40] });
         }
 
-        setTimeout(() => {
-          map.invalidateSize();
-        }, 150);
-      } catch (e) {
-        if (!cancelled) {
-          setShops([]);
-          setDebug("failed to load shops");
-          console.error(e);
-        }
+        setTimeout(() => map.invalidateSize(), 150);
+      } catch (err) {
+        console.error("Map shop load failed:", err);
+        setShops([]);
+        setDebug("shop load failed");
       }
     }
 
     loadShops();
-
-    return () => {
-      cancelled = true;
-    };
   }, [geo.lat, geo.lng]);
 
   return (
@@ -214,8 +192,8 @@ export default function MapPage() {
 
         <div
           ref={mapRef}
-          className="w-full"
           style={{
+            width: "100%",
             height: "calc(100vh - 80px)",
             minHeight: 500,
             zIndex: 10,
