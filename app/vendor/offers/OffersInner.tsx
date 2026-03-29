@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -14,6 +14,8 @@ const EMPTY_OFFER = {
   tier: "2",
 };
 
+type FilterKey = "all" | "active" | "paused";
+
 export default function OffersInner() {
   const params = useSearchParams();
   const shopId = params.get("shop_id");
@@ -24,20 +26,41 @@ export default function OffersInner() {
   const [form, setForm] = useState(EMPTY_OFFER);
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [filter, setFilter] = useState<FilterKey>("all");
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!shopId) return;
+    async function loadOffers() {
+      if (!shopId) return;
 
-    supabase
-      .from("offers")
-      .select("*")
-      .eq("shop_id", shopId)
-      .order("created_at", { ascending: false })
-      .then(({ data }) => setOffers(data ?? []));
-  }, [shopId]);
+      const { data, error } = await supabase
+        .from("offers")
+        .select("*")
+        .eq("shop_id", shopId)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        setError(error.message);
+        return;
+      }
+
+      setOffers(data ?? []);
+    }
+
+    loadOffers();
+  }, [shopId, supabase]);
+
+  const filtered = useMemo(() => {
+    if (filter === "active") return offers.filter((o) => o.is_active);
+    if (filter === "paused") return offers.filter((o) => !o.is_active);
+    return offers;
+  }, [offers, filter]);
 
   async function saveOffer() {
+    if (!shopId) return;
+
     setSaving(true);
+    setError("");
 
     const payload = {
       shop_id: shopId,
@@ -57,6 +80,12 @@ export default function OffersInner() {
 
     const d = await r.json();
 
+    if (!r.ok) {
+      setError(d?.error || "Failed to save offer");
+      setSaving(false);
+      return;
+    }
+
     if (d.offer) {
       setOffers((p) => [d.offer, ...p]);
       setForm(EMPTY_OFFER);
@@ -67,10 +96,15 @@ export default function OffersInner() {
   }
 
   async function toggleOffer(id: string, is_active: boolean) {
-    await supabase
+    const { error } = await supabase
       .from("offers")
       .update({ is_active: !is_active })
       .eq("id", id);
+
+    if (error) {
+      setError(error.message);
+      return;
+    }
 
     setOffers((p) =>
       p.map((o) => (o.id === id ? { ...o, is_active: !is_active } : o))
@@ -78,7 +112,13 @@ export default function OffersInner() {
   }
 
   async function deleteOffer(id: string) {
-    await supabase.from("offers").delete().eq("id", id);
+    const { error } = await supabase.from("offers").delete().eq("id", id);
+
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
     setOffers((p) => p.filter((o) => o.id !== id));
   }
 
@@ -95,7 +135,12 @@ export default function OffersInner() {
         <button onClick={() => history.back()} className="text-xl">
           ←
         </button>
-        <p className="font-syne font-black text-base flex-1">Manage Offers</p>
+        <div className="flex-1">
+          <p className="font-syne font-black text-base">Manage Offers</p>
+          <p className="text-[10px]" style={{ color: "var(--t3)" }}>
+            Create, pause and manage your deals
+          </p>
+        </div>
         <button
           onClick={() => setAdding(true)}
           className="px-3 py-1.5 rounded-full text-xs font-bold text-white"
@@ -106,6 +151,44 @@ export default function OffersInner() {
       </div>
 
       <div className="px-4 py-4">
+        {error && (
+          <div
+            className="mb-4 p-3 rounded-xl text-sm"
+            style={{
+              background: "rgba(239,68,68,0.1)",
+              color: "#f87171",
+              border: "1px solid rgba(239,68,68,0.2)",
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        <div className="flex gap-2 mb-4">
+          {[
+            { key: "all", label: `All (${offers.length})` },
+            { key: "active", label: `Active (${offers.filter((o) => o.is_active).length})` },
+            { key: "paused", label: `Paused (${offers.filter((o) => !o.is_active).length})` },
+          ].map((f) => (
+            <button
+              key={f.key}
+              onClick={() => setFilter(f.key as FilterKey)}
+              className="px-3 py-2 rounded-full text-xs font-semibold"
+              style={
+                filter === f.key
+                  ? { background: "var(--accent)", color: "#fff" }
+                  : {
+                      background: "rgba(255,255,255,0.05)",
+                      color: "var(--t2)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                    }
+              }
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
         {adding && (
           <div
             className="p-4 rounded-2xl mb-4"
@@ -230,7 +313,7 @@ export default function OffersInner() {
                   className="block text-[10px] font-semibold mb-1"
                   style={{ color: "var(--t3)" }}
                 >
-                  Tier (1=Big Deal, 2=Normal, 3=Basic)
+                  Tier
                 </label>
                 <select
                   value={form.tier}
@@ -278,18 +361,18 @@ export default function OffersInner() {
           </div>
         )}
 
-        {offers.length === 0 && !adding && (
+        {filtered.length === 0 && !adding && (
           <div className="text-center py-12" style={{ color: "var(--t2)" }}>
             <div className="text-4xl mb-3">🎯</div>
-            <p className="font-semibold">No offers yet</p>
+            <p className="font-semibold">No offers found</p>
             <p className="text-sm mt-1" style={{ color: "var(--t3)" }}>
-              Shops with offers get 5× more visits
+              Create a live offer to increase visibility
             </p>
           </div>
         )}
 
         <div className="space-y-3">
-          {offers.map((offer) => (
+          {filtered.map((offer) => (
             <div
               key={offer.id}
               className="p-4 rounded-2xl"
@@ -321,8 +404,15 @@ export default function OffersInner() {
                     background:
                       offer.tier === 1
                         ? "rgba(255,80,0,0.15)"
-                        : "rgba(255,255,255,0.06)",
-                    color: offer.tier === 1 ? "#FF6830" : "var(--t3)",
+                        : offer.tier === 2
+                        ? "rgba(232,168,0,0.12)"
+                        : "rgba(31,187,90,0.1)",
+                    color:
+                      offer.tier === 1
+                        ? "#FF6830"
+                        : offer.tier === 2
+                        ? "#E8A800"
+                        : "var(--green)",
                   }}
                 >
                   T{offer.tier}
@@ -330,7 +420,7 @@ export default function OffersInner() {
               </div>
 
               <div
-                className="flex items-center gap-2 text-xs mb-3"
+                className="flex flex-wrap items-center gap-2 text-xs mb-3"
                 style={{ color: "var(--t3)" }}
               >
                 {offer.coupon_code && (
@@ -350,6 +440,7 @@ export default function OffersInner() {
                   </span>
                 )}
                 <span>{offer.click_count ?? 0} clicks</span>
+                <span>{offer.is_active ? "🟢 Active" : "⏸ Paused"}</span>
               </div>
 
               <div className="flex gap-2">
@@ -368,7 +459,7 @@ export default function OffersInner() {
                     color: offer.is_active ? "var(--green)" : "var(--t2)",
                   }}
                 >
-                  {offer.is_active ? "● Active" : "○ Paused"}
+                  {offer.is_active ? "Pause Offer" : "Resume Offer"}
                 </button>
 
                 <button
