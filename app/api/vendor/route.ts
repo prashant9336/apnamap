@@ -9,21 +9,18 @@ async function requireVendor(supabase: ReturnType<typeof createClient>) {
 
   if (userErr || !user) return { user: null, role: null };
 
-  // Prefer auth metadata first, fallback to profiles
-  let role =
+  // ✅ Profiles table first
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const role =
+    profile?.role ||
     user.user_metadata?.role ||
     user.app_metadata?.role ||
-    null;
-
-  if (!role) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    role = profile?.role || "customer";
-  }
+    "customer";
 
   if (role === "vendor" || role === "admin") {
     return { user, role };
@@ -77,7 +74,7 @@ export async function GET(req: NextRequest) {
     total_saves: analytics.filter((e) => e.event_type === "save").length,
   };
 
-  return NextResponse.json({ shops: shops ?? [], stats, user_id: user.id });
+  return NextResponse.json({ shops: shops ?? [], stats, user_id: user.id, role });
 }
 
 export async function PATCH(req: NextRequest) {
