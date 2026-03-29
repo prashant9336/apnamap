@@ -18,14 +18,18 @@ type Shop = {
   locality?: { name?: string };
 };
 
+type FilterKey = "all" | "pending" | "approved" | "inactive";
+
 export default function AdminPage() {
   const supabase = createClient();
 
   const [shops, setShops] = useState<Shop[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [filter, setFilter] = useState<"all" | "pending" | "approved">("all");
+  const [filter, setFilter] = useState<FilterKey>("all");
+  const [query, setQuery] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -102,16 +106,48 @@ export default function AdminPage() {
       approved: shops.filter((s) => s.is_approved).length,
       pending: shops.filter((s) => !s.is_approved).length,
       active: shops.filter((s) => s.is_active).length,
+      inactive: shops.filter((s) => !s.is_active).length,
     };
   }, [shops]);
 
   const filtered = useMemo(() => {
-    if (filter === "pending") return shops.filter((s) => !s.is_approved);
-    if (filter === "approved") return shops.filter((s) => s.is_approved);
-    return shops;
-  }, [shops, filter]);
+    const q = query.trim().toLowerCase();
 
-  async function updateShop(shopId: string, action: "approve" | "reject" | "toggle_active") {
+    return shops.filter((shop) => {
+      const passFilter =
+        filter === "all"
+          ? true
+          : filter === "pending"
+          ? !shop.is_approved
+          : filter === "approved"
+          ? shop.is_approved
+          : !shop.is_active;
+
+      if (!passFilter) return false;
+
+      if (!q) return true;
+
+      const haystack = [
+        shop.name,
+        shop.slug,
+        shop.address,
+        shop.phone,
+        shop.vendor_id,
+        shop.category?.name,
+        shop.locality?.name,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(q);
+    });
+  }, [shops, filter, query]);
+
+  async function updateShop(
+    shopId: string,
+    action: "approve" | "reject" | "toggle_active"
+  ) {
     setBusyId(shopId);
     setError("");
 
@@ -147,11 +183,45 @@ export default function AdminPage() {
 
     setShops((prev) =>
       prev.map((shop) =>
-        shop.id === shopId ? { ...shop, ...updates } as Shop : shop
+        shop.id === shopId ? ({ ...shop, ...updates } as Shop) : shop
       )
     );
 
     setBusyId(null);
+  }
+
+  async function approveAllPending() {
+    const pendingIds = shops.filter((s) => !s.is_approved).map((s) => s.id);
+
+    if (pendingIds.length === 0) return;
+
+    setBulkBusy(true);
+    setError("");
+
+    const { error: bulkErr } = await supabase
+      .from("shops")
+      .update({
+        is_approved: true,
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      })
+      .in("id", pendingIds);
+
+    if (bulkErr) {
+      setError(bulkErr.message);
+      setBulkBusy(false);
+      return;
+    }
+
+    setShops((prev) =>
+      prev.map((shop) =>
+        !shop.is_approved
+          ? { ...shop, is_approved: true, is_active: true }
+          : shop
+      )
+    );
+
+    setBulkBusy(false);
   }
 
   if (loading) {
@@ -227,29 +297,62 @@ export default function AdminPage() {
           ))}
         </div>
 
-        <div className="flex gap-2 mb-4">
-          {[
-            { key: "all", label: "All" },
-            { key: "pending", label: "Pending" },
-            { key: "approved", label: "Approved" },
-          ].map((f) => (
+        <div className="mb-4 space-y-3">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by shop, locality, category, vendor id..."
+            className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+            style={{
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.10)",
+              color: "var(--t1)",
+            }}
+          />
+
+          <div className="flex flex-wrap gap-2">
+            {[
+              { key: "all", label: "All" },
+              { key: "pending", label: "Pending" },
+              { key: "approved", label: "Approved" },
+              { key: "inactive", label: "Inactive" },
+            ].map((f) => (
+              <button
+                key={f.key}
+                onClick={() => setFilter(f.key as FilterKey)}
+                className="px-3 py-2 rounded-full text-xs font-semibold"
+                style={
+                  filter === f.key
+                    ? { background: "var(--accent)", color: "#fff" }
+                    : {
+                        background: "rgba(255,255,255,0.05)",
+                        color: "var(--t2)",
+                        border: "1px solid rgba(255,255,255,0.08)",
+                      }
+                }
+              >
+                {f.label}
+              </button>
+            ))}
+
             <button
-              key={f.key}
-              onClick={() => setFilter(f.key as any)}
-              className="px-3 py-2 rounded-full text-xs font-semibold"
-              style={
-                filter === f.key
-                  ? { background: "var(--accent)", color: "#fff" }
-                  : {
-                      background: "rgba(255,255,255,0.05)",
-                      color: "var(--t2)",
-                      border: "1px solid rgba(255,255,255,0.08)",
-                    }
-              }
+              onClick={approveAllPending}
+              disabled={bulkBusy || stats.pending === 0}
+              className="px-3 py-2 rounded-full text-xs font-semibold ml-auto"
+              style={{
+                background: "rgba(31,187,90,0.1)",
+                border: "1px solid rgba(31,187,90,0.25)",
+                color: "var(--green)",
+                opacity: bulkBusy || stats.pending === 0 ? 0.5 : 1,
+              }}
             >
-              {f.label}
+              {bulkBusy ? "Approving..." : `Approve All Pending (${stats.pending})`}
             </button>
-          ))}
+          </div>
+        </div>
+
+        <div className="mb-3 text-xs" style={{ color: "var(--t3)" }}>
+          Showing {filtered.length} of {shops.length} shops
         </div>
 
         <div className="space-y-3">
