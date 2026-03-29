@@ -42,15 +42,14 @@ export default function AdminPage() {
 
       const {
         data: { user },
-        error: userErr,
       } = await supabase.auth.getUser();
 
-      if (userErr || !user) {
+      if (!user) {
         window.location.href = "/auth/login?redirect=/admin";
         return;
       }
 
-      const { data: profile, error: profileErr } = await supabase
+      const { data: profile } = await supabase
         .from("profiles")
         .select("role")
         .eq("id", user.id)
@@ -62,34 +61,16 @@ export default function AdminPage() {
         user.app_metadata?.role ||
         "customer";
 
-      if (profileErr) {
-        setError(profileErr.message);
-        setLoading(false);
-        return;
-      }
-
       if (role !== "admin") {
         setError("Forbidden");
         setLoading(false);
         return;
       }
 
+      // ✅ STEP 1: fetch shops (NO JOIN)
       const { data: shopData, error: shopErr } = await supabase
         .from("shops")
-        .select(`
-          id,
-          name,
-          slug,
-          vendor_id,
-          is_approved,
-          is_active,
-          created_at,
-          phone,
-          address,
-          category:categories(name, icon),
-          locality:localities(name),
-          vendor:profiles!shops_vendor_id_fkey(name, email)
-        `)
+        .select("*")
         .order("created_at", { ascending: false });
 
       if (shopErr) {
@@ -98,7 +79,28 @@ export default function AdminPage() {
         return;
       }
 
-      setShops((shopData ?? []) as Shop[]);
+      // ✅ STEP 2: fetch vendor profiles separately
+      const vendorIds = [
+        ...new Set((shopData ?? []).map((s: any) => s.vendor_id)),
+      ];
+
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, name, email")
+        .in("id", vendorIds);
+
+      const profileMap: any = {};
+      profiles?.forEach((p: any) => {
+        profileMap[p.id] = p;
+      });
+
+      // ✅ STEP 3: merge data
+      const finalShops = (shopData ?? []).map((shop: any) => ({
+        ...shop,
+        vendor: profileMap[shop.vendor_id] || null,
+      }));
+
+      setShops(finalShops);
       setLoading(false);
     }
 
@@ -111,12 +113,11 @@ export default function AdminPage() {
       approved: shops.filter((s) => s.is_approved).length,
       pending: shops.filter((s) => !s.is_approved).length,
       active: shops.filter((s) => s.is_active).length,
-      inactive: shops.filter((s) => !s.is_active).length,
     };
   }, [shops]);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = query.toLowerCase();
 
     return shops.filter((shop) => {
       const passFilter =
@@ -132,350 +133,94 @@ export default function AdminPage() {
 
       if (!q) return true;
 
-      const haystack = [
-        shop.name,
-        shop.slug,
-        shop.address,
-        shop.phone,
-        shop.vendor_id,
-        shop.vendor?.name,
-        shop.vendor?.email,
-        shop.category?.name,
-        shop.locality?.name,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      return haystack.includes(q);
+      return (
+        shop.name?.toLowerCase().includes(q) ||
+        shop.vendor?.name?.toLowerCase().includes(q) ||
+        shop.vendor?.email?.toLowerCase().includes(q)
+      );
     });
   }, [shops, filter, query]);
 
-  async function updateShop(
-    shopId: string,
-    action: "approve" | "reject" | "toggle_active"
-  ) {
+  async function updateShop(shopId: string, approve: boolean) {
     setBusyId(shopId);
-    setError("");
 
-    const current = shops.find((s) => s.id === shopId);
-    if (!current) {
-      setBusyId(null);
-      return;
-    }
-
-    let updates: Record<string, unknown> = {};
-
-    if (action === "approve") {
-      updates = { is_approved: true, is_active: true };
-    } else if (action === "reject") {
-      updates = { is_approved: false, is_active: false };
-    } else if (action === "toggle_active") {
-      updates = { is_active: !current.is_active };
-    }
-
-    const { error: updateErr } = await supabase
+    await supabase
       .from("shops")
       .update({
-        ...updates,
-        updated_at: new Date().toISOString(),
+        is_approved: approve,
+        is_active: approve,
       })
       .eq("id", shopId);
 
-    if (updateErr) {
-      setError(updateErr.message);
-      setBusyId(null);
-      return;
-    }
-
     setShops((prev) =>
-      prev.map((shop) =>
-        shop.id === shopId ? ({ ...shop, ...updates } as Shop) : shop
+      prev.map((s) =>
+        s.id === shopId
+          ? { ...s, is_approved: approve, is_active: approve }
+          : s
       )
     );
 
     setBusyId(null);
   }
 
-  async function approveAllPending() {
-    const pendingIds = shops.filter((s) => !s.is_approved).map((s) => s.id);
-
-    if (pendingIds.length === 0) return;
-
+  async function approveAll() {
     setBulkBusy(true);
-    setError("");
 
-    const { error: bulkErr } = await supabase
+    const pending = shops.filter((s) => !s.is_approved).map((s) => s.id);
+
+    if (pending.length === 0) return;
+
+    await supabase
       .from("shops")
-      .update({
-        is_approved: true,
-        is_active: true,
-        updated_at: new Date().toISOString(),
-      })
-      .in("id", pendingIds);
-
-    if (bulkErr) {
-      setError(bulkErr.message);
-      setBulkBusy(false);
-      return;
-    }
+      .update({ is_approved: true, is_active: true })
+      .in("id", pending);
 
     setShops((prev) =>
-      prev.map((shop) =>
-        !shop.is_approved
-          ? { ...shop, is_approved: true, is_active: true }
-          : shop
+      prev.map((s) =>
+        !s.is_approved ? { ...s, is_approved: true, is_active: true } : s
       )
     );
 
     setBulkBusy(false);
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen p-6 space-y-4" style={{ background: "var(--bg)" }}>
-        {[1, 2, 3, 4].map((i) => (
-          <div
-            key={i}
-            className="h-24 rounded-2xl"
-            style={{ background: "rgba(255,255,255,0.04)" }}
-          />
-        ))}
-      </div>
-    );
-  }
+  if (loading) return <div className="p-6">Loading...</div>;
 
   return (
-    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
-      <div
-        className="sticky top-0 z-50 px-4 py-3 flex items-center gap-3"
-        style={{
-          background: "rgba(5,7,12,0.96)",
-          backdropFilter: "blur(20px)",
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
-        }}
-      >
-        <Link href="/profile" className="text-xl">
-          ←
-        </Link>
-        <div className="flex-1">
-          <p className="font-syne font-black text-base">Admin Panel</p>
-          <p className="text-[10px]" style={{ color: "var(--t3)" }}>
-            Approve shops and control listings
-          </p>
-        </div>
-      </div>
+    <div className="p-4">
+      <h2 className="text-lg font-bold mb-4">Admin Panel</h2>
 
-      <div className="px-4 py-4">
-        {error && (
-          <div
-            className="mb-4 p-3 rounded-xl text-sm"
-            style={{
-              background: "rgba(239,68,68,0.1)",
-              color: "#f87171",
-              border: "1px solid rgba(239,68,68,0.2)",
-            }}
-          >
-            {error}
+      <input
+        placeholder="Search..."
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        className="border p-2 mb-4 w-full"
+      />
+
+      <button onClick={approveAll} className="mb-4">
+        Approve All Pending
+      </button>
+
+      {filtered.map((shop) => (
+        <div key={shop.id} className="border p-3 mb-3">
+          <b>{shop.name}</b>
+
+          <div>👤 {shop.vendor?.name || "Unknown"}</div>
+          <div>📧 {shop.vendor?.email || shop.vendor_id}</div>
+
+          <div>
+            {shop.is_approved ? "✅ Approved" : "⏳ Pending"}
           </div>
-        )}
 
-        <div className="grid grid-cols-4 gap-2 mb-5">
-          {[
-            { label: "Total", value: stats.total, icon: "🏪" },
-            { label: "Approved", value: stats.approved, icon: "✅" },
-            { label: "Pending", value: stats.pending, icon: "⏳" },
-            { label: "Active", value: stats.active, icon: "🟢" },
-          ].map((card) => (
-            <div
-              key={card.label}
-              className="p-3 rounded-xl text-center"
-              style={{
-                background: "rgba(255,255,255,0.034)",
-                border: "1px solid rgba(255,255,255,0.07)",
-              }}
-            >
-              <div className="text-lg mb-1">{card.icon}</div>
-              <div className="font-syne font-black text-lg">{card.value}</div>
-              <div className="text-[9px]" style={{ color: "var(--t3)" }}>
-                {card.label}
-              </div>
-            </div>
-          ))}
+          <button onClick={() => updateShop(shop.id, true)}>
+            Approve
+          </button>
+
+          <button onClick={() => updateShop(shop.id, false)}>
+            Reject
+          </button>
         </div>
-
-        <div className="mb-4 space-y-3">
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by shop, locality, category, vendor name/email..."
-            className="w-full px-4 py-3 rounded-xl text-sm outline-none"
-            style={{
-              background: "rgba(255,255,255,0.06)",
-              border: "1px solid rgba(255,255,255,0.10)",
-              color: "var(--t1)",
-            }}
-          />
-
-          <div className="flex flex-wrap gap-2">
-            {[
-              { key: "all", label: "All" },
-              { key: "pending", label: "Pending" },
-              { key: "approved", label: "Approved" },
-              { key: "inactive", label: "Inactive" },
-            ].map((f) => (
-              <button
-                key={f.key}
-                onClick={() => setFilter(f.key as FilterKey)}
-                className="px-3 py-2 rounded-full text-xs font-semibold"
-                style={
-                  filter === f.key
-                    ? { background: "var(--accent)", color: "#fff" }
-                    : {
-                        background: "rgba(255,255,255,0.05)",
-                        color: "var(--t2)",
-                        border: "1px solid rgba(255,255,255,0.08)",
-                      }
-                }
-              >
-                {f.label}
-              </button>
-            ))}
-
-            <button
-              onClick={approveAllPending}
-              disabled={bulkBusy || stats.pending === 0}
-              className="px-3 py-2 rounded-full text-xs font-semibold ml-auto"
-              style={{
-                background: "rgba(31,187,90,0.1)",
-                border: "1px solid rgba(31,187,90,0.25)",
-                color: "var(--green)",
-                opacity: bulkBusy || stats.pending === 0 ? 0.5 : 1,
-              }}
-            >
-              {bulkBusy ? "Approving..." : `Approve All Pending (${stats.pending})`}
-            </button>
-          </div>
-        </div>
-
-        <div className="mb-3 text-xs" style={{ color: "var(--t3)" }}>
-          Showing {filtered.length} of {shops.length} shops
-        </div>
-
-        <div className="space-y-3">
-          {filtered.map((shop) => (
-            <div
-              key={shop.id}
-              className="p-4 rounded-2xl"
-              style={{
-                background: "rgba(255,255,255,0.034)",
-                border: "1px solid rgba(255,255,255,0.07)",
-              }}
-            >
-              <div className="flex items-start justify-between gap-3 mb-3">
-                <div className="flex items-start gap-2">
-                  <div className="text-xl mt-0.5">{shop.category?.icon ?? "🏪"}</div>
-                  <div>
-                    <p className="font-syne font-bold text-sm">{shop.name}</p>
-                    <p className="text-xs" style={{ color: "var(--t3)" }}>
-                      {shop.category?.name ?? "Shop"} · {shop.locality?.name ?? "Unknown locality"}
-                    </p>
-                    <p className="text-[10px] mt-1" style={{ color: "var(--t3)" }}>
-                      {shop.address || "No address"}
-                    </p>
-                    <p className="text-[10px]" style={{ color: "var(--t3)" }}>
-                      👤 {shop.vendor?.name || "Unknown Vendor"}
-                    </p>
-                    <p className="text-[10px]" style={{ color: "var(--t3)" }}>
-                      📧 {shop.vendor?.email || shop.vendor_id}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-1 items-end">
-                  <span
-                    className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                    style={
-                      shop.is_approved
-                        ? {
-                            background: "rgba(31,187,90,0.13)",
-                            color: "var(--green)",
-                          }
-                        : {
-                            background: "rgba(232,168,0,0.12)",
-                            color: "var(--gold)",
-                          }
-                    }
-                  >
-                    {shop.is_approved ? "✓ Approved" : "⏳ Pending"}
-                  </span>
-
-                  <span
-                    className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                    style={
-                      shop.is_active
-                        ? {
-                            background: "rgba(31,187,90,0.13)",
-                            color: "var(--green)",
-                          }
-                        : {
-                            background: "rgba(255,255,255,0.06)",
-                            color: "var(--t3)",
-                          }
-                    }
-                  >
-                    {shop.is_active ? "Live" : "Inactive"}
-                  </span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  disabled={busyId === shop.id}
-                  onClick={() => updateShop(shop.id, "approve")}
-                  className="py-2 rounded-lg text-xs font-semibold"
-                  style={{
-                    background: "rgba(31,187,90,0.1)",
-                    border: "1px solid rgba(31,187,90,0.25)",
-                    color: "var(--green)",
-                    opacity: busyId === shop.id ? 0.5 : 1,
-                  }}
-                >
-                  Approve
-                </button>
-
-                <button
-                  disabled={busyId === shop.id}
-                  onClick={() => updateShop(shop.id, "reject")}
-                  className="py-2 rounded-lg text-xs font-semibold"
-                  style={{
-                    background: "rgba(239,68,68,0.08)",
-                    border: "1px solid rgba(239,68,68,0.18)",
-                    color: "#f87171",
-                    opacity: busyId === shop.id ? 0.5 : 1,
-                  }}
-                >
-                  Reject
-                </button>
-
-                <button
-                  disabled={busyId === shop.id}
-                  onClick={() => updateShop(shop.id, "toggle_active")}
-                  className="py-2 rounded-lg text-xs font-semibold"
-                  style={{
-                    background: "rgba(255,94,26,0.1)",
-                    border: "1px solid rgba(255,94,26,0.22)",
-                    color: "var(--accent)",
-                    opacity: busyId === shop.id ? 0.5 : 1,
-                  }}
-                >
-                  {shop.is_active ? "Deactivate" : "Activate"}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      ))}
     </div>
   );
 }
