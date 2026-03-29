@@ -1,44 +1,88 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
 export default function VendorDashboard() {
-  const [data, setData] = useState<{ shops: any[]; stats: any } | null>(null);
+  const [shops, setShops] = useState<any[]>([]);
+  const [stats, setStats] = useState({
+    total_views: 0,
+    total_calls: 0,
+    total_whatsapp: 0,
+    total_saves: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
   const router = useRouter();
   const supabase = createClient();
 
   useEffect(() => {
-    async function load() {
+    async function loadDashboard() {
       setLoading(true);
       setError("");
 
       const {
         data: { user },
+        error: userErr,
       } = await supabase.auth.getUser();
 
-      if (!user) {
+      if (userErr || !user) {
         router.push("/auth/login");
         return;
       }
 
-      const res = await fetch("/api/vendor", { cache: "no-store" });
-      const json = await res.json();
+      const { data: shopData, error: shopErr } = await supabase
+        .from("shops")
+        .select(`
+          *,
+          offers(*),
+          category:categories(name,slug,icon,color),
+          locality:localities(name,slug)
+        `)
+        .eq("vendor_id", user.id)
+        .order("created_at", { ascending: false });
 
-      if (!res.ok) {
-        setError(json?.error || "Failed to load dashboard");
+      if (shopErr) {
+        setError(shopErr.message);
         setLoading(false);
         return;
       }
 
-      setData(json);
+      const safeShops = shopData ?? [];
+      setShops(safeShops);
+
+      const shopIds = safeShops.map((s: any) => s.id);
+
+      if (shopIds.length > 0) {
+        const { data: analytics } = await supabase
+          .from("analytics_events")
+          .select("event_type, shop_id")
+          .in("shop_id", shopIds);
+
+        const events = analytics ?? [];
+
+        setStats({
+          total_views: events.filter((e: any) => e.event_type === "view").length,
+          total_calls: events.filter((e: any) => e.event_type === "call").length,
+          total_whatsapp: events.filter((e: any) => e.event_type === "whatsapp").length,
+          total_saves: events.filter((e: any) => e.event_type === "save").length,
+        });
+      } else {
+        setStats({
+          total_views: 0,
+          total_calls: 0,
+          total_whatsapp: 0,
+          total_saves: 0,
+        });
+      }
+
       setLoading(false);
     }
 
-    load();
+    loadDashboard();
   }, [router, supabase]);
 
   if (loading) {
@@ -50,9 +94,6 @@ export default function VendorDashboard() {
       </div>
     );
   }
-
-  const shops = data?.shops ?? [];
-  const stats = data?.stats ?? {};
 
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)" }}>
@@ -96,10 +137,10 @@ export default function VendorDashboard() {
 
         <div className="grid grid-cols-4 gap-2 mb-6">
           {[
-            { label: "Views", value: stats.total_views ?? 0, icon: "👁" },
-            { label: "Calls", value: stats.total_calls ?? 0, icon: "📞" },
-            { label: "WhatsApp", value: stats.total_whatsapp ?? 0, icon: "💬" },
-            { label: "Saves", value: stats.total_saves ?? 0, icon: "❤️" },
+            { label: "Views", value: stats.total_views, icon: "👁" },
+            { label: "Calls", value: stats.total_calls, icon: "📞" },
+            { label: "WhatsApp", value: stats.total_whatsapp, icon: "💬" },
+            { label: "Saves", value: stats.total_saves, icon: "❤️" },
           ].map((s) => (
             <div
               key={s.label}
