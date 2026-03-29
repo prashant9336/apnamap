@@ -3,67 +3,27 @@ import { motion } from "framer-motion";
 
 export default function YouAreHere({ locality }: { locality: string }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: -10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: [0.25, 0, 0, 1] }}
-      style={{
-        margin: "12px 12px 0",
-        padding: "10px 13px",
-        borderRadius: 12,
-        background: "rgba(31,187,90,0.09)",
-        border: "1px solid rgba(31,187,90,0.25)",
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-      }}
-    >
-      {/* Sonar icon */}
-      <div style={{ position: "relative", width: 20, height: 20, flexShrink: 0 }}>
-        {[0, 1].map(i => (
-          <motion.div
-            key={i}
-            style={{
-              position: "absolute", inset: 0,
-              border: "1.5px solid rgba(31,187,90,0.55)",
-              borderRadius: "50%",
-            }}
-            animate={{ scale: [0.25, 2.0], opacity: [0.9, 0] }}
-            transition={{ duration: 2.4, delay: i * 0.9, repeat: Infinity, ease: "easeOut" }}
-          />
+    <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+      className="mx-3 mt-3 flex items-center gap-3 px-3.5 py-2.5 rounded-xl"
+      style={{ background: "rgba(31,187,90,0.08)", border: "1px solid rgba(31,187,90,0.22)" }}>
+      {/* Sonar */}
+      <div className="relative w-5 h-5 flex-shrink-0">
+        {[1, 2].map((i) => (
+          <motion.div key={i} className="absolute inset-0 rounded-full"
+            style={{ border: "1.5px solid rgba(31,187,90,0.5)" }}
+            animate={{ scale: [0.3, 2], opacity: [0.8, 0] }}
+            transition={{ duration: 2.2, delay: i * 0.9, repeat: Infinity, ease: "easeOut" }} />
         ))}
-        <div style={{
-          position: "absolute",
-          top: "50%", left: "50%", transform: "translate(-50%,-50%)",
-          width: 9, height: 9,
-          background: "#1FBB5A",
-          borderRadius: "50%",
-          boxShadow: "0 0 10px #1FBB5A",
-        }} />
+        <motion.div className="absolute inset-0 m-auto rounded-full" style={{ width: 8, height: 8, background: "var(--green)", boxShadow: "0 0 10px var(--green)" }}
+          animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 2, repeat: Infinity }} />
       </div>
-
-      {/* Text */}
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: "11.5px", fontWeight: 700, color: "#1FBB5A" }}>
-          You are here
-        </div>
-        <div style={{ fontSize: "10.5px", color: "rgba(255,255,255,0.42)", marginTop: 1 }}>
-          {locality}, Prayagraj · GPS active
-        </div>
+      <div>
+        <p className="text-xs font-bold leading-tight" style={{ color: "var(--green)" }}>You are here</p>
+        <p className="text-[11px]" style={{ color: "rgba(255,255,255,0.42)" }}>{locality} · GPS active</p>
       </div>
-
-      {/* Live badge */}
-      <div style={{
-        marginLeft: "auto",
-        display: "flex", alignItems: "center", gap: 4,
-        fontSize: "9px", fontWeight: 700, textTransform: "uppercase",
-        letterSpacing: "1px", color: "rgba(31,187,90,0.65)",
-      }}>
-        <motion.div
-          style={{ width: 5, height: 5, borderRadius: "50%", background: "#1FBB5A" }}
-          animate={{ opacity: [1, 0.2, 1] }}
-          transition={{ duration: 1.6, repeat: Infinity }}
-        />
+      <div className="ml-auto flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider" style={{ color: "rgba(31,187,90,0.65)" }}>
+        <motion.span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--green)" }}
+          animate={{ opacity: [1, 0.2, 1] }} transition={{ duration: 1.5, repeat: Infinity }} />
         Live
       </div>
     </motion.div>

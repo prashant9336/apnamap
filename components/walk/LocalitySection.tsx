@@ -5,118 +5,76 @@ import ShopCard from "./ShopCard";
 import RoadDivider from "./RoadDivider";
 import type { WalkLocality } from "@/types";
 
-const STRIP_LABEL: Record<string,string> = {
-  "civil-lines":  "Main Market Strip",
-  "chowk-bazar":  "Heritage Bazaar Cluster",
-  "katra-market": "Katra Market Cluster",
-  "rambagh":      "Residential Market Strip",
-  "naini":        "Industrial Wholesale Strip",
+const CROWD_STYLES = {
+  hot:   { dot: "var(--accent)", badge: "rgba(255,94,26,0.13)", color: "var(--accent)", border: "rgba(255,94,26,0.28)", emoji: "🔥", text: "Most visited today" },
+  busy:  { dot: "var(--gold)",   badge: "rgba(232,168,0,0.11)",  color: "var(--gold)",   border: "rgba(232,168,0,0.26)",  emoji: "⚡", text: "Busy right now" },
+  quiet: { dot: "rgba(255,255,255,0.3)", badge: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.28)", border: "rgba(255,255,255,0.08)", emoji: "🔵", text: "Quiet now" },
 };
 
 export default function LocalitySection({ locality, index }: { locality: WalkLocality; index: number }) {
-  const ref    = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once: true, margin: "-20px 0px" });
+  const ref   = useRef(null);
+  const inView = useInView(ref, { once: true, margin: "-40px 0px" });
 
-  const left  = locality.shops.filter((_, i) => i % 2 === 0);
-  const right = locality.shops.filter((_, i) => i % 2 !== 0);
-
-  // Crowd config from badge
-  const crowdCfg = {
-    hot:   { dotBg: "#FF5E1A", dotShadow: "#FF5E1A", badgeClass: "hot",  badgeStyle: { background:"rgba(255,94,26,0.14)",  color:"#FF5E1A", border:"1px solid rgba(255,94,26,0.28)"  }, em: "🔥", lbl: "Most visited today" },
-    busy:  { dotBg: "#E8A800", dotShadow: "#E8A800", badgeClass: "busy", badgeStyle: { background:"rgba(232,168,0,0.12)",  color:"#E8A800", border:"1px solid rgba(232,168,0,0.26)"  }, em: "⚡", lbl: "Busy right now" },
-    quiet: { dotBg: "rgba(255,255,255,0.30)", dotShadow: "transparent", badgeClass: "quiet", badgeStyle: { background:"rgba(255,255,255,0.05)", color:"rgba(255,255,255,0.20)", border:"1px solid rgba(255,255,255,0.068)" }, em: "🔵", lbl: "Quiet now" },
-  };
-  const cc = crowdCfg[locality.crowd_badge] ?? crowdCfg.quiet;
-
-  const distLabel = index === 0
-    ? "You are here"
-    : locality.shops[0]
-      ? `${(locality.shops[0].distance_m / 1000).toFixed(1)} km away`
-      : `~${(index * 1.05).toFixed(1)} km`;
-
-  const strip = STRIP_LABEL[locality.slug] ?? `${locality.name} Cluster`;
+  const leftShops  = locality.shops.filter((_, i) => i % 2 === 0);
+  const rightShops = locality.shops.filter((_, i) => i % 2 !== 0);
+  const maxRows    = Math.max(leftShops.length, rightShops.length);
+  const crowd      = CROWD_STYLES[locality.crowd_badge];
 
   return (
-    <motion.div
-      ref={ref}
-      initial={{ opacity: 0, y: 8 }}
-      animate={inView ? { opacity: 1, y: 0 } : {}}
-      transition={{ duration: 0.45, ease: [0.25,0,0,1] }}
-      data-loc={locality.name}
-    >
-      {/* Locality header — matches .loc-head */}
-      <div style={{
-        display: "flex", alignItems: "flex-end", justifyContent: "space-between",
-        margin: "20px 13px 4px",
-      }}>
+    <motion.div ref={ref} initial={{ opacity: 0, x: -8 }} animate={inView ? { opacity: 1, x: 0 } : {}}
+      transition={{ duration: 0.45, ease: [0.25, 0, 0, 1] }}>
+
+      {/* Locality header */}
+      <div className="flex items-end justify-between mx-3 mt-5 mb-1">
         <div>
-          <h2 className="font-syne" style={{
-            fontSize: "24px", fontWeight: 800, color: "#EDEEF5",
-            letterSpacing: "-0.6px", lineHeight: 1,
-          }}>
-            {locality.name}
-          </h2>
+          <h2 className="font-syne font-black text-2xl leading-none" style={{ letterSpacing: "-0.5px" }}>{locality.name}</h2>
           {locality.description && (
-            <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.20)", fontStyle: "italic", marginTop: 3 }}>
-              {locality.description}
-            </div>
+            <p className="text-xs italic mt-1" style={{ color: "var(--t3)" }}>{locality.description}</p>
           )}
         </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{
-            fontSize: "10px", fontFamily: "'DM Mono',monospace",
-            color: "rgba(255,255,255,0.20)",
-            background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.068)",
-            borderRadius: 5, padding: "3px 8px", display: "inline-block", marginBottom: 2,
-          }}>
-            {distLabel}
+        <div className="text-right">
+          <div className="text-[10px] font-mono px-2 py-1 rounded inline-block" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", color: "var(--t3)" }}>
+            {index === 0 ? "You are here" : `${(index * 1.8).toFixed(1)} km`}
           </div>
-          <div style={{ fontSize: "9.5px", color: "rgba(255,255,255,0.10)" }}>
-            {locality.shops.length} shops
-          </div>
+          <div className="text-[9.5px] mt-1" style={{ color: "var(--t4)" }}>{locality.shops.length} shops</div>
         </div>
       </div>
 
-      {/* Crowd row — matches .loc-crowd */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={inView ? { opacity: 1 } : {}}
-        transition={{ delay: 0.1, duration: 0.4 }}
-        style={{ display: "flex", alignItems: "center", gap: 5, margin: "4px 13px 0", fontSize: "10.5px" }}
-      >
-        <motion.div
-          style={{ width: 6, height: 6, borderRadius: "50%", background: cc.dotBg, boxShadow: `0 0 6px ${cc.dotShadow}` }}
-          animate={{ opacity: [1, 0.2, 1] }}
-          transition={{ duration: 1, repeat: Infinity }}
-        />
-        <span style={{ color: "rgba(255,255,255,0.42)", fontWeight: 500 }}>
-          {locality.crowd_count} people here now
+      {/* Crowd intelligence */}
+      <div className="flex items-center gap-2 mx-3 mb-1">
+        <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: crowd.dot, boxShadow: `0 0 5px ${crowd.dot}` }} />
+        <span className="text-xs" style={{ color: "var(--t2)" }}>{locality.crowd_count} {locality.crowd_label}</span>
+        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: crowd.badge, color: crowd.color, border: `1px solid ${crowd.border}` }}>
+          {crowd.emoji} {crowd.text}
         </span>
-        <span style={{ fontSize: "9px", fontWeight: 700, padding: "1.5px 7px", borderRadius: 100, ...cc.badgeStyle }}>
-          {cc.em} {cc.lbl}
-        </span>
-      </motion.div>
-
-      {/* Dense cluster label — matches .dense-label */}
-      <div style={{ margin: "6px 13px 2px", display: "flex", alignItems: "center", gap: 7, fontSize: "10px", fontWeight: 700, color: "rgba(255,255,255,0.20)", textTransform: "uppercase", letterSpacing: "1px" }}>
-        <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.05)" }} />
-        <span>{strip}</span>
-        <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.05)" }} />
       </div>
 
-      {/* Street — matches .street */}
-      <div style={{ display: "flex", alignItems: "stretch", padding: "4px 0" }}>
-        {/* Left col */}
-        <div className="scol-l" style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 8, padding: "4px 7px" }}>
-          {left.map((s, i) => <ShopCard key={s.id} shop={s} index={i} side="left" />)}
+      {/* Cluster label */}
+      <div className="flex items-center gap-2 mx-3 my-1.5">
+        <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.05)" }} />
+        <span className="text-[9.5px] font-bold uppercase tracking-wider" style={{ color: "var(--t3)" }}>
+          {locality.name} Market Strip
+        </span>
+        <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.05)" }} />
+      </div>
+
+      {/* Street */}
+      <div className="flex items-stretch" style={{ minHeight: maxRows * 164 }}>
+        {/* Left column */}
+        <div className="scol-l flex flex-col gap-2 flex-1 px-1.5 py-2 min-w-0">
+          {leftShops.map((shop, i) => (
+            <ShopCard key={shop.id} shop={shop} index={i} side="left" />
+          ))}
         </div>
 
         {/* Road */}
-        <RoadDivider height={Math.max(left.length, right.length, 1) * 185 + 8} />
+        <RoadDivider height={maxRows * 164} />
 
-        {/* Right col */}
-        <div className="scol-r" style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 8, padding: "4px 7px" }}>
-          {right.map((s, i) => <ShopCard key={s.id} shop={s} index={i} side="right" />)}
+        {/* Right column */}
+        <div className="scol-r flex flex-col gap-2 flex-1 px-1.5 py-2 min-w-0">
+          {rightShops.map((shop, i) => (
+            <ShopCard key={shop.id} shop={shop} index={i} side="right" />
+          ))}
         </div>
       </div>
     </motion.div>
