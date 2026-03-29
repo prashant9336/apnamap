@@ -70,6 +70,9 @@ export default function VendorOnboarding() {
         router.push("/auth/login");
         return;
       }
+      await supabase.auth.updateUser({
+  data: { role: "vendor" },
+});
 
       if (!form.category_id || !form.locality_id) {
         setError("Please select a valid category and locality.");

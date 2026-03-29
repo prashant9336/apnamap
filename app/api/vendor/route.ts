@@ -7,29 +7,40 @@ async function requireVendor(supabase: ReturnType<typeof createClient>) {
     error: userErr,
   } = await supabase.auth.getUser();
 
-  if (userErr || !user) return null;
+  if (userErr || !user) return { user: null, role: null };
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  const role =
-    profile?.role ||
+  // Prefer auth metadata first, fallback to profiles
+  let role =
     user.user_metadata?.role ||
     user.app_metadata?.role ||
-    "customer";
+    null;
 
-  return role === "vendor" || role === "admin" ? user : null;
+  if (!role) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    role = profile?.role || "customer";
+  }
+
+  if (role === "vendor" || role === "admin") {
+    return { user, role };
+  }
+
+  return { user: null, role };
 }
 
 export async function GET(req: NextRequest) {
   const supabase = createClient();
-  const user = await requireVendor(supabase);
+  const { user, role } = await requireVendor(supabase);
 
   if (!user) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return NextResponse.json(
+      { error: "Forbidden", debug_role: role },
+      { status: 403 }
+    );
   }
 
   const { data: shops, error: shopErr } = await supabase
@@ -66,12 +77,12 @@ export async function GET(req: NextRequest) {
     total_saves: analytics.filter((e) => e.event_type === "save").length,
   };
 
-  return NextResponse.json({ shops: shops ?? [], stats });
+  return NextResponse.json({ shops: shops ?? [], stats, user_id: user.id });
 }
 
 export async function PATCH(req: NextRequest) {
   const supabase = createClient();
-  const user = await requireVendor(supabase);
+  const { user } = await requireVendor(supabase);
 
   if (!user) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -85,7 +96,7 @@ export async function PATCH(req: NextRequest) {
     .eq("id", shop_id)
     .single();
 
-  if (shop?.vendor_id !== user.id) {
+  if (!shop || shop.vendor_id !== user.id) {
     return NextResponse.json({ error: "Not your shop" }, { status: 403 });
   }
 
