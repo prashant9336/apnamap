@@ -28,7 +28,7 @@ export function useWalkData(
 
         const supabase = createClient();
 
-        // 1) Fetch localities directly from DB
+        // ✅ Fetch localities
         const { data: locData, error: locErr } = await supabase
           .from("localities")
           .select("*, city:cities(*)")
@@ -40,7 +40,7 @@ export function useWalkData(
           return;
         }
 
-        // 2) Fetch shops from API (not direct broken join query)
+        // ✅ Fetch shops
         const res = await fetch(
           `/api/shops?lat=${lat}&lng=${lng}&radius=${radiusM}`,
           { cache: "no-store" }
@@ -56,19 +56,11 @@ export function useWalkData(
 
         const rawShops = json?.shops ?? [];
 
-        if (!locData) {
-          setLocalities([]);
-          setLoading(false);
-          return;
-        }
-
-        // Map localities by id for fallback
         const localityMetaMap = new Map<string, any>();
-        locData.forEach((loc: any) => {
+        locData?.forEach((loc: any) => {
           localityMetaMap.set(loc.id, loc);
         });
 
-        // Group shops by locality_id
         const localityMap = new Map<string, WalkShop[]>();
 
         rawShops.forEach((shop: any) => {
@@ -79,7 +71,8 @@ export function useWalkData(
 
           if (dist > radiusM) return;
 
-          const fallbackLocality = localityMetaMap.get(shop.locality_id) ?? null;
+          const fallbackLocality =
+            localityMetaMap.get(shop.locality_id) ?? null;
 
           const walkShop: WalkShop = {
             ...shop,
@@ -89,10 +82,7 @@ export function useWalkData(
               shop.open_time && shop.close_time
                 ? isShopOpen(shop.open_time, shop.close_time, shop.open_days)
                 : false,
-            top_offer:
-              Array.isArray(shop.offers) && shop.offers.length > 0
-                ? shop.offers.find((o: any) => o.is_active) ?? shop.offers[0]
-                : null,
+            top_offer: shop.top_offer ?? null,
           };
 
           if (!localityMap.has(shop.locality_id)) {
@@ -110,7 +100,7 @@ export function useWalkData(
           { count: 12, label: "people here now", badge: "quiet" as const },
         ];
 
-        const walkLocs: WalkLocality[] = locData
+        const walkLocs: WalkLocality[] = (locData ?? [])
           .map((loc: any, idx: number) => {
             const locShops = (localityMap.get(loc.id) ?? []).sort(
               (a: any, b: any) => a.distance_m - b.distance_m
@@ -125,9 +115,14 @@ export function useWalkData(
               crowd_count: crowd.count + Math.floor(Math.random() * 10),
               crowd_label: crowd.label,
               crowd_badge: crowd.badge,
+              nearest_distance:
+                locShops.length > 0 ? locShops[0].distance_m : 999999,
             };
           })
-          .filter((l: any) => l.shops.length > 0);
+          .filter((l: any) => l.shops.length > 0)
+          .sort(
+            (a: any, b: any) => a.nearest_distance - b.nearest_distance
+          );
 
         setLocalities(walkLocs);
         setLoading(false);
