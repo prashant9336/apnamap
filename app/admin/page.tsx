@@ -80,9 +80,9 @@ export default function AdminPage() {
       }
 
       // ✅ STEP 2: fetch vendor profiles separately
-      const vendorIds = [
-        ...new Set((shopData ?? []).map((s: any) => s.vendor_id)),
-      ];
+      const vendorIds = Array.from(
+  new Set((shopData ?? []).map((s: any) => s.vendor_id))
+);
 
       const { data: profiles } = await supabase
         .from("profiles")
