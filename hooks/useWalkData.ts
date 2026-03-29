@@ -78,11 +78,21 @@ export function useWalkData(
             ...shop,
             locality: shop.locality ?? fallbackLocality,
             distance_m: dist,
+
             is_open:
               shop.open_time && shop.close_time
                 ? isShopOpen(shop.open_time, shop.close_time, shop.open_days)
                 : false,
+
             top_offer: shop.top_offer ?? null,
+
+            // 🔥 LIVE FEEL FLAGS (NO UI CHANGE)
+            is_trending:
+              (shop.top_offer?.tier ?? 5) <= 2 &&
+              Math.random() > 0.5,
+
+            is_busy:
+              dist < 2000 && Math.random() > 0.4,
           };
 
           if (!localityMap.has(shop.locality_id)) {
@@ -92,13 +102,21 @@ export function useWalkData(
           localityMap.get(shop.locality_id)!.push(walkShop);
         });
 
-        const CROWD = [
-          { count: 47, label: "people here now", badge: "hot" as const },
-          { count: 42, label: "people here now", badge: "busy" as const },
-          { count: 19, label: "people here now", badge: "quiet" as const },
-          { count: 31, label: "people here now", badge: "busy" as const },
-          { count: 12, label: "people here now", badge: "quiet" as const },
-        ];
+        // 🔥 TIME-BASED CROWD ENGINE
+        const getLiveCrowd = (hour: number) => {
+          if (hour >= 9 && hour <= 12)
+            return { base: 20, label: "morning rush", badge: "busy" as const };
+
+          if (hour >= 13 && hour <= 16)
+            return { base: 35, label: "afternoon peak", badge: "hot" as const };
+
+          if (hour >= 17 && hour <= 21)
+            return { base: 50, label: "evening rush", badge: "hot" as const };
+
+          return { base: 10, label: "quiet hours", badge: "quiet" as const };
+        };
+
+        const hour = new Date().getHours();
 
         const walkLocs: WalkLocality[] = (locData ?? [])
           .map((loc: any, idx: number) => {
@@ -106,25 +124,41 @@ export function useWalkData(
               (a: any, b: any) => a.distance_m - b.distance_m
             );
 
-            const crowd = CROWD[idx % CROWD.length];
+            if (locShops.length === 0) return null;
+
+            const live = getLiveCrowd(hour);
+
+            const crowd = {
+              count:
+                live.base +
+                Math.floor(Math.random() * 15) +
+                locShops.length * 2,
+              label: live.label,
+              badge: live.badge,
+            };
 
             return {
               ...loc,
               city: loc.city ?? undefined,
               shops: locShops,
-              crowd_count: crowd.count + Math.floor(Math.random() * 10),
+
+              crowd_count: crowd.count,
               crowd_label: crowd.label,
               crowd_badge: crowd.badge,
-              nearest_distance:
-                locShops.length > 0 ? locShops[0].distance_m : 999999,
+
+              nearest_distance: locShops[0].distance_m,
             };
           })
-          .filter((l: any) => l.shops.length > 0)
-          .sort(
-            (a: any, b: any) => a.nearest_distance - b.nearest_distance
-          );
+          .filter(Boolean)
+          .sort((a: any, b: any) => {
+            // 🔥 SMART PRIORITY SORT
+            const scoreA = a.crowd_count * 2 - a.nearest_distance / 100;
+            const scoreB = b.crowd_count * 2 - b.nearest_distance / 100;
 
-        setLocalities(walkLocs);
+            return scoreB - scoreA;
+          });
+
+        setLocalities(walkLocs as WalkLocality[]);
         setLoading(false);
       } catch (err: any) {
         setError(err?.message || "Something went wrong");
