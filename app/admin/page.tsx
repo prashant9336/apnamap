@@ -22,12 +22,6 @@ export default function AdminPage() {
   const supabase = createClient();
 
   const [shops, setShops] = useState<Shop[]>([]);
-  const [stats, setStats] = useState({
-    total: 0,
-    approved: 0,
-    pending: 0,
-    active: 0,
-  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<"all" | "pending" | "approved">("all");
@@ -40,29 +34,76 @@ export default function AdminPage() {
 
       const {
         data: { user },
+        error: userErr,
       } = await supabase.auth.getUser();
 
-      if (!user) {
+      if (userErr || !user) {
         window.location.href = "/auth/login?redirect=/admin";
         return;
       }
 
-      const res = await fetch("/api/admin/shops", { cache: "no-store" });
-      const json = await res.json();
+      const { data: profile, error: profileErr } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
 
-      if (!res.ok) {
-        setError(json?.error || "Failed to load admin panel");
+      const role =
+        profile?.role ||
+        user.user_metadata?.role ||
+        user.app_metadata?.role ||
+        "customer";
+
+      if (profileErr) {
+        setError(profileErr.message);
         setLoading(false);
         return;
       }
 
-      setShops(json.shops ?? []);
-      setStats(json.stats ?? { total: 0, approved: 0, pending: 0, active: 0 });
+      if (role !== "admin") {
+        setError("Forbidden");
+        setLoading(false);
+        return;
+      }
+
+      const { data: shopData, error: shopErr } = await supabase
+        .from("shops")
+        .select(`
+          id,
+          name,
+          slug,
+          vendor_id,
+          is_approved,
+          is_active,
+          created_at,
+          phone,
+          address,
+          category:categories(name, icon),
+          locality:localities(name)
+        `)
+        .order("created_at", { ascending: false });
+
+      if (shopErr) {
+        setError(shopErr.message);
+        setLoading(false);
+        return;
+      }
+
+      setShops((shopData ?? []) as Shop[]);
       setLoading(false);
     }
 
     load();
   }, [supabase]);
+
+  const stats = useMemo(() => {
+    return {
+      total: shops.length,
+      approved: shops.filter((s) => s.is_approved).length,
+      pending: shops.filter((s) => !s.is_approved).length,
+      active: shops.filter((s) => s.is_active).length,
+    };
+  }, [shops]);
 
   const filtered = useMemo(() => {
     if (filter === "pending") return shops.filter((s) => !s.is_approved);
@@ -74,30 +115,41 @@ export default function AdminPage() {
     setBusyId(shopId);
     setError("");
 
-    const res = await fetch("/api/admin/shops", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ shop_id: shopId, action }),
-    });
-
-    const json = await res.json();
-
-    if (!res.ok) {
-      setError(json?.error || "Action failed");
+    const current = shops.find((s) => s.id === shopId);
+    if (!current) {
       setBusyId(null);
       return;
     }
 
-    const updated = json.shop;
+    let updates: Record<string, unknown> = {};
 
-    const nextShops = shops.map((s) => (s.id === updated.id ? updated : s));
-    setShops(nextShops);
-    setStats({
-      total: nextShops.length,
-      approved: nextShops.filter((s) => s.is_approved).length,
-      pending: nextShops.filter((s) => !s.is_approved).length,
-      active: nextShops.filter((s) => s.is_active).length,
-    });
+    if (action === "approve") {
+      updates = { is_approved: true, is_active: true };
+    } else if (action === "reject") {
+      updates = { is_approved: false, is_active: false };
+    } else if (action === "toggle_active") {
+      updates = { is_active: !current.is_active };
+    }
+
+    const { error: updateErr } = await supabase
+      .from("shops")
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", shopId);
+
+    if (updateErr) {
+      setError(updateErr.message);
+      setBusyId(null);
+      return;
+    }
+
+    setShops((prev) =>
+      prev.map((shop) =>
+        shop.id === shopId ? { ...shop, ...updates } as Shop : shop
+      )
+    );
 
     setBusyId(null);
   }
