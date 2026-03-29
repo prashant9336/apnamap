@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function updateSession(request: NextRequest) {
-  let response = NextResponse.next();
+  let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,19 +22,29 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // 🔥 VERY IMPORTANT: this refreshes session
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
 
-  const role =
-    user?.user_metadata?.role ||
-    user?.app_metadata?.role ||
-    "customer";
+  // 🔥 IMPORTANT: profiles table first, metadata second
+  let role: string | null = null;
 
-  // 🔒 vendor protection
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    role =
+      profile?.role ||
+      user.user_metadata?.role ||
+      user.app_metadata?.role ||
+      "customer";
+  }
+
   if (path.startsWith("/vendor")) {
     if (!user) {
       const url = request.nextUrl.clone();
@@ -48,7 +58,6 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
-  // 🔒 admin protection
   if (path.startsWith("/admin")) {
     if (!user) {
       const url = request.nextUrl.clone();
