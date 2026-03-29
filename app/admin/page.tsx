@@ -16,6 +16,10 @@ type Shop = {
   address?: string | null;
   category?: { name?: string; icon?: string };
   locality?: { name?: string };
+  vendor?: {
+    name?: string | null;
+    email?: string | null;
+  };
 };
 
 type FilterKey = "all" | "pending" | "approved" | "inactive";
@@ -83,7 +87,8 @@ export default function AdminPage() {
           phone,
           address,
           category:categories(name, icon),
-          locality:localities(name)
+          locality:localities(name),
+          vendor:profiles!shops_vendor_id_fkey(name, email)
         `)
         .order("created_at", { ascending: false });
 
@@ -133,6 +138,8 @@ export default function AdminPage() {
         shop.address,
         shop.phone,
         shop.vendor_id,
+        shop.vendor?.name,
+        shop.vendor?.email,
         shop.category?.name,
         shop.locality?.name,
       ]
@@ -301,7 +308,7 @@ export default function AdminPage() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by shop, locality, category, vendor id..."
+            placeholder="Search by shop, locality, category, vendor name/email..."
             className="w-full px-4 py-3 rounded-xl text-sm outline-none"
             style={{
               background: "rgba(255,255,255,0.06)",
@@ -377,7 +384,10 @@ export default function AdminPage() {
                       {shop.address || "No address"}
                     </p>
                     <p className="text-[10px]" style={{ color: "var(--t3)" }}>
-                      Vendor: {shop.vendor_id}
+                      👤 {shop.vendor?.name || "Unknown Vendor"}
+                    </p>
+                    <p className="text-[10px]" style={{ color: "var(--t3)" }}>
+                      📧 {shop.vendor?.email || shop.vendor_id}
                     </p>
                   </div>
                 </div>
