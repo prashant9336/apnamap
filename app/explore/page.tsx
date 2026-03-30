@@ -4,6 +4,7 @@ import { useGeo } from "@/hooks/useGeo";
 import { useWalkData } from "@/hooks/useWalkData";
 import WalkView from "@/components/walk/WalkView";
 import AppShell from "@/components/layout/AppShell";
+import { useLocalityStreak } from "@/hooks/useLocalityStreak";
 
 export default function ExplorePage() {
   const { geo, detect } = useGeo();
@@ -13,7 +14,8 @@ export default function ExplorePage() {
   useEffect(() => {
     if (!asked) { setAsked(true); detect(); }
   }, [asked, detect]);
-
+import { useLocalityStreak } from "@/hooks/useLocalityStreak";
+const { trackVisit } = useLocalityStreak();
   return (
     <AppShell activeTab="walk">
       <WalkView
