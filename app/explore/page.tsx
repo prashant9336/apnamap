@@ -10,12 +10,16 @@ export default function ExplorePage() {
   const { geo, detect } = useGeo();
   const { localities, loading } = useWalkData(geo.lat ?? 25.4358, geo.lng ?? 81.8463, 50000);
   const [asked, setAsked] = useState(false);
-
+const { trackVisit } = useLocalityStreak();
   useEffect(() => {
     if (!asked) { setAsked(true); detect(); }
   }, [asked, detect]);
-import { useLocalityStreak } from "@/hooks/useLocalityStreak";
-const { trackVisit } = useLocalityStreak();
+
+useEffect(() => {
+  if (!geo.locality) return;
+  trackVisit(geo.locality);
+}, [geo.locality, trackVisit]);
+
   return (
     <AppShell activeTab="walk">
       <WalkView
