@@ -39,7 +39,8 @@ export default function LocalityTransition({ fromName, toName }: { fromName: str
           ))}
         </div>
 
-        <span>Leaving {fromName}</span>
+        <span style={{ color: "rgba(255,255,255,0.28)" }}>Leaving</span>
+        <span style={{ color: "rgba(255,255,255,0.50)", fontWeight: 600 }}>{fromName}</span>
 
         <motion.span
           style={{ fontSize: "14px" }}
@@ -49,7 +50,10 @@ export default function LocalityTransition({ fromName, toName }: { fromName: str
           🚶
         </motion.span>
 
-        <span style={{ color: "#FF5E1A", fontWeight: 700 }}>→</span>
+        <span style={{ color: "rgba(255,255,255,0.18)" }}>→</span>
+
+        <span style={{ color: "rgba(255,255,255,0.28)" }}>Entering</span>
+        <span style={{ color: "#FF5E1A", fontWeight: 700 }}>{toName}</span>
       </motion.div>
     </div>
   );

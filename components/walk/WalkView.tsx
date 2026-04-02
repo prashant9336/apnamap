@@ -198,15 +198,22 @@ export default function WalkView({ localities, loading, userLocality, gpsError }
         {/* You are here */}
         <YouAreHere locality={currentLoc || userLocality} />
 
+        {/* Live feed strip — activity from shops in this walk */}
+        <LiveFeedStrip localities={localities} />
+
         {/* Crowd banner */}
-        <CrowdBanner crowd={crowd} />
+        <CrowdBanner crowd={crowd} localities={localities} />
 
         {/* Localities */}
         {localities.map((loc, i) => (
           <div key={loc.id} data-loc={loc.name} data-loc-idx={i}>
             <LocalitySection locality={loc} index={i} />
             {i < localities.length - 1 && (
-              <LocalityTransition fromName={loc.name} toName={localities[i + 1].name} />
+              <>
+                <LocalityTransition fromName={loc.name} toName={localities[i + 1].name} />
+                {/* Mystery deal teaser — appears after first locality transition only */}
+                {i === 0 && <MysteryDeal />}
+              </>
             )}
           </div>
         ))}
@@ -256,32 +263,177 @@ function ModeTabs() {
   );
 }
 
+/* ─── Live Feed Strip ────────────────────────────────────────── */
+interface FeedItem { icon: string; shop: string; text: string }
+
+function LiveFeedStrip({ localities }: { localities: WalkLocality[] }) {
+  const allShops = localities.flatMap(l => l.shops);
+  if (allShops.length === 0) return null;
+
+  // Build feed items purely from in-memory locality data — zero extra API calls
+  const items: FeedItem[] = [];
+  allShops
+    .filter(s => (s.view_count ?? 0) > 0)
+    .sort((a, b) => (b.view_count ?? 0) - (a.view_count ?? 0))
+    .slice(0, 3)
+    .forEach(s => items.push({ icon: "👀", shop: s.name, text: `${s.view_count} views` }));
+  allShops
+    .filter(s => s.is_featured)
+    .slice(0, 2)
+    .forEach(s => items.push({ icon: "🔥", shop: s.name, text: "Trending now" }));
+  allShops
+    .filter(s => s.top_offer)
+    .slice(0, 4)
+    .forEach(s => items.push({
+      icon: s.top_offer!.tier === 1 ? "🔥" : "🎯",
+      shop: s.name,
+      text: s.top_offer!.title.length > 18
+        ? s.top_offer!.title.slice(0, 16) + "…"
+        : s.top_offer!.title,
+    }));
+
+  if (items.length === 0) return null;
+
+  return (
+    <div style={{ margin: "10px 0 0", paddingLeft: 12 }}>
+      {/* Label */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 5,
+        marginBottom: 6, paddingRight: 12,
+      }}>
+        <motion.div
+          style={{ width: 5, height: 5, borderRadius: "50%", background: "#FF5E1A" }}
+          animate={{ opacity: [1, 0.3, 1] }}
+          transition={{ duration: 1.2, repeat: Infinity }}
+        />
+        <span style={{ fontSize: "10px", fontWeight: 700, color: "rgba(255,255,255,0.30)", textTransform: "uppercase", letterSpacing: "0.7px" }}>
+          Live activity
+        </span>
+      </div>
+      {/* Horizontal scroll strip */}
+      <div style={{ display: "flex", gap: 7, overflowX: "auto", paddingRight: 12 }} className="scroll-none">
+        {items.map((item, i) => (
+          <motion.div
+            key={i}
+            initial={{ opacity: 0, x: 10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: i * 0.06, duration: 0.35, ease: [0.25,0,0,1] }}
+            style={{
+              flexShrink: 0, display: "flex", alignItems: "center", gap: 5,
+              padding: "5px 10px", borderRadius: 100,
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.07)",
+              fontSize: "10.5px", whiteSpace: "nowrap",
+            }}
+          >
+            <span>{item.icon}</span>
+            <span style={{ color: "#EDEEF5", fontWeight: 600, maxWidth: 80, overflow: "hidden", textOverflow: "ellipsis" }}>
+              {item.shop}
+            </span>
+            <span style={{ color: "rgba(255,255,255,0.28)" }}>·</span>
+            <span style={{ color: "rgba(255,255,255,0.38)" }}>{item.text}</span>
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ─── Crowd banner ───────────────────────────────────────────── */
-function CrowdBanner({ crowd }: { crowd: number }) {
+function CrowdBanner({ crowd, localities }: { crowd: number; localities: WalkLocality[] }) {
+  const totalOffers = localities.reduce(
+    (sum, l) => sum + l.shops.filter(s => s.top_offer).length, 0
+  );
   return (
     <motion.div
       initial={{ opacity: 0, y: -6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.15, duration: 0.5, ease: [0.25,0,0,1] }}
       style={{
-        margin: "10px 12px 0", padding: "9px 12px", borderRadius: 10,
+        margin: "10px 12px 0", padding: "10px 12px", borderRadius: 10,
         background: "rgba(255,94,26,0.07)", border: "1px solid rgba(255,94,26,0.18)",
-        display: "flex", alignItems: "center", gap: 8, fontSize: "11px",
+        display: "flex", alignItems: "center", gap: 8,
       }}
     >
-      <span style={{ fontSize: "14px" }}>🔥</span>
-      <span style={{ flex: 1, fontWeight: 600, color: "#EDEEF5" }}>Active right now in your city</span>
       <motion.span
-        animate={{ scale: [1, 1.04, 1] }}
+        style={{ fontSize: "15px" }}
+        animate={{ scale: [1, 1.15, 1] }}
+        transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+      >
+        🔥
+      </motion.span>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: "11px", fontWeight: 700, color: "#EDEEF5" }}>
+          Active right now
+        </div>
+        {totalOffers > 0 && (
+          <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.35)", marginTop: 1 }}>
+            {totalOffers} live deal{totalOffers !== 1 ? "s" : ""} in this area
+          </div>
+        )}
+      </div>
+      <motion.span
+        animate={{ scale: [1, 1.05, 1] }}
         transition={{ duration: 2.8, repeat: Infinity }}
         style={{
           fontSize: "10px", fontWeight: 700, color: "#FF5E1A",
           background: "rgba(255,94,26,0.12)", border: "1px solid rgba(255,94,26,0.28)",
-          borderRadius: 100, padding: "2px 8px", whiteSpace: "nowrap",
+          borderRadius: 100, padding: "3px 9px", whiteSpace: "nowrap",
         }}
       >
         🧑 {crowd} exploring
       </motion.span>
+    </motion.div>
+  );
+}
+
+/* ─── Mystery Deal teaser ────────────────────────────────────── */
+function MysteryDeal() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.97 }}
+      whileInView={{ opacity: 1, scale: 1 }}
+      viewport={{ once: true, margin: "-20px 0px" }}
+      transition={{ duration: 0.4, ease: [0.25,0,0,1] }}
+      style={{ margin: "4px 12px 4px", position: "relative", overflow: "hidden" }}
+    >
+      <div style={{
+        padding: "14px 16px", borderRadius: 13,
+        background: "linear-gradient(135deg,rgba(167,139,250,0.10),rgba(255,94,26,0.06))",
+        border: "1px solid rgba(167,139,250,0.22)",
+        display: "flex", alignItems: "center", gap: 12,
+      }}>
+        {/* Lock icon */}
+        <div style={{
+          width: 40, height: 40, borderRadius: 11, flexShrink: 0,
+          background: "rgba(167,139,250,0.12)", border: "1px solid rgba(167,139,250,0.22)",
+          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18,
+        }}>
+          🔒
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="font-syne" style={{ fontSize: "13px", fontWeight: 800, color: "#EDEEF5", marginBottom: 2 }}>
+            🎁 Mystery Deal Nearby
+          </div>
+          <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", lineHeight: 1.4 }}>
+            Keep exploring to unlock a hidden offer in this area
+          </div>
+        </div>
+        {/* Pulse indicator */}
+        <motion.div
+          animate={{ opacity: [0.4, 1, 0.4] }}
+          transition={{ duration: 1.8, repeat: Infinity }}
+          style={{
+            flexShrink: 0, fontSize: "9px", fontWeight: 700,
+            color: "rgba(167,139,250,0.7)",
+            background: "rgba(167,139,250,0.08)",
+            border: "1px solid rgba(167,139,250,0.18)",
+            borderRadius: 100, padding: "3px 8px", whiteSpace: "nowrap",
+          }}
+        >
+          🔓 Unlock
+        </motion.div>
+      </div>
     </motion.div>
   );
 }

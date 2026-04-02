@@ -115,12 +115,17 @@ export default function ShopCard({ shop, index, side }: Props) {
   const isNew         = !hasRating;
   const isTrending    = !!shop.is_featured;
   const isRecommended = hasRating && shop.avg_rating >= 4.0 && shop.review_count >= 5;
+  // Hidden gem: high quality but low discovery — deserves a spotlight
+  const isHiddenGem   = hasRating && shop.avg_rating >= 4.5 && (shop.view_count ?? 0) < 200 && shop.review_count >= 3;
   const validDist     = (shop.distance_m ?? 0) > 0 && shop.distance_m < 50_000;
   const endingSoon    = !!(offer?.ends_at &&
     new Date(offer.ends_at).getTime() - Date.now() < 86_400_000 * 3);
+  const hasViewers    = (shop.view_count ?? 0) > 0;
+  // Glow border when open + has a big deal — signals activity without animation cost
+  const isHot         = shop.is_open && offer?.tier === 1;
 
   const status = getStatus(shop);
-  const hasTags = isNew || isTrending || isRecommended || endingSoon;
+  const hasTags = isNew || isTrending || isRecommended || isHiddenGem || endingSoon;
 
   return (
     <motion.div
@@ -134,8 +139,11 @@ export default function ShopCard({ shop, index, side }: Props) {
       className="relative overflow-hidden cursor-pointer group"
       style={{
         borderRadius: 13,
-        border: "1px solid rgba(255,255,255,0.068)",
-        transition: "border-color 0.2s",
+        border: isHot
+          ? "1px solid rgba(255,94,26,0.35)"
+          : "1px solid rgba(255,255,255,0.068)",
+        boxShadow: isHot ? "0 0 12px rgba(255,94,26,0.10)" : "none",
+        transition: "border-color 0.3s, box-shadow 0.3s",
       }}
     >
       {/* Category skin tint */}
@@ -233,13 +241,13 @@ export default function ShopCard({ shop, index, side }: Props) {
         {/* Row 3: compact offer chip */}
         {offer && <OfferChip offer={offer} />}
 
-        {/* Row 4: trust signals — only rendered when at least one fires */}
-        {hasTags && (
+        {/* Row 4: trust signals + live viewers */}
+        {(hasTags || hasViewers) && (
           <div style={{
             display: "flex", alignItems: "center",
             gap: 5, flexWrap: "wrap", marginTop: 2,
           }}>
-            {isNew && !isTrending && !isRecommended && (
+            {isNew && !isTrending && !isRecommended && !isHiddenGem && (
               <span style={{
                 fontSize: "9px", fontWeight: 700,
                 color: "rgba(31,187,90,0.85)",
@@ -247,22 +255,38 @@ export default function ShopCard({ shop, index, side }: Props) {
                 border: "1px solid rgba(31,187,90,0.16)",
                 padding: "1.5px 6px", borderRadius: 100,
               }}>
-                🆕 New on ApnaMap
+                🆕 New
               </span>
             )}
             {isTrending && (
-              <span style={{ fontSize: "9.5px", color: "#FF5E1A", fontWeight: 600 }}>
-                🔥 Trending
+              <span style={{ fontSize: "9px", fontWeight: 700, color: "#FF5E1A" }}>
+                🔥 Hot
               </span>
             )}
-            {isRecommended && (
-              <span style={{ fontSize: "9.5px", color: "#E8A800", fontWeight: 600 }}>
+            {isHiddenGem && (
+              <span style={{
+                fontSize: "9px", fontWeight: 700,
+                color: "rgba(167,139,250,0.9)",
+                background: "rgba(167,139,250,0.07)",
+                border: "1px solid rgba(167,139,250,0.18)",
+                padding: "1.5px 6px", borderRadius: 100,
+              }}>
+                💎 Hidden gem
+              </span>
+            )}
+            {isRecommended && !isHiddenGem && (
+              <span style={{ fontSize: "9px", fontWeight: 700, color: "#E8A800" }}>
                 ⭐ Recommended
               </span>
             )}
             {endingSoon && (
-              <span style={{ fontSize: "9.5px", color: "#E8A800", fontWeight: 600 }}>
-                ⚡ Ending soon
+              <span style={{ fontSize: "9px", fontWeight: 700, color: "#E8A800" }}>
+                ⚡ Ends soon
+              </span>
+            )}
+            {hasViewers && (
+              <span style={{ fontSize: "9px", color: "rgba(255,255,255,0.22)" }}>
+                👀 {shop.view_count}
               </span>
             )}
           </div>
