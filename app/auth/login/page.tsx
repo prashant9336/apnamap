@@ -1,10 +1,10 @@
 "use client";
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
-export default function LoginPage() {
+function LoginForm() {
   const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
   const [loading,  setLoading]  = useState(false);
@@ -26,7 +26,6 @@ export default function LoginPage() {
     setLoading(true); setError("");
     const { data, error: err } = await sb.auth.signInWithPassword({ email, password });
     if (err) { setError(err.message); setLoading(false); return; }
-    // Check role and redirect accordingly
     const { data: profile } = await sb.from("profiles").select("role").eq("id", data.user.id).single();
     if (profile?.role === "admin")  { router.replace("/admin/dashboard"); return; }
     if (profile?.role === "vendor") { router.replace("/vendor/dashboard"); return; }
@@ -71,5 +70,13 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }
