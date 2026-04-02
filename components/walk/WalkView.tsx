@@ -1,12 +1,12 @@
 "use client";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import YouAreHere         from "./YouAreHere";
 import WalkProgress       from "./WalkProgress";
 import LocalitySection    from "./LocalitySection";
 import LocalityTransition from "./LocalityTransition";
-import type { WalkLocality } from "@/types";
+import type { WalkLocality, Offer } from "@/types";
 
 interface Props {
   localities:   WalkLocality[];
@@ -187,7 +187,7 @@ export default function WalkView({ localities, loading, userLocality, gpsError }
         ref={scrollRef}
         onScroll={onScroll}
         className="scroll-none"
-        style={{ flex: 1, overflowY: "scroll", overflowX: "hidden" }}
+        style={{ flex: 1, overflowY: "scroll", overflowX: "hidden", position: "relative" }}
       >
         {gpsError && (
           <div style={{ margin: "10px 12px 0", padding: "8px 12px", borderRadius: 10, fontSize: "11px", background: "rgba(232,168,0,0.09)", border: "1px solid rgba(232,168,0,0.22)", color: "#E8A800" }}>
@@ -212,7 +212,11 @@ export default function WalkView({ localities, loading, userLocality, gpsError }
               <>
                 <LocalityTransition fromName={loc.name} toName={localities[i + 1].name} />
                 {/* Mystery deal teaser — appears after first locality transition only */}
-                {i === 0 && <MysteryDeal />}
+                {i === 0 && (
+                  <MysteryDeal
+                    revealOffer={localities[1]?.shops?.find(s => s.top_offer)?.top_offer ?? null}
+                  />
+                )}
               </>
             )}
           </div>
@@ -222,6 +226,9 @@ export default function WalkView({ localities, loading, userLocality, gpsError }
         {localities.length > 0  && <EndCTA localities={localities} />}
         <div style={{ height: 18 }} />
       </div>
+
+      {/* Floating deal bar — anchored to bottom of walk view */}
+      <FloatingDealBar localities={localities} currentLoc={currentLoc || userLocality} />
     </div>
   );
 }
@@ -388,7 +395,9 @@ function CrowdBanner({ crowd, localities }: { crowd: number; localities: WalkLoc
 }
 
 /* ─── Mystery Deal teaser ────────────────────────────────────── */
-function MysteryDeal() {
+function MysteryDeal({ revealOffer }: { revealOffer?: Offer | null }) {
+  const [revealed, setRevealed] = useState(false);
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.97 }}
@@ -397,44 +406,193 @@ function MysteryDeal() {
       transition={{ duration: 0.4, ease: [0.25,0,0,1] }}
       style={{ margin: "4px 12px 4px", position: "relative", overflow: "hidden" }}
     >
-      <div style={{
-        padding: "14px 16px", borderRadius: 13,
-        background: "linear-gradient(135deg,rgba(167,139,250,0.10),rgba(255,94,26,0.06))",
-        border: "1px solid rgba(167,139,250,0.22)",
-        display: "flex", alignItems: "center", gap: 12,
-      }}>
-        {/* Lock icon */}
-        <div style={{
-          width: 40, height: 40, borderRadius: 11, flexShrink: 0,
-          background: "rgba(167,139,250,0.12)", border: "1px solid rgba(167,139,250,0.22)",
-          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18,
-        }}>
-          🔒
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="font-syne" style={{ fontSize: "13px", fontWeight: 800, color: "#EDEEF5", marginBottom: 2 }}>
-            🎁 Mystery Deal Nearby
-          </div>
-          <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", lineHeight: 1.4 }}>
-            Keep exploring to unlock a hidden offer in this area
-          </div>
-        </div>
-        {/* Pulse indicator */}
+      <AnimatePresence mode="wait">
+        {!revealed ? (
+          /* ── Locked state ── */
+          <motion.button
+            key="locked"
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0, scale: 0.96 }}
+            transition={{ duration: 0.2 }}
+            onClick={() => setRevealed(true)}
+            style={{
+              width: "100%", cursor: "pointer", background: "none", border: "none", padding: 0, textAlign: "left",
+            }}
+          >
+            <motion.div
+              whileTap={{ scale: 0.98 }}
+              style={{
+                padding: "14px 16px", borderRadius: 13,
+                background: "linear-gradient(135deg,rgba(167,139,250,0.10),rgba(255,94,26,0.06))",
+                border: "1px solid rgba(167,139,250,0.22)",
+                display: "flex", alignItems: "center", gap: 12,
+              }}
+            >
+              {/* Lock icon */}
+              <motion.div
+                animate={{ rotate: [0, -5, 5, 0] }}
+                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                style={{
+                  width: 40, height: 40, borderRadius: 11, flexShrink: 0,
+                  background: "rgba(167,139,250,0.12)", border: "1px solid rgba(167,139,250,0.22)",
+                  display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18,
+                }}
+              >
+                🔒
+              </motion.div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="font-syne" style={{ fontSize: "13px", fontWeight: 800, color: "#EDEEF5", marginBottom: 2 }}>
+                  🎁 Mystery Deal Nearby
+                </div>
+                <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", lineHeight: 1.4 }}>
+                  {revealOffer
+                    ? "Tap to reveal a hidden offer in this area"
+                    : "Keep exploring to unlock a hidden offer in this area"}
+                </div>
+              </div>
+              {/* Pulse unlock badge */}
+              <motion.div
+                animate={{ opacity: [0.4, 1, 0.4], scale: [1, 1.05, 1] }}
+                transition={{ duration: 1.8, repeat: Infinity }}
+                style={{
+                  flexShrink: 0, fontSize: "9px", fontWeight: 700,
+                  color: "rgba(167,139,250,0.7)",
+                  background: "rgba(167,139,250,0.08)",
+                  border: "1px solid rgba(167,139,250,0.18)",
+                  borderRadius: 100, padding: "3px 8px", whiteSpace: "nowrap",
+                }}
+              >
+                🔓 Tap to reveal
+              </motion.div>
+            </motion.div>
+          </motion.button>
+        ) : (
+          /* ── Revealed state ── */
+          <motion.div
+            key="revealed"
+            initial={{ opacity: 0, scale: 0.94, y: 6 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: [0.34, 1.56, 0.64, 1] }}
+            style={{
+              padding: "14px 16px", borderRadius: 13,
+              background: "linear-gradient(135deg,rgba(255,94,26,0.10),rgba(167,139,250,0.06))",
+              border: "1px solid rgba(255,94,26,0.30)",
+              display: "flex", alignItems: "center", gap: 12,
+            }}
+          >
+            {/* Unlocked icon */}
+            <motion.div
+              animate={{ scale: [1, 1.2, 1] }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+              style={{
+                width: 40, height: 40, borderRadius: 11, flexShrink: 0,
+                background: "rgba(255,94,26,0.14)", border: "1px solid rgba(255,94,26,0.28)",
+                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18,
+              }}
+            >
+              🎁
+            </motion.div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {revealOffer ? (
+                <>
+                  <div className="font-syne" style={{ fontSize: "13px", fontWeight: 800, color: "#FF5E1A", marginBottom: 2 }}>
+                    {revealOffer.title}
+                  </div>
+                  <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.45)", lineHeight: 1.4 }}>
+                    {revealOffer.discount_type === "percent" && revealOffer.discount_value
+                      ? `${revealOffer.discount_value}% off · `
+                      : revealOffer.discount_type === "flat" && revealOffer.discount_value
+                      ? `₹${revealOffer.discount_value} off · `
+                      : ""}
+                    {revealOffer.ends_at
+                      ? `Ends ${new Date(revealOffer.ends_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`
+                      : "Limited time"}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="font-syne" style={{ fontSize: "13px", fontWeight: 800, color: "#FF5E1A", marginBottom: 2 }}>
+                    You found a hidden deal!
+                  </div>
+                  <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", lineHeight: 1.4 }}>
+                    Ask any shop in this area for the explorer discount
+                  </div>
+                </>
+              )}
+            </div>
+            {/* Unlocked badge */}
+            <div style={{
+              flexShrink: 0, fontSize: "9px", fontWeight: 700,
+              color: "#FF5E1A",
+              background: "rgba(255,94,26,0.10)",
+              border: "1px solid rgba(255,94,26,0.25)",
+              borderRadius: 100, padding: "3px 8px", whiteSpace: "nowrap",
+            }}>
+              ✅ Unlocked
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+/* ─── Floating Deal Bar ──────────────────────────────────────── */
+function FloatingDealBar({ localities, currentLoc }: { localities: WalkLocality[]; currentLoc: string }) {
+  const activeLoc = localities.find(l => l.name === currentLoc) ?? localities[0];
+  const deals = activeLoc?.shops.filter(s => s.top_offer) ?? [];
+  const show  = deals.length > 0;
+
+  return (
+    <AnimatePresence>
+      {show && (
         <motion.div
-          animate={{ opacity: [0.4, 1, 0.4] }}
-          transition={{ duration: 1.8, repeat: Infinity }}
+          key="fdb"
+          initial={{ y: 60, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 60, opacity: 0 }}
+          transition={{ duration: 0.35, ease: [0.25,0,0,1] }}
           style={{
-            flexShrink: 0, fontSize: "9px", fontWeight: 700,
-            color: "rgba(167,139,250,0.7)",
-            background: "rgba(167,139,250,0.08)",
-            border: "1px solid rgba(167,139,250,0.18)",
-            borderRadius: 100, padding: "3px 8px", whiteSpace: "nowrap",
+            flexShrink: 0,
+            padding: "10px 14px",
+            background: "rgba(5,7,12,0.92)",
+            backdropFilter: "blur(18px)",
+            borderTop: "1px solid rgba(255,94,26,0.18)",
+            display: "flex", alignItems: "center", gap: 10,
           }}
         >
-          🔓 Unlock
+          {/* Pulsing dot */}
+          <motion.div
+            animate={{ scale: [1, 1.5, 1], opacity: [1, 0.5, 1] }}
+            transition={{ duration: 1.4, repeat: Infinity }}
+            style={{ width: 7, height: 7, borderRadius: "50%", background: "#FF5E1A", flexShrink: 0 }}
+          />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ fontSize: "12px", fontWeight: 700, color: "#EDEEF5" }}>
+              🔥 {deals.length} deal{deals.length !== 1 ? "s" : ""} in {activeLoc?.name ?? currentLoc}
+            </span>
+            <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", marginLeft: 6 }}>
+              · Tap any shop to claim
+            </span>
+          </div>
+          {/* Top deal preview */}
+          {deals[0]?.top_offer && (
+            <div style={{
+              flexShrink: 0, fontSize: "9.5px", fontWeight: 700,
+              color: "#FF5E1A",
+              background: "rgba(255,94,26,0.10)",
+              border: "1px solid rgba(255,94,26,0.22)",
+              borderRadius: 100, padding: "3px 9px", whiteSpace: "nowrap",
+              maxWidth: 90, overflow: "hidden", textOverflow: "ellipsis",
+            }}>
+              {deals[0].top_offer.title.length > 12
+                ? deals[0].top_offer.title.slice(0, 11) + "…"
+                : deals[0].top_offer.title}
+            </div>
+          )}
         </motion.div>
-      </div>
-    </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 

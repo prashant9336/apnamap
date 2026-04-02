@@ -1,9 +1,22 @@
 "use client";
-import { useRef } from "react";
+import { useRef, useState, useEffect } from "react";
 import { motion, useInView } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { formatDistance } from "@/lib/geo/distance";
 import type { WalkShop, Offer } from "@/types";
+
+/* ── Time-left helper ────────────────────────────────────────────── */
+function getTimeLeft(endsAt: string): string | null {
+  const ms = new Date(endsAt).getTime() - Date.now();
+  if (ms <= 0) return null;
+  const totalMins = Math.floor(ms / 60_000);
+  if (totalMins >= 1440) return null;          // > 24 h — no countdown shown
+  const h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m left`;
+  return "< 1m";
+}
 
 /* ── Category tints ──────────────────────────────────────────────── */
 const CAT_SKIN: Record<string, string> = {
@@ -296,61 +309,159 @@ export default function ShopCard({ shop, index, side }: Props) {
   );
 }
 
-/* ── Compact offer chip — replaces heavy Tier1/2/3 blocks ─────────
-   Single line: [icon + label] — [truncated title]
-   Keeps offer secondary to shop name, no animation overhead          */
+/* ── Compact offer chip ──────────────────────────────────────────
+   Format: [label] [discount?] • [countdown?] — [title]
+   Tier-1 gets a slow glow pulse. All chips show social proof.       */
 function OfferChip({ offer }: { offer: Offer }) {
-  const { tier, discount_type, title } = offer;
+  // Tick every 60 s so countdown stays fresh without thrashing
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!offer.ends_at) return;
+    const iv = setInterval(() => tick((n) => n + 1), 60_000);
+    return () => clearInterval(iv);
+  }, [offer.ends_at]);
 
+  const { tier, discount_type, discount_value, title, ends_at, click_count } = offer;
+
+  // ── Chip identity ──────────────────────────────────────────────
   let prefix: string;
   let color: string;
   let bg: string;
   let border: string;
+  const isBig = tier === 1;
 
-  if (tier === 1) {
+  if (isBig) {
     prefix = "🔥 Big Deal";
     color  = "#FF6A30";
-    bg     = "rgba(255,80,0,0.08)";
-    border = "1px solid rgba(255,80,0,0.20)";
+    bg     = "rgba(255,80,0,0.09)";
+    border = "1px solid rgba(255,80,0,0.24)";
   } else if (discount_type === "bogo" || discount_type === "free") {
     prefix = "🟢 Combo";
     color  = "#1FBB5A";
     bg     = "rgba(31,187,90,0.07)";
-    border = "1px solid rgba(31,187,90,0.16)";
+    border = "1px solid rgba(31,187,90,0.18)";
   } else if (tier === 2) {
     prefix = "⚡ Deal";
     color  = "#E8A800";
-    bg     = "rgba(232,168,0,0.07)";
-    border = "1px solid rgba(232,168,0,0.16)";
+    bg     = "rgba(232,168,0,0.08)";
+    border = "1px solid rgba(232,168,0,0.18)";
   } else {
-    prefix = "🎯 Offer";
-    color  = "rgba(255,255,255,0.38)";
+    prefix = "🎯";
+    color  = "rgba(255,255,255,0.35)";
     bg     = "rgba(255,255,255,0.04)";
     border = "1px solid rgba(255,255,255,0.07)";
   }
 
-  const shortTitle = title.length > 20 ? title.slice(0, 18) + "…" : title;
+  // ── Discount suffix ────────────────────────────────────────────
+  let discountBadge: string | null = null;
+  if (discount_value && discount_type === "percent") discountBadge = `${discount_value}% off`;
+  else if (discount_value && discount_type === "flat") discountBadge = `₹${discount_value} off`;
+  else if (discount_type === "bogo")                   discountBadge = "Buy 1 Get 1";
+  else if (discount_type === "free")                   discountBadge = "Free";
 
-  return (
+  // ── Countdown (only within 24 h) ──────────────────────────────
+  const timeLeft = ends_at ? getTimeLeft(ends_at) : null;
+
+  // ── Social proof ───────────────────────────────────────────────
+  const claimed = click_count ?? 0;
+
+  const shortTitle = title.length > 18 ? title.slice(0, 16) + "…" : title;
+
+  const chip = (
     <div style={{
       display: "flex", alignItems: "center", gap: 4,
       padding: "3.5px 8px", borderRadius: 7, marginBottom: 5,
-      background: bg, border,
-      overflow: "hidden",
+      background: bg, border, overflow: "hidden",
+      position: "relative",
     }}>
+      {/* Label */}
       <span style={{ fontSize: "10px", fontWeight: 700, color, flexShrink: 0 }}>
         {prefix}
       </span>
-      <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.18)", flexShrink: 0 }}>
-        —
-      </span>
+
+      {/* Discount badge */}
+      {discountBadge && (
+        <>
+          <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.15)", flexShrink: 0 }}>•</span>
+          <span style={{ fontSize: "9.5px", fontWeight: 700, color, flexShrink: 0 }}>{discountBadge}</span>
+        </>
+      )}
+
+      {/* Countdown */}
+      {timeLeft && (
+        <>
+          <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.15)", flexShrink: 0 }}>•</span>
+          <span style={{ fontSize: "9px", fontWeight: 700, color: "#E8A800", flexShrink: 0 }}>
+            ⏱ {timeLeft}
+          </span>
+        </>
+      )}
+
+      {/* Divider + title */}
+      <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.12)", flexShrink: 0 }}>—</span>
       <span style={{
-        fontSize: "10px", fontWeight: 500,
-        color: "rgba(255,255,255,0.50)",
+        fontSize: "10px", fontWeight: 500, color: "rgba(255,255,255,0.48)",
         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
       }}>
         {shortTitle}
       </span>
+
+      {/* Social proof — far right */}
+      {claimed > 0 && (
+        <span style={{
+          marginLeft: "auto", flexShrink: 0, paddingLeft: 4,
+          fontSize: "8.5px", color: "rgba(255,255,255,0.22)", whiteSpace: "nowrap",
+        }}>
+          🔥 {claimed}×
+        </span>
+      )}
     </div>
   );
+
+  // Tier-1 gets a slow glow pulse — all other tiers are static (no animation loop)
+  if (isBig) {
+    return (
+      <motion.div
+        animate={{ boxShadow: [
+          "0 0 0 rgba(255,80,0,0)",
+          "0 0 10px rgba(255,80,0,0.22), inset 0 0 8px rgba(255,80,0,0.05)",
+          "0 0 0 rgba(255,80,0,0)",
+        ]}}
+        transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+        style={{ borderRadius: 7, marginBottom: 5 }}
+      >
+        {/* Re-render chip without its own marginBottom since wrapper has it */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 4,
+          padding: "3.5px 8px", borderRadius: 7,
+          background: bg, border, overflow: "hidden",
+        }}>
+          <span style={{ fontSize: "10px", fontWeight: 700, color, flexShrink: 0 }}>{prefix}</span>
+          {discountBadge && (
+            <>
+              <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.15)", flexShrink: 0 }}>•</span>
+              <span style={{ fontSize: "9.5px", fontWeight: 700, color, flexShrink: 0 }}>{discountBadge}</span>
+            </>
+          )}
+          {timeLeft && (
+            <>
+              <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.15)", flexShrink: 0 }}>•</span>
+              <span style={{ fontSize: "9px", fontWeight: 700, color: "#E8A800", flexShrink: 0 }}>⏱ {timeLeft}</span>
+            </>
+          )}
+          <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.12)", flexShrink: 0 }}>—</span>
+          <span style={{ fontSize: "10px", fontWeight: 500, color: "rgba(255,255,255,0.48)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {shortTitle}
+          </span>
+          {claimed > 0 && (
+            <span style={{ marginLeft: "auto", flexShrink: 0, paddingLeft: 4, fontSize: "8.5px", color: "rgba(255,255,255,0.22)", whiteSpace: "nowrap" }}>
+              🔥 {claimed}×
+            </span>
+          )}
+        </div>
+      </motion.div>
+    );
+  }
+
+  return chip;
 }
