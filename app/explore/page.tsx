@@ -4,29 +4,32 @@ import { useGeo } from "@/hooks/useGeo";
 import { useWalkData } from "@/hooks/useWalkData";
 import WalkView from "@/components/walk/WalkView";
 import AppShell from "@/components/layout/AppShell";
-import { useLocalityStreak } from "@/hooks/useLocalityStreak";
+
+const DEFAULT_LAT = parseFloat(process.env.NEXT_PUBLIC_DEFAULT_LAT ?? "25.4358");
+const DEFAULT_LNG = parseFloat(process.env.NEXT_PUBLIC_DEFAULT_LNG ?? "81.8463");
 
 export default function ExplorePage() {
   const { geo, detect } = useGeo();
-  const { localities, loading } = useWalkData(geo.lat ?? 25.4358, geo.lng ?? 81.8463, 50000);
   const [asked, setAsked] = useState(false);
-const { trackVisit } = useLocalityStreak();
+
+  // Use GPS if available, otherwise fall back to Prayagraj
+  const lat = geo.lat ?? DEFAULT_LAT;
+  const lng = geo.lng ?? DEFAULT_LNG;
+
+  // 50km radius — covers all Prayagraj localities from anywhere in the city
+  const { localities, loading } = useWalkData(lat, lng, 50000);
+
   useEffect(() => {
     if (!asked) { setAsked(true); detect(); }
   }, [asked, detect]);
-
-useEffect(() => {
-  if (!geo.locality) return;
-  trackVisit(geo.locality);
-}, [geo.locality, trackVisit]);
 
   return (
     <AppShell activeTab="walk">
       <WalkView
         localities={localities}
         loading={loading}
-        userLat={geo.lat ?? 25.4358}
-        userLng={geo.lng ?? 81.8463}
+        userLat={lat}
+        userLng={lng}
         userLocality={geo.locality ?? "Prayagraj"}
         gpsError={geo.error}
       />

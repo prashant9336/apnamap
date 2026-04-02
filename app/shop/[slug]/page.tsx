@@ -155,6 +155,24 @@ export default function ShopPage() {
           </div>
         )}
 
+
+        {/* Claim this shop */}
+        {!shop.is_claimed && (
+          <div className="mb-6 p-4 rounded-2xl" style={{ background:"rgba(255,94,26,0.06)", border:"1px solid rgba(255,94,26,0.18)" }}>
+            <p className="font-syne font-bold text-sm mb-1" style={{ color:"#F2F5FF" }}>🏪 Is this your shop?</p>
+            <p className="text-xs mb-3" style={{ color:"rgba(255,255,255,0.40)", lineHeight:1.6 }}>Claim this listing to manage offers, update details, and connect directly with customers.</p>
+            <a href={`/vendor/claim?shop_id=${shop.id}`}
+              className="inline-block px-5 py-2.5 rounded-full text-sm font-bold text-white"
+              style={{ background:"#FF5E1A", textDecoration:"none", boxShadow:"0 0 18px rgba(255,94,26,0.35)" }}>
+              Claim This Shop →
+            </a>
+          </div>
+        )}
+        {shop.is_claimed && (
+          <div className="mb-4 px-3 py-2 rounded-xl text-xs" style={{ background:"rgba(31,187,90,0.08)", border:"1px solid rgba(31,187,90,0.22)", color:"#1FBB5A" }}>
+            ✓ This shop is claimed and managed by the owner
+          </div>
+        )}
         {/* Info */}
         <div className="space-y-3 pb-8">
           <h2 className="font-syne font-bold text-base">ℹ️ Info</h2>
