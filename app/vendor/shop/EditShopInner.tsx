@@ -14,6 +14,8 @@ export default function EditShopInner() {
   const [shop, setShop] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [gpsLabel, setGpsLabel] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     name: "",
@@ -48,6 +50,36 @@ export default function EditShopInner() {
         }
       });
   }, [shopId]);
+
+  async function updateLocation() {
+    if (!navigator.geolocation) return;
+    setGpsLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        await supabase.from("shops").update({ lat, lng }).eq("id", shopId!);
+        setShop((s: any) => ({ ...s, lat, lng }));
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+            { headers: { "User-Agent": "ApnaMap/1.0" } }
+          );
+          const data = await res.json();
+          setGpsLabel(
+            data.address?.suburb ||
+            data.address?.neighbourhood ||
+            data.address?.road ||
+            `${lat.toFixed(5)}, ${lng.toFixed(5)}`
+          );
+        } catch {
+          setGpsLabel(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+        }
+        setGpsLoading(false);
+      },
+      () => setGpsLoading(false),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
 
   async function save() {
     setSaving(true);
@@ -127,6 +159,35 @@ export default function EditShopInner() {
             setForm((p) => ({ ...p, description: e.target.value }))
           }
         />
+
+        {/* Location update */}
+        <div>
+          <p className="text-xs font-semibold mb-1.5" style={{ color: "var(--t2)" }}>
+            Shop Location on Map
+          </p>
+          {shop.lat && shop.lng && !gpsLabel && (
+            <p className="text-xs mb-2" style={{ color: "var(--t3)" }}>
+              Current pin: {Number(shop.lat).toFixed(5)}, {Number(shop.lng).toFixed(5)}
+            </p>
+          )}
+          {gpsLabel && (
+            <p className="text-xs mb-2" style={{ color: "#1FBB5A" }}>
+              ✓ Updated to: {gpsLabel}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={updateLocation}
+            disabled={gpsLoading}
+            className="w-full py-2.5 rounded-xl text-sm font-bold"
+            style={{ background: "rgba(255,94,26,0.08)", border: "1px dashed rgba(255,94,26,0.35)", color: "var(--accent)" }}
+          >
+            {gpsLoading ? "Detecting…" : "📍 Update to My Current Location"}
+          </button>
+          <p className="text-[10px] mt-1" style={{ color: "var(--t3)" }}>
+            Stand at your shop entrance, then tap to pin the exact location.
+          </p>
+        </div>
       </div>
     </div>
   );

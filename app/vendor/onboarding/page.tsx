@@ -28,6 +28,52 @@ export default function VendorOnboarding() {
     offer_value: "",
   });
 
+  const DEFAULT_LAT = parseFloat(process.env.NEXT_PUBLIC_DEFAULT_LAT ?? "25.4358");
+  const DEFAULT_LNG = parseFloat(process.env.NEXT_PUBLIC_DEFAULT_LNG ?? "81.8463");
+
+  const [shopLat, setShopLat] = useState<number | null>(null);
+  const [shopLng, setShopLng] = useState<number | null>(null);
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [gpsLabel, setGpsLabel] = useState<string | null>(null);
+
+  async function captureLocation() {
+    if (!navigator.geolocation) {
+      setError("GPS not available on this device");
+      return;
+    }
+    setGpsLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        setShopLat(lat);
+        setShopLng(lng);
+        // reverse-geocode for label
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+            { headers: { "User-Agent": "ApnaMap/1.0" } }
+          );
+          const data = await res.json();
+          const area =
+            data.address?.suburb ||
+            data.address?.neighbourhood ||
+            data.address?.road ||
+            data.address?.city ||
+            "Your Location";
+          setGpsLabel(area);
+        } catch {
+          setGpsLabel(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+        }
+        setGpsLoading(false);
+      },
+      () => {
+        setError("Location access denied. Using city centre as fallback.");
+        setGpsLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
+
   const router = useRouter();
   const supabase = createClient();
 
@@ -106,8 +152,8 @@ export default function VendorOnboarding() {
           phone: form.phone,
           whatsapp: form.whatsapp || form.phone,
           address: form.address,
-          lat: 25.4358,
-          lng: 81.8463,
+          lat: shopLat ?? DEFAULT_LAT,
+          lng: shopLng ?? DEFAULT_LNG,
           open_time: form.open_time,
           close_time: form.close_time,
           is_approved: false,
@@ -380,6 +426,40 @@ export default function VendorOnboarding() {
                   color: "var(--t1)",
                 }}
               />
+            </div>
+
+            {/* GPS pin */}
+            <div>
+              <label
+                className="block text-xs font-semibold mb-1.5"
+                style={{ color: "var(--t2)" }}
+              >
+                Pin Shop on Map
+              </label>
+              <button
+                type="button"
+                onClick={captureLocation}
+                disabled={gpsLoading}
+                className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all"
+                style={
+                  shopLat
+                    ? { background: "rgba(31,187,90,0.10)", border: "1px solid rgba(31,187,90,0.30)", color: "#1FBB5A" }
+                    : { background: "rgba(255,94,26,0.08)", border: "1px dashed rgba(255,94,26,0.35)", color: "var(--accent)" }
+                }
+              >
+                {gpsLoading ? (
+                  "Detecting…"
+                ) : shopLat ? (
+                  <>✓ Pinned: {gpsLabel}</>
+                ) : (
+                  <>📍 Use My Current Location</>
+                )}
+              </button>
+              {!shopLat && (
+                <p className="text-[10px] mt-1.5" style={{ color: "var(--t3)" }}>
+                  Helps customers find your shop on the map. Stand at your shop entrance and tap the button.
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
