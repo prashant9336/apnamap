@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -14,7 +14,7 @@ async function sendOTP(phone: string): Promise<{ success: boolean; code?: string
   return { success: true, code };
 }
 
-export default function ClaimShopPage() {
+function ClaimShopForm() {
   const params = useSearchParams();
   const shopId = params.get("shop_id");
   const router = useRouter();
@@ -171,5 +171,13 @@ export default function ClaimShopPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function ClaimShopPage() {
+  return (
+    <Suspense>
+      <ClaimShopForm />
+    </Suspense>
   );
 }
