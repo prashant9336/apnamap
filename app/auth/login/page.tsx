@@ -61,7 +61,20 @@ function LoginForm() {
           </button>
         </form>
 
-        <p style={{ textAlign:"center", fontSize:13, marginTop:20, color:"rgba(255,255,255,0.40)" }}>
+        {/* Phone OTP CTA */}
+        <Link href="/auth/phone" style={{
+          display:"block", textAlign:"center", marginTop:18,
+          padding:"12px", borderRadius:12,
+          background:"rgba(255,255,255,0.04)",
+          border:"1px solid rgba(255,255,255,0.09)",
+          fontSize:13, fontWeight:700,
+          color:"rgba(255,255,255,0.60)",
+          textDecoration:"none",
+        }}>
+          📲 Sign in with Mobile OTP instead
+        </Link>
+
+        <p style={{ textAlign:"center", fontSize:13, marginTop:16, color:"rgba(255,255,255,0.40)" }}>
           No account?{" "}
           <Link href="/auth/signup" style={{ color:"#FF5E1A", fontWeight:600, textDecoration:"none" }}>Sign up free</Link>
         </p>
