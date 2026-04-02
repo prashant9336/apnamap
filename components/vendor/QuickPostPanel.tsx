@@ -6,6 +6,7 @@ import {
   QuickPostHistory,
   type QuickPost,
 } from "@/components/vendor/QuickPostHistory";
+import VoicePostModal from "@/components/vendor/VoicePostModal";
 
 interface QuickPostPanelProps {
   shopId: string;
@@ -58,6 +59,7 @@ export function QuickPostPanel({
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [voiceOpen, setVoiceOpen] = useState(false);
 
   const defaultNote = useMemo(() => {
     return PRESETS.find((p) => p.type === selected)?.note ?? "";
@@ -105,7 +107,21 @@ export function QuickPostPanel({
           border: "1px solid rgba(255,255,255,0.07)",
         }}
       >
-        <div className="font-syne font-bold text-base mb-3">Quick Post</div>
+        <div className="flex items-center justify-between mb-3">
+          <span className="font-syne font-bold text-base">Quick Post</span>
+          <button
+            type="button"
+            onClick={() => setVoiceOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold"
+            style={{
+              background: "rgba(255,94,26,0.12)",
+              color: "#FF5E1A",
+              border: "1px solid rgba(255,94,26,0.28)",
+            }}
+          >
+            🎙️ Speak Offer
+          </button>
+        </div>
 
         <div className="flex flex-wrap gap-2 mb-3">
           {PRESETS.map((preset) => (
@@ -165,6 +181,14 @@ export function QuickPostPanel({
         <div className="font-syne font-bold text-sm mb-3">Recent Quick Posts</div>
         <QuickPostHistory posts={posts} onToggle={handleToggle} />
       </div>
+
+      {voiceOpen && (
+        <VoicePostModal
+          shopId={shopId}
+          onClose={() => setVoiceOpen(false)}
+          onPublished={() => setVoiceOpen(false)}
+        />
+      )}
     </div>
   );
 }

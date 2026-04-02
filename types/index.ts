@@ -162,3 +162,33 @@ export interface GeoState {
   error: string | null;
   locality: string | null;
 }
+
+// ─── Voice Post types ──────────────────────────────────────────────
+export type DealType =
+  | "flash_deal"
+  | "big_deal"
+  | "combo_offer"
+  | "new_arrival"
+  | "festive_offer"
+  | "limited_stock"
+  | "clearance"
+  | "regular_offer";
+
+export interface VoicePostDraft {
+  id?: string;
+  shop_id: string;
+  vendor_id?: string;
+  source_type: "voice" | "manual";
+  raw_transcript?: string | null;
+  cleaned_transcript?: string | null;
+  title: string;
+  description: string;
+  deal_type: DealType;
+  offer_value_text?: string | null;
+  validity_text?: string | null;
+  valid_until?: string | null;
+  locality_text?: string | null;
+  is_published: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
