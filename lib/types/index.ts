@@ -1,17 +1,15 @@
 // ═══════════════════════════════════════════════════════════════
-// APNAMAP — GLOBAL TYPES
+// APNAMAP — GLOBAL TYPES (aligned with 001_schema.sql)
 // ═══════════════════════════════════════════════════════════════
 
-export type UserRole = "user" | "vendor" | "admin";
-export type ShopStatus = "pending" | "active" | "suspended" | "rejected";
-export type OfferStatus = "active" | "expired" | "paused";
-export type OfferType = "percentage" | "flat" | "bogo" | "free_service" | "combo" | "other";
+export type UserRole = "customer" | "vendor" | "admin";
+export type DiscountType = "percent" | "flat" | "bogo" | "free" | "other";
 
 // ─── DATABASE TYPES ───────────────────────────────────────────
 
 export interface Profile {
   id: string;
-  full_name: string | null;
+  name: string | null;
   phone: string | null;
   avatar_url: string | null;
   role: UserRole;
@@ -38,8 +36,7 @@ export interface Locality {
   description: string | null;
   lat: number;
   lng: number;
-  sort_order: number;
-  is_active: boolean;
+  priority: number;
   // joined
   city?: City;
 }
@@ -50,95 +47,83 @@ export interface Category {
   slug: string;
   icon: string;
   color: string;
-  bg_class: string;
-  sort_order: number;
+  parent_id: string | null;
 }
 
 export interface Vendor {
   id: string;
-  user_id: string;
-  business_name: string;
+  business_name: string | null;
   gstin: string | null;
-  verified: boolean;
+  is_verified: boolean;
+  created_at: string;
 }
 
 export interface Shop {
   id: string;
-  vendor_id: string | null;
-  category_id: string;
+  vendor_id: string;
   locality_id: string;
-  city_id: string;
+  category_id: string;
   name: string;
   slug: string;
   description: string | null;
-  address: string | null;
   phone: string | null;
   whatsapp: string | null;
-  website: string | null;
-  email: string | null;
+  address: string | null;
   lat: number;
   lng: number;
   logo_url: string | null;
   cover_url: string | null;
-  gallery: string[];
-  tags: string[];
+  is_approved: boolean;
+  is_active: boolean;
+  is_featured: boolean;
   open_time: string | null;
   close_time: string | null;
   open_days: string[];
-  rating: number;
+  avg_rating: number;
   review_count: number;
-  status: ShopStatus;
-  is_featured: boolean;
   view_count: number;
-  save_count: number;
   created_at: string;
   updated_at: string;
   // joined
-  category?: Category;
   locality?: Locality;
-  city?: City;
+  category?: Category;
   offers?: Offer[];
 }
 
 export interface ShopWithDistance extends Shop {
-  distance_km: number;
-  category_name: string;
-  category_icon: string;
-  locality_name: string;
-  city_name: string;
-  active_offer_count: number;
+  distance_m: number;
 }
 
 export interface Offer {
   id: string;
   shop_id: string;
   title: string;
-  slug: string;
   description: string | null;
-  image_url: string | null;
-  offer_type: OfferType;
+  discount_type: DiscountType;
   discount_value: number | null;
-  min_order: number | null;
-  max_discount: number | null;
+  original_price: number | null;
+  offer_price: number | null;
   coupon_code: string | null;
-  start_date: string;
-  end_date: string | null;
-  terms: string | null;
-  status: OfferStatus;
+  image_url: string | null;
+  starts_at: string;
+  ends_at: string | null;
+  is_active: boolean;
+  is_featured: boolean;
+  tier: 1 | 2 | 3;
   view_count: number;
   click_count: number;
   created_at: string;
+  updated_at: string;
   // joined
   shop?: Shop;
 }
 
 export interface Review {
   id: string;
-  shop_id: string;
   user_id: string;
+  shop_id: string;
   rating: number;
   comment: string | null;
-  images: string[];
   is_approved: boolean;
   created_at: string;
   // joined
@@ -156,6 +141,28 @@ export interface Favorite {
   offer?: Offer;
 }
 
+export interface AnalyticsEvent {
+  id: string;
+  user_id: string | null;
+  shop_id: string | null;
+  offer_id: string | null;
+  event_type: "view" | "click" | "call" | "whatsapp" | "direction" | "save";
+  meta: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface LocalityStreak {
+  id: string;
+  user_id: string;
+  locality_id: string;
+  streak_count: number;
+  last_visit_date: string;
+  reward_unlocked: boolean;
+  reward_code: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // ─── APP TYPES ────────────────────────────────────────────────
 
 export interface GeoLocation {
@@ -164,19 +171,26 @@ export interface GeoLocation {
   accuracy?: number;
 }
 
-export interface WalkViewLocality {
-  locality: Locality;
-  shops: ShopWithDistance[];
+export interface WalkLocality extends Locality {
+  shops: WalkShop[];
+  crowd_count: number;
+  crowd_label: string;
+  crowd_badge: "hot" | "busy" | "quiet";
 }
 
-export interface AnalyticsEvent {
-  event_type: string;
-  shop_id?: string;
-  offer_id?: string;
-  locality_id?: string;
-  lat?: number;
-  lng?: number;
-  meta?: Record<string, unknown>;
+export interface WalkShop extends Shop {
+  distance_m: number;
+  is_open: boolean;
+  top_offer: Offer | null;
+}
+
+export interface GeoState {
+  lat: number | null;
+  lng: number | null;
+  accuracy: number | null;
+  loading: boolean;
+  error: string | null;
+  locality: string | null;
 }
 
 // ─── FORM TYPES ───────────────────────────────────────────────
@@ -189,8 +203,6 @@ export interface ShopFormData {
   address: string;
   phone: string;
   whatsapp: string;
-  website: string;
-  email: string;
   lat: number;
   lng: number;
   open_time: string;
@@ -200,11 +212,10 @@ export interface ShopFormData {
 export interface OfferFormData {
   title: string;
   description: string;
-  offer_type: OfferType;
+  discount_type: DiscountType;
   discount_value?: number;
   coupon_code?: string;
-  end_date?: string;
-  terms?: string;
+  ends_at?: string;
 }
 
 // ─── API RESPONSE TYPES ───────────────────────────────────────

@@ -1,6 +1,6 @@
 // app/api/shops/route.ts
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/server";
 
 export async function GET(req: Request) {
   try {
@@ -17,12 +17,8 @@ export async function GET(req: Request) {
       );
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
+    const supabase = createClient();
 
-    // ✅ Fetch shops with relations
     const { data, error } = await supabase
       .from("shops")
       .select(`
@@ -38,7 +34,6 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // ✅ Distance calculation
     const shopsWithDistance = (data ?? []).map((shop: any) => {
       const dLat = (shop.lat - lat) * (Math.PI / 180);
       const dLng = (shop.lng - lng) * (Math.PI / 180);
@@ -51,7 +46,6 @@ export async function GET(req: Request) {
           Math.sin(dLng / 2);
 
       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
       const distance = 6371000 * c;
 
       const topOffer =
@@ -66,14 +60,12 @@ export async function GET(req: Request) {
       };
     });
 
-    // ✅ Filter + smart sort
     const finalShops = shopsWithDistance
       .filter((shop: any) => shop.distance_m <= radius)
       .sort((a: any, b: any) => {
         if (a.distance_m !== b.distance_m) {
           return a.distance_m - b.distance_m;
         }
-
         return (b.top_offer?.tier ?? 5) - (a.top_offer?.tier ?? 5);
       });
 

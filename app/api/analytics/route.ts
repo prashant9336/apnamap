@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     meta: meta ?? {},
   }).then(() => {});
 
-  // Increment view_count on shop
+  // Increment view_count on shop via SQL function (avoids read-modify-write race)
   if (event_type === "view" && shop_id) {
     supabase.rpc("increment_view_count", { p_shop_id: shop_id }).then(() => {});
   }

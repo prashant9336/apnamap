@@ -151,3 +151,27 @@ CREATE POLICY "reviews_select" ON reviews FOR SELECT USING (is_approved=TRUE);
 CREATE POLICY "reviews_insert" ON reviews FOR INSERT WITH CHECK (auth.uid()=user_id);
 CREATE POLICY "favorites_all" ON favorites FOR ALL USING (auth.uid()=user_id);
 CREATE POLICY "analytics_insert" ON analytics_events FOR INSERT WITH CHECK (TRUE);
+
+-- LOCALITY STREAKS
+CREATE TABLE IF NOT EXISTS user_locality_streaks (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  locality_id UUID NOT NULL REFERENCES localities(id) ON DELETE CASCADE,
+  streak_count INTEGER NOT NULL DEFAULT 1,
+  last_visit_date TEXT NOT NULL,
+  reward_unlocked BOOLEAN NOT NULL DEFAULT FALSE,
+  reward_code TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(user_id, locality_id)
+);
+
+ALTER TABLE user_locality_streaks ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "streaks_user_all" ON user_locality_streaks FOR ALL USING (auth.uid() = user_id);
+CREATE INDEX IF NOT EXISTS idx_streaks_user ON user_locality_streaks(user_id);
+
+-- INCREMENT VIEW COUNT FUNCTION
+CREATE OR REPLACE FUNCTION increment_view_count(p_shop_id UUID)
+RETURNS void LANGUAGE SQL SECURITY DEFINER AS $$
+  UPDATE shops SET view_count = view_count + 1 WHERE id = p_shop_id;
+$$;

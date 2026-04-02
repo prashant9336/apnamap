@@ -9,6 +9,7 @@ export interface Profile {
   role: UserRole;
   city_id: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 export interface City {
@@ -90,8 +91,10 @@ export interface Offer {
   is_active: boolean;
   is_featured: boolean;
   view_count: number;
+  click_count: number;
   tier: 1 | 2 | 3; // 1=big deal, 2=normal, 3=basic
   created_at: string;
+  updated_at: string;
   // joined
   shop?: Shop;
 }
@@ -137,6 +140,18 @@ export interface WalkShop extends Shop {
   distance_m: number;
   is_open: boolean;
   top_offer: Offer | null;
+}
+
+export interface LocalityStreak {
+  id: string;
+  user_id: string;
+  locality_id: string;
+  streak_count: number;
+  last_visit_date: string;
+  reward_unlocked: boolean;
+  reward_code: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface GeoState {

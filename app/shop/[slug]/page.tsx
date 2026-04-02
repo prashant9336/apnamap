@@ -157,7 +157,7 @@ export default function ShopPage() {
 
 
         {/* Claim this shop */}
-        {!shop.is_claimed && (
+        {!shop.vendor_id && (
           <div className="mb-6 p-4 rounded-2xl" style={{ background:"rgba(255,94,26,0.06)", border:"1px solid rgba(255,94,26,0.18)" }}>
             <p className="font-syne font-bold text-sm mb-1" style={{ color:"#F2F5FF" }}>🏪 Is this your shop?</p>
             <p className="text-xs mb-3" style={{ color:"rgba(255,255,255,0.40)", lineHeight:1.6 }}>Claim this listing to manage offers, update details, and connect directly with customers.</p>
@@ -168,7 +168,7 @@ export default function ShopPage() {
             </a>
           </div>
         )}
-        {shop.is_claimed && (
+        {shop.vendor_id && (
           <div className="mb-4 px-3 py-2 rounded-xl text-xs" style={{ background:"rgba(31,187,90,0.08)", border:"1px solid rgba(31,187,90,0.22)", color:"#1FBB5A" }}>
             ✓ This shop is claimed and managed by the owner
           </div>
