@@ -93,6 +93,7 @@ export interface Offer {
   view_count: number;
   click_count: number;
   tier: 1 | 2 | 3; // 1=big deal, 2=normal, 3=basic
+  is_mystery: boolean;
   created_at: string;
   updated_at: string;
   // joined

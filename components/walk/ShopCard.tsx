@@ -3,6 +3,7 @@ import { useRef, useState, useEffect } from "react";
 import { motion, useInView } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { formatDistance } from "@/lib/geo/distance";
+import { classifyDealEngineType, trackDealView, trackDealClick } from "@/lib/deal-engine";
 import type { WalkShop, Offer } from "@/types";
 
 /* ── Time-left helper ────────────────────────────────────────────── */
@@ -115,6 +116,13 @@ export default function ShopCard({ shop, index, side }: Props) {
   const inView = useInView(ref, { once: true, margin: "-30px 0px" });
   const router = useRouter();
 
+  // Track deal view 2 s after the card enters the viewport — fire once per session
+  useEffect(() => {
+    if (!inView || !shop.top_offer) return;
+    const t = setTimeout(() => trackDealView(shop.top_offer!.id), 2000);
+    return () => clearTimeout(t);
+  }, [inView, shop.top_offer?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const slug    = shop.category?.slug ?? "";
   const skinBg  = CAT_SKIN[slug] ?? "rgba(255,255,255,0.05)";
   const iconCfg = CAT_ICON_BG[slug] ?? CAT_ICON_FB;
@@ -148,7 +156,10 @@ export default function ShopCard({ shop, index, side }: Props) {
       transition={{ duration: 0.45, delay: index * 0.05, ease: [0.25, 0, 0, 1] }}
       whileHover={{ y: -2, scale: 1.01 }}
       whileTap={{ scale: 0.96 }}
-      onClick={() => router.push(`/shop/${shop.slug}`)}
+      onClick={() => {
+        if (shop.top_offer) trackDealClick(shop.top_offer.id);
+        router.push(`/shop/${shop.slug}`);
+      }}
       className="relative overflow-hidden cursor-pointer group"
       style={{
         borderRadius: 13,
@@ -310,27 +321,61 @@ export default function ShopCard({ shop, index, side }: Props) {
 }
 
 /* ── Compact offer chip ──────────────────────────────────────────
-   Format: [label] [discount?] • [countdown?] — [title]
-   Tier-1 gets a slow glow pulse. All chips show social proof.       */
+   Deal engine classifies the offer type first, then visual style
+   is derived from that classification.
+   - mystery  → blurred teaser, no discount revealed
+   - flash    → amber urgency with countdown front-and-center
+   - big_deal → orange glow pulse (tier-1)
+   - new_deal → neutral chip, discount if available              */
 function OfferChip({ offer }: { offer: Offer }) {
-  // Tick every 60 s so countdown stays fresh without thrashing
+  // 60-s tick so countdown string stays fresh without thrashing
   const [, tick] = useState(0);
   useEffect(() => {
     if (!offer.ends_at) return;
-    const iv = setInterval(() => tick((n) => n + 1), 60_000);
+    const iv = setInterval(() => tick(n => n + 1), 60_000);
     return () => clearInterval(iv);
   }, [offer.ends_at]);
 
-  const { tier, discount_type, discount_value, title, ends_at, click_count } = offer;
+  const now      = Date.now();
+  const dealType = classifyDealEngineType(offer, now);
+  const { discount_type, discount_value, title, ends_at, click_count } = offer;
 
-  // ── Chip identity ──────────────────────────────────────────────
+  // ── Mystery chip — teaser only, no details ─────────────────────
+  if (dealType === "mystery") {
+    return (
+      <div style={{
+        display: "flex", alignItems: "center", gap: 5,
+        padding: "3.5px 8px", borderRadius: 7, marginBottom: 5,
+        background: "rgba(167,139,250,0.07)",
+        border: "1px solid rgba(167,139,250,0.20)",
+      }}>
+        <span style={{ fontSize: "10px", fontWeight: 700, color: "#A78BFA", flexShrink: 0 }}>
+          🎁 Mystery Deal
+        </span>
+        <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.12)", flexShrink: 0 }}>—</span>
+        <span style={{
+          fontSize: "10px", color: "rgba(167,139,250,0.45)",
+          filter: "blur(3px)", userSelect: "none",
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        }}>
+          {title}
+        </span>
+      </div>
+    );
+  }
+
+  // ── Style config per deal type ─────────────────────────────────
   let prefix: string;
   let color: string;
   let bg: string;
   let border: string;
-  const isBig = tier === 1;
 
-  if (isBig) {
+  if (dealType === "flash_deal") {
+    prefix = "⚡ Flash";
+    color  = "#E8A800";
+    bg     = "rgba(232,168,0,0.09)";
+    border = "1px solid rgba(232,168,0,0.24)";
+  } else if (dealType === "big_deal") {
     prefix = "🔥 Big Deal";
     color  = "#FF6A30";
     bg     = "rgba(255,80,0,0.09)";
@@ -340,11 +385,6 @@ function OfferChip({ offer }: { offer: Offer }) {
     color  = "#1FBB5A";
     bg     = "rgba(31,187,90,0.07)";
     border = "1px solid rgba(31,187,90,0.18)";
-  } else if (tier === 2) {
-    prefix = "⚡ Deal";
-    color  = "#E8A800";
-    bg     = "rgba(232,168,0,0.08)";
-    border = "1px solid rgba(232,168,0,0.18)";
   } else {
     prefix = "🎯";
     color  = "rgba(255,255,255,0.35)";
@@ -352,42 +392,30 @@ function OfferChip({ offer }: { offer: Offer }) {
     border = "1px solid rgba(255,255,255,0.07)";
   }
 
-  // ── Discount suffix ────────────────────────────────────────────
+  // ── Discount badge ─────────────────────────────────────────────
   let discountBadge: string | null = null;
   if (discount_value && discount_type === "percent") discountBadge = `${discount_value}% off`;
   else if (discount_value && discount_type === "flat") discountBadge = `₹${discount_value} off`;
   else if (discount_type === "bogo")                   discountBadge = "Buy 1 Get 1";
   else if (discount_type === "free")                   discountBadge = "Free";
 
-  // ── Countdown (only within 24 h) ──────────────────────────────
+  // ── Countdown — only within 24 h ──────────────────────────────
   const timeLeft = ends_at ? getTimeLeft(ends_at) : null;
 
   // ── Social proof ───────────────────────────────────────────────
-  const claimed = click_count ?? 0;
-
+  const claimed    = click_count ?? 0;
   const shortTitle = title.length > 18 ? title.slice(0, 16) + "…" : title;
 
-  const chip = (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 4,
-      padding: "3.5px 8px", borderRadius: 7, marginBottom: 5,
-      background: bg, border, overflow: "hidden",
-      position: "relative",
-    }}>
-      {/* Label */}
-      <span style={{ fontSize: "10px", fontWeight: 700, color, flexShrink: 0 }}>
-        {prefix}
-      </span>
-
-      {/* Discount badge */}
+  // ── Shared inner layout ────────────────────────────────────────
+  const inner = (
+    <>
+      <span style={{ fontSize: "10px", fontWeight: 700, color, flexShrink: 0 }}>{prefix}</span>
       {discountBadge && (
         <>
           <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.15)", flexShrink: 0 }}>•</span>
           <span style={{ fontSize: "9.5px", fontWeight: 700, color, flexShrink: 0 }}>{discountBadge}</span>
         </>
       )}
-
-      {/* Countdown */}
       {timeLeft && (
         <>
           <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.15)", flexShrink: 0 }}>•</span>
@@ -396,8 +424,6 @@ function OfferChip({ offer }: { offer: Offer }) {
           </span>
         </>
       )}
-
-      {/* Divider + title */}
       <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.12)", flexShrink: 0 }}>—</span>
       <span style={{
         fontSize: "10px", fontWeight: 500, color: "rgba(255,255,255,0.48)",
@@ -405,8 +431,6 @@ function OfferChip({ offer }: { offer: Offer }) {
       }}>
         {shortTitle}
       </span>
-
-      {/* Social proof — far right */}
       {claimed > 0 && (
         <span style={{
           marginLeft: "auto", flexShrink: 0, paddingLeft: 4,
@@ -415,11 +439,17 @@ function OfferChip({ offer }: { offer: Offer }) {
           🔥 {claimed}×
         </span>
       )}
-    </div>
+    </>
   );
 
-  // Tier-1 gets a slow glow pulse — all other tiers are static (no animation loop)
-  if (isBig) {
+  const chipStyle = {
+    display: "flex", alignItems: "center", gap: 4,
+    padding: "3.5px 8px", borderRadius: 7,
+    background: bg, border, overflow: "hidden" as const,
+  };
+
+  // Big deal gets a slow outer glow pulse; flash gets a fast amber pulse
+  if (dealType === "big_deal") {
     return (
       <motion.div
         animate={{ boxShadow: [
@@ -430,38 +460,28 @@ function OfferChip({ offer }: { offer: Offer }) {
         transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
         style={{ borderRadius: 7, marginBottom: 5 }}
       >
-        {/* Re-render chip without its own marginBottom since wrapper has it */}
-        <div style={{
-          display: "flex", alignItems: "center", gap: 4,
-          padding: "3.5px 8px", borderRadius: 7,
-          background: bg, border, overflow: "hidden",
-        }}>
-          <span style={{ fontSize: "10px", fontWeight: 700, color, flexShrink: 0 }}>{prefix}</span>
-          {discountBadge && (
-            <>
-              <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.15)", flexShrink: 0 }}>•</span>
-              <span style={{ fontSize: "9.5px", fontWeight: 700, color, flexShrink: 0 }}>{discountBadge}</span>
-            </>
-          )}
-          {timeLeft && (
-            <>
-              <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.15)", flexShrink: 0 }}>•</span>
-              <span style={{ fontSize: "9px", fontWeight: 700, color: "#E8A800", flexShrink: 0 }}>⏱ {timeLeft}</span>
-            </>
-          )}
-          <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.12)", flexShrink: 0 }}>—</span>
-          <span style={{ fontSize: "10px", fontWeight: 500, color: "rgba(255,255,255,0.48)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {shortTitle}
-          </span>
-          {claimed > 0 && (
-            <span style={{ marginLeft: "auto", flexShrink: 0, paddingLeft: 4, fontSize: "8.5px", color: "rgba(255,255,255,0.22)", whiteSpace: "nowrap" }}>
-              🔥 {claimed}×
-            </span>
-          )}
-        </div>
+        <div style={chipStyle}>{inner}</div>
       </motion.div>
     );
   }
 
-  return chip;
+  if (dealType === "flash_deal") {
+    return (
+      <motion.div
+        animate={{ boxShadow: [
+          "0 0 0 rgba(232,168,0,0)",
+          "0 0 8px rgba(232,168,0,0.28)",
+          "0 0 0 rgba(232,168,0,0)",
+        ]}}
+        transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+        style={{ borderRadius: 7, marginBottom: 5 }}
+      >
+        <div style={chipStyle}>{inner}</div>
+      </motion.div>
+    );
+  }
+
+  return (
+    <div style={{ ...chipStyle, marginBottom: 5 }}>{inner}</div>
+  );
 }

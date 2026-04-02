@@ -1,11 +1,13 @@
 "use client";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import YouAreHere         from "./YouAreHere";
 import WalkProgress       from "./WalkProgress";
 import LocalitySection    from "./LocalitySection";
 import LocalityTransition from "./LocalityTransition";
+import { rankLocalities, topOffersAcrossLocalities } from "@/lib/deal-engine";
+import type { ScoredOffer } from "@/lib/deal-engine";
 import type { WalkLocality, Offer } from "@/types";
 
 interface Props {
@@ -17,7 +19,7 @@ interface Props {
   gpsError?:    string | null;
 }
 
-export default function WalkView({ localities, loading, userLocality, gpsError }: Props) {
+export default function WalkView({ localities, loading, userLat, userLng, userLocality, gpsError }: Props) {
   const scrollRef    = useRef<HTMLDivElement>(null);
   const [scrollPct,  setSP]     = useState(0);
   const [activeIdx,  setAI]     = useState(0);
@@ -25,6 +27,18 @@ export default function WalkView({ localities, loading, userLocality, gpsError }
   const [crowd,      setCrowd]  = useState(142);
   const raf  = useRef<number>(0);
   const lasy = useRef(0);
+
+  /* Deal engine — rank shops by score, memoised until localities / GPS change */
+  const rankedLocalities = useMemo(
+    () => rankLocalities(localities, userLat ?? 0, userLng ?? 0),
+    [localities, userLat, userLng]
+  );
+
+  /* Top offers for FloatingDealBar rotation */
+  const topDeals = useMemo(
+    () => topOffersAcrossLocalities(localities, userLat ?? 0, userLng ?? 0, 5),
+    [localities, userLat, userLng]
+  );
   const footTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const leftFoot  = useRef(true);
 
@@ -177,7 +191,7 @@ export default function WalkView({ localities, loading, userLocality, gpsError }
       {/* Walk progress — clickable locality rail */}
       <WalkProgress
         scrollPct={scrollPct}
-        localities={localities.map(l => l.name)}
+        localities={rankedLocalities.map(l => l.name)}
         activeIdx={activeIdx}
         onLocality={scrollToLocality}
       />
@@ -198,23 +212,23 @@ export default function WalkView({ localities, loading, userLocality, gpsError }
         {/* You are here */}
         <YouAreHere locality={currentLoc || userLocality} />
 
-        {/* Live feed strip — activity from shops in this walk */}
-        <LiveFeedStrip localities={localities} />
+        {/* Live feed strip — uses ranked data for relevance */}
+        <LiveFeedStrip localities={rankedLocalities} />
 
         {/* Crowd banner */}
-        <CrowdBanner crowd={crowd} localities={localities} />
+        <CrowdBanner crowd={crowd} localities={rankedLocalities} />
 
-        {/* Localities */}
-        {localities.map((loc, i) => (
+        {/* Localities — ranked by deal score */}
+        {rankedLocalities.map((loc, i) => (
           <div key={loc.id} data-loc={loc.name} data-loc-idx={i}>
             <LocalitySection locality={loc} index={i} />
-            {i < localities.length - 1 && (
+            {i < rankedLocalities.length - 1 && (
               <>
-                <LocalityTransition fromName={loc.name} toName={localities[i + 1].name} />
+                <LocalityTransition fromName={loc.name} toName={rankedLocalities[i + 1].name} />
                 {/* Mystery deal teaser — appears after first locality transition only */}
                 {i === 0 && (
                   <MysteryDeal
-                    revealOffer={localities[1]?.shops?.find(s => s.top_offer)?.top_offer ?? null}
+                    revealOffer={rankedLocalities[1]?.shops?.find(s => s.top_offer)?.top_offer ?? null}
                   />
                 )}
               </>
@@ -222,13 +236,13 @@ export default function WalkView({ localities, loading, userLocality, gpsError }
           </div>
         ))}
 
-        {localities.length === 0 && <EmptyState />}
-        {localities.length > 0  && <EndCTA localities={localities} />}
+        {rankedLocalities.length === 0 && <EmptyState />}
+        {rankedLocalities.length > 0  && <EndCTA localities={rankedLocalities} />}
         <div style={{ height: 18 }} />
       </div>
 
-      {/* Floating deal bar — anchored to bottom of walk view */}
-      <FloatingDealBar localities={localities} currentLoc={currentLoc || userLocality} />
+      {/* Floating deal bar — shows top-scored deal for current locality */}
+      <FloatingDealBar topDeals={topDeals} currentLoc={currentLoc || userLocality} />
     </div>
   );
 }
@@ -538,10 +552,39 @@ function MysteryDeal({ revealOffer }: { revealOffer?: Offer | null }) {
 }
 
 /* ─── Floating Deal Bar ──────────────────────────────────────── */
-function FloatingDealBar({ localities, currentLoc }: { localities: WalkLocality[]; currentLoc: string }) {
-  const activeLoc = localities.find(l => l.name === currentLoc) ?? localities[0];
-  const deals = activeLoc?.shops.filter(s => s.top_offer) ?? [];
-  const show  = deals.length > 0;
+function FloatingDealBar({
+  topDeals,
+  currentLoc,
+}: {
+  topDeals:   ScoredOffer[];
+  currentLoc: string;
+}) {
+  // Rotate through top deals every 4 s
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    if (topDeals.length <= 1) return;
+    const iv = setInterval(() => setIdx(n => (n + 1) % topDeals.length), 4000);
+    return () => clearInterval(iv);
+  }, [topDeals.length]);
+
+  const show = topDeals.length > 0;
+  const top  = topDeals[idx];
+
+  // Deal type → colour
+  const TYPE_COLOR: Record<string, string> = {
+    big_deal:  "#FF5E1A",
+    flash_deal: "#E8A800",
+    mystery:   "#A78BFA",
+    new_deal:  "#1FBB5A",
+  };
+  const TYPE_ICON: Record<string, string> = {
+    big_deal:  "🔥",
+    flash_deal: "⚡",
+    mystery:   "🎁",
+    new_deal:  "🎯",
+  };
+  const accent = top ? (TYPE_COLOR[top.dealType] ?? "#FF5E1A") : "#FF5E1A";
+  const icon   = top ? (TYPE_ICON[top.dealType]  ?? "🔥")     : "🔥";
 
   return (
     <AnimatePresence>
@@ -557,7 +600,7 @@ function FloatingDealBar({ localities, currentLoc }: { localities: WalkLocality[
             padding: "10px 14px",
             background: "rgba(5,7,12,0.92)",
             backdropFilter: "blur(18px)",
-            borderTop: "1px solid rgba(255,94,26,0.18)",
+            borderTop: `1px solid ${accent}28`,
             display: "flex", alignItems: "center", gap: 10,
           }}
         >
@@ -565,30 +608,45 @@ function FloatingDealBar({ localities, currentLoc }: { localities: WalkLocality[
           <motion.div
             animate={{ scale: [1, 1.5, 1], opacity: [1, 0.5, 1] }}
             transition={{ duration: 1.4, repeat: Infinity }}
-            style={{ width: 7, height: 7, borderRadius: "50%", background: "#FF5E1A", flexShrink: 0 }}
+            style={{ width: 7, height: 7, borderRadius: "50%", background: accent, flexShrink: 0 }}
           />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ fontSize: "12px", fontWeight: 700, color: "#EDEEF5" }}>
-              🔥 {deals.length} deal{deals.length !== 1 ? "s" : ""} in {activeLoc?.name ?? currentLoc}
-            </span>
-            <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", marginLeft: 6 }}>
-              · Tap any shop to claim
+            <AnimatePresence mode="wait">
+              <motion.span
+                key={idx}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.25 }}
+                style={{ fontSize: "12px", fontWeight: 700, color: "#EDEEF5", display: "block" }}
+              >
+                {icon} {topDeals.length} deal{topDeals.length !== 1 ? "s" : ""} nearby · {currentLoc}
+              </motion.span>
+            </AnimatePresence>
+            <span style={{ fontSize: "10.5px", color: "rgba(255,255,255,0.30)" }}>
+              Tap any shop to claim
             </span>
           </div>
-          {/* Top deal preview */}
-          {deals[0]?.top_offer && (
-            <div style={{
-              flexShrink: 0, fontSize: "9.5px", fontWeight: 700,
-              color: "#FF5E1A",
-              background: "rgba(255,94,26,0.10)",
-              border: "1px solid rgba(255,94,26,0.22)",
-              borderRadius: 100, padding: "3px 9px", whiteSpace: "nowrap",
-              maxWidth: 90, overflow: "hidden", textOverflow: "ellipsis",
-            }}>
-              {deals[0].top_offer.title.length > 12
-                ? deals[0].top_offer.title.slice(0, 11) + "…"
-                : deals[0].top_offer.title}
-            </div>
+          {/* Top deal score chip */}
+          {top && (
+            <motion.div
+              key={`chip-${idx}`}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.2 }}
+              style={{
+                flexShrink: 0, fontSize: "9.5px", fontWeight: 700,
+                color: accent,
+                background: `${accent}18`,
+                border: `1px solid ${accent}30`,
+                borderRadius: 100, padding: "3px 9px", whiteSpace: "nowrap",
+                maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis",
+              }}
+            >
+              {top.offer.title.length > 13
+                ? top.offer.title.slice(0, 12) + "…"
+                : top.offer.title}
+            </motion.div>
           )}
         </motion.div>
       )}
