@@ -1,4 +1,84 @@
 /** @type {import('next').NextConfig} */
+
+const withPWA = require("@ducanh2912/next-pwa").default;
+
+/* ── PWA / Workbox configuration ────────────────────────────────── */
+const pwaConfig = {
+  dest: "public",                     // sw.js + workbox files land in public/
+
+  // Aggressive caching for the walk-view heavy app
+  cacheOnFrontEndNav:          true,  // cache pages on client-side navigation
+  aggressiveFrontEndNavCaching: true, // also cache prefetched pages
+  reloadOnOnline:              true,  // reload stale page when back online
+
+  // Disable in development — service workers conflict with HMR
+  disable: process.env.NODE_ENV === "development",
+
+  workboxOptions: {
+    disableDevLogs: true,
+
+    // Runtime caching on top of the default Next.js asset caching
+    runtimeCaching: [
+      /* Supabase storage (shop logos, cover images) — Cache First, 30 days */
+      {
+        urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/.*/i,
+        handler: "CacheFirst",
+        options: {
+          cacheName:    "supabase-images",
+          expiration:   { maxEntries: 200, maxAgeSeconds: 30 * 24 * 60 * 60 },
+          cacheableResponse: { statuses: [0, 200] },
+        },
+      },
+
+      /* Unsplash images — Cache First, 7 days */
+      {
+        urlPattern: /^https:\/\/images\.unsplash\.com\/.*/i,
+        handler: "CacheFirst",
+        options: {
+          cacheName:  "unsplash-images",
+          expiration: { maxEntries: 50, maxAgeSeconds: 7 * 24 * 60 * 60 },
+          cacheableResponse: { statuses: [0, 200] },
+        },
+      },
+
+      /* Google Fonts — Cache First forever (fonts don't change) */
+      {
+        urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,
+        handler: "CacheFirst",
+        options: {
+          cacheName:  "google-fonts",
+          expiration: { maxEntries: 20, maxAgeSeconds: 365 * 24 * 60 * 60 },
+          cacheableResponse: { statuses: [0, 200] },
+        },
+      },
+
+      /* App API routes — Network First, fall back to cache for 24 h */
+      {
+        urlPattern: /^\/api\/.*/i,
+        handler: "NetworkFirst",
+        options: {
+          cacheName:  "api-responses",
+          expiration: { maxEntries: 32, maxAgeSeconds: 24 * 60 * 60 },
+          cacheableResponse: { statuses: [0, 200] },
+          networkTimeoutSeconds: 10,
+        },
+      },
+
+      /* All other same-origin fetches — StaleWhileRevalidate */
+      {
+        urlPattern: /\/_next\/static\/.*/i,
+        handler: "CacheFirst",
+        options: {
+          cacheName:  "next-static",
+          expiration: { maxAgeSeconds: 365 * 24 * 60 * 60 },
+          cacheableResponse: { statuses: [0, 200] },
+        },
+      },
+    ],
+  },
+};
+
+/* ── Core Next.js config ─────────────────────────────────────────── */
 const nextConfig = {
   images: {
     remotePatterns: [
@@ -21,4 +101,4 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+module.exports = withPWA(pwaConfig)(nextConfig);

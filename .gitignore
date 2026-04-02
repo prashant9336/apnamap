@@ -1,5 +1,4 @@
 node_modules
-node_modules
 .next
 .env.local
 .vercel
@@ -7,3 +6,12 @@ dist
 build
 out
 *.log
+
+# next-pwa generated files (created at build time)
+public/sw.js
+public/sw.js.map
+public/workbox-*.js
+public/workbox-*.js.map
+public/worker-*.js
+public/worker-*.js.map
+tsconfig.tsbuildinfo
