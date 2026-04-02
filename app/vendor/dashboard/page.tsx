@@ -303,23 +303,23 @@ export default function VendorDashboard() {
                 <div className="flex items-start justify-between gap-2 mb-3">
                   <button
                     type="button"
-                    className="flex items-center gap-2 text-left"
+                    className="flex items-center gap-2 text-left min-w-0 flex-1"
                     onClick={() => setActiveShopId(shop.id)}
                     aria-pressed={activeShopId === shop.id}
                     aria-label={`Select ${shop.name} for quick post`}
                     style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
                   >
-                    <span className="text-xl">{shop.category?.icon ?? "🏪"}</span>
-                    <div>
-                      <p className="font-syne font-bold text-sm">{shop.name}</p>
-                      <p className="text-xs" style={{ color: "var(--t3)" }}>
+                    <span className="text-xl flex-shrink-0">{shop.category?.icon ?? "🏪"}</span>
+                    <div className="min-w-0">
+                      <p className="font-syne font-bold text-sm truncate">{shop.name}</p>
+                      <p className="text-xs truncate" style={{ color: "var(--t3)" }}>
                         {shop.locality?.name ?? "Unknown locality"}
                       </p>
                     </div>
                   </button>
 
                   <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 whitespace-nowrap ${
                       shop.is_approved ? "" : "opacity-75"
                     }`}
                     style={

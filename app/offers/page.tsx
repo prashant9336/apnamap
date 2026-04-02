@@ -153,8 +153,8 @@ function OfferCard({ offer, showDistance }: { offer: Offer; showDistance?: boole
 
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
-          <h3 className="font-syne font-bold text-sm leading-tight line-clamp-2">{offer.title}</h3>
-          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+          <h3 className="font-syne font-bold text-sm leading-tight line-clamp-2 min-w-0 flex-1">{offer.title}</h3>
+          <div className="flex flex-col items-end gap-1 flex-shrink-0 whitespace-nowrap">
             {isT1 && (
               <span className="text-[8.5px] font-black px-1.5 py-0.5 rounded"
                 style={{ background: "rgba(255,80,0,0.18)", color: "#FF6830" }}>⭐ BIG DEAL</span>

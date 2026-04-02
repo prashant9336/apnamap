@@ -98,16 +98,18 @@ export default function ShopCard({ shop, index, side }: Props) {
             {icon}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
+            {/* Badge sits top-right; name gets remaining space and clamps */}
             <div style={{ display: "flex", alignItems: "flex-start", gap: 4 }}>
               <div className="font-syne" style={{
                 fontSize: "12.5px", fontWeight: 700, color: "#EDEEF5",
-                lineHeight: 1.25, flex: 1,
+                lineHeight: 1.25, flex: 1, minWidth: 0,
                 display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
               }}>
                 {shop.name}
               </div>
               <span style={{
-                flexShrink: 0, fontSize: "8.5px", fontWeight: 700, padding: "2px 5px", borderRadius: 100,
+                flexShrink: 0, whiteSpace: "nowrap",
+                fontSize: "8.5px", fontWeight: 700, padding: "2px 5px", borderRadius: 100,
                 ...(shop.is_open
                   ? { background: "rgba(31,187,90,0.13)", color: "#1FBB5A", border: "1px solid rgba(31,187,90,0.26)" }
                   : { background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.20)", border: "1px solid rgba(255,255,255,0.068)" }),
