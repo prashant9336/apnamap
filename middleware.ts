@@ -6,12 +6,13 @@ const PUBLIC_FILE = /\.(.*)$/;
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow Next internals, images/files, favicon, and unlock routes
+  // Allow Next internals, images/files, favicon, auth routes, and unlock routes
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon.ico") ||
     pathname.startsWith("/unlock") ||
     pathname.startsWith("/api/unlock") ||
+    pathname.startsWith("/auth") ||
     PUBLIC_FILE.test(pathname)
   ) {
     return await updateSession(request);
@@ -34,13 +35,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except:
-     * - _next/static
-     * - _next/image
-     * - favicon.ico
-     * - common image files
-     */
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

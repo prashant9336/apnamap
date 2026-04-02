@@ -26,9 +26,13 @@ export default function ShopPage() {
         setShop(data as any);
         setOffers((data as any).offers?.filter((o: Offer) => o.is_active) ?? []);
         setLoading(false);
-        // Track view
-        fetch("/api/analytics", { method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ shop_id: data.id, event_type: "view" }) });
+        // Track view — once per session per shop to avoid reload spam
+        const key = `view_${data.id}`;
+        if (!sessionStorage.getItem(key)) {
+          sessionStorage.setItem(key, "1");
+          fetch("/api/analytics", { method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ shop_id: data.id, event_type: "view" }) });
+        }
       });
   }, [slug, router]);
 
@@ -98,6 +102,12 @@ export default function ShopPage() {
             <>
               <span style={{ color: "rgba(255,255,255,0.2)" }}>·</span>
               <span className="text-sm font-semibold" style={{ color: "var(--gold)" }}>★ {shop.avg_rating.toFixed(1)} ({shop.review_count})</span>
+            </>
+          )}
+          {(shop.view_count ?? 0) > 0 && (
+            <>
+              <span style={{ color: "rgba(255,255,255,0.2)" }}>·</span>
+              <span className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>👀 {shop.view_count} views</span>
             </>
           )}
         </div>

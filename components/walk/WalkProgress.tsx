@@ -1,14 +1,14 @@
 "use client";
 import { motion } from "framer-motion";
 
-const SHORT: Record<string,string> = {
-  "Civil Lines":"Civil Lines","Chowk Bazar":"Chowk Bazar","Katra Market":"Katra Market",
-  "Rambagh":"Rambagh","Naini":"Naini",
-};
+interface Props {
+  scrollPct:  number;
+  localities: string[];
+  activeIdx:  number;
+  onLocality?: (index: number) => void;
+}
 
-export default function WalkProgress({
-  scrollPct, localities, activeIdx,
-}: { scrollPct: number; localities: string[]; activeIdx: number }) {
+export default function WalkProgress({ scrollPct, localities, activeIdx, onLocality }: Props) {
   if (!localities.length) return null;
   const totalKm = Math.max(localities.length * 1.05, 1);
   const walked  = Math.min(scrollPct * totalKm * 1.1, totalKm).toFixed(1);
@@ -37,20 +37,31 @@ export default function WalkProgress({
         </div>
       </div>
 
-      {/* Track */}
+      {/* Clickable locality track */}
       <div style={{ display: "flex", alignItems: "center", position: "relative" }}>
         {localities.map((name, i) => {
           const done    = i < activeIdx;
           const current = i === activeIdx;
           const isLast  = i === localities.length - 1;
+          // First word of locality name for label
+          const short   = name.split(" ")[0];
           return (
             <div key={`${name}-${i}`} style={{ display: "flex", alignItems: "center", flex: isLast ? "none" : 1, minWidth: 0 }}>
-              {/* Node */}
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, position: "relative", zIndex: 1 }}>
+              {/* Clickable node */}
+              <button
+                onClick={() => onLocality?.(i)}
+                title={`Jump to ${name}`}
+                style={{
+                  background: "none", border: "none", padding: 0, cursor: onLocality ? "pointer" : "default",
+                  display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+                  position: "relative", zIndex: 1,
+                }}
+              >
                 <motion.div
                   animate={current ? {
                     boxShadow: ["0 0 4px rgba(255,94,26,0.5)","0 0 14px rgba(255,94,26,0.8), 0 0 24px rgba(255,94,26,0.3)","0 0 4px rgba(255,94,26,0.5)"]
                   } : {}}
+                  whileTap={onLocality ? { scale: 1.5 } : {}}
                   transition={{ duration: 1.8, repeat: Infinity }}
                   style={{
                     width: 8, height: 8, borderRadius: "50%",
@@ -64,10 +75,11 @@ export default function WalkProgress({
                   fontSize: "8.5px", fontWeight: 600, whiteSpace: "nowrap",
                   color: done ? "#1FBB5A" : current ? "#FF5E1A" : "rgba(255,255,255,0.20)",
                   transition: "color .4s",
+                  textDecoration: onLocality ? "none" : "none",
                 }}>
-                  {SHORT[name] ?? name.split(" ")[0]}
+                  {short}
                 </div>
-              </div>
+              </button>
 
               {/* Segment */}
               {!isLast && (

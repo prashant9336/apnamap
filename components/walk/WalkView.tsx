@@ -1,5 +1,6 @@
 "use client";
 import { useState, useRef, useEffect, useCallback } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import YouAreHere         from "./YouAreHere";
 import WalkProgress       from "./WalkProgress";
@@ -26,6 +27,15 @@ export default function WalkView({ localities, loading, userLocality, gpsError }
   const lasy = useRef(0);
   const footTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const leftFoot  = useRef(true);
+
+  // Scroll-to-locality: finds the section by data-loc-idx and scrolls container
+  const scrollToLocality = useCallback((idx: number) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const target = el.querySelector<HTMLElement>(`[data-loc-idx="${idx}"]`);
+    if (!target) return;
+    el.scrollTo({ top: target.offsetTop - el.offsetTop - 60, behavior: "smooth" });
+  }, []);
 
   useEffect(() => {
     setCL(localities.length > 0 ? localities[0].name : userLocality);
@@ -164,8 +174,13 @@ export default function WalkView({ localities, loading, userLocality, gpsError }
       {/* Separator */}
       <div style={{ height: 1, background: "linear-gradient(to right,transparent,rgba(255,255,255,0.07),transparent)", flexShrink: 0 }} />
 
-      {/* Walk progress */}
-      <WalkProgress scrollPct={scrollPct} localities={localities.map(l => l.name)} activeIdx={activeIdx} />
+      {/* Walk progress — clickable locality rail */}
+      <WalkProgress
+        scrollPct={scrollPct}
+        localities={localities.map(l => l.name)}
+        activeIdx={activeIdx}
+        onLocality={scrollToLocality}
+      />
 
       {/* Scroll canvas */}
       <div
@@ -212,22 +227,31 @@ function Clock() {
   return <span style={{ fontFamily:"'Syne',sans-serif", fontSize:"15px", fontWeight:700, color:"#EDEEF5", letterSpacing:"-0.3px" }}>{t}</span>;
 }
 
-/* ─── Mode tabs ──────────────────────────────────────────────── */
+/* ─── Mode tabs — navigates to real pages ───────────────────── */
 function ModeTabs() {
-  const [active, setActive] = useState(0);
-  const TABS = ["🚶 Walk View","🗺 Map","🎯 Offers","📍 Near Me"];
+  const router  = useRouter();
+  const path    = usePathname();
+  const TABS = [
+    { label: "🚶 Walk",    href: "/explore"  },
+    { label: "🗺 Map",     href: "/map"       },
+    { label: "🎯 Offers",  href: "/offers"    },
+    { label: "📍 Near Me", href: "/near-me"   },
+  ];
   return (
     <div style={{ display:"flex", alignItems:"center", gap:6, overflowX:"auto" }} className="scroll-none">
-      {TABS.map((t, i) => (
-        <button key={t} onClick={() => setActive(i)} style={{
-          flexShrink:0, padding:"6px 13px", borderRadius:100,
-          fontSize:"12px", fontWeight:600, cursor:"pointer", border:"none",
-          fontFamily:"'DM Sans',sans-serif", transition:"all .2s",
-          ...(active === i
-            ? { background:"#FF5E1A", color:"#fff", boxShadow:"0 0 18px rgba(255,94,26,0.4)" }
-            : { background:"rgba(255,255,255,0.04)", color:"rgba(255,255,255,0.42)", outline:"1px solid rgba(255,255,255,0.07)" }),
-        }}>{t}</button>
-      ))}
+      {TABS.map((t) => {
+        const active = path === t.href || (t.href === "/explore" && path === "/");
+        return (
+          <button key={t.href} onClick={() => router.push(t.href)} style={{
+            flexShrink:0, padding:"6px 13px", borderRadius:100,
+            fontSize:"12px", fontWeight:600, cursor:"pointer", border:"none",
+            fontFamily:"'DM Sans',sans-serif", transition:"all .2s",
+            ...(active
+              ? { background:"#FF5E1A", color:"#fff", boxShadow:"0 0 18px rgba(255,94,26,0.4)" }
+              : { background:"rgba(255,255,255,0.04)", color:"rgba(255,255,255,0.42)", outline:"1px solid rgba(255,255,255,0.07)" }),
+          }}>{t.label}</button>
+        );
+      })}
     </div>
   );
 }

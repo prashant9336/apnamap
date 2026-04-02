@@ -53,8 +53,13 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    if (role !== "vendor" && role !== "admin") {
-      return NextResponse.redirect(new URL("/explore", request.url));
+    // Onboarding and claim are accessible to any logged-in user
+    // (they upgrade the user's role to vendor on completion)
+    const openVendorPaths = ["/vendor/onboarding", "/vendor/claim"];
+    if (!openVendorPaths.some((p) => path.startsWith(p))) {
+      if (role !== "vendor" && role !== "admin") {
+        return NextResponse.redirect(new URL("/vendor/onboarding", request.url));
+      }
     }
   }
 
