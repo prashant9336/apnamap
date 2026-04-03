@@ -5,8 +5,9 @@ export async function GET() {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("categories")
-    .select("*")
-    .order("name");
+    .select("*, subcategories(id, name, slug, icon, sort_order)")
+    .order("name")
+    .order("sort_order", { referencedTable: "subcategories" });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ categories: data ?? [] }, {

@@ -41,6 +41,16 @@ export interface Category {
   icon: string;
   color: string;
   parent_id: string | null;
+  subcategories?: Subcategory[];
+}
+
+export interface Subcategory {
+  id: string;
+  category_id: string;
+  name: string;
+  slug: string;
+  icon: string;
+  sort_order: number;
 }
 
 export interface Shop {
@@ -48,6 +58,11 @@ export interface Shop {
   vendor_id: string;
   locality_id: string;
   category_id: string;
+  subcategory_id: string | null;
+  custom_business_type: string | null;
+  tags: string[];
+  ai_category_confidence: number | null;
+  business_input_text: string | null;
   name: string;
   slug: string;
   description: string | null;
