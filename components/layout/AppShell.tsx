@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
+import InstallPrompt from "@/components/pwa/InstallPrompt";
 
 const TABS = [
   { id: "walk",    href: "/explore",  icon: "🚶", label: "Walk"    },
@@ -27,6 +28,9 @@ export default function AppShell({ children, activeTab }: Props) {
       <main className="flex-1 overflow-hidden relative">
         {children}
       </main>
+
+      {/* PWA install prompt — Android banner or iOS hint */}
+      <InstallPrompt />
 
       {/* Bottom navigation */}
       <nav className="flex-shrink-0 flex items-stretch"

@@ -52,9 +52,20 @@ const pwaConfig = {
         },
       },
 
+      /* PWA icons — Cache First forever (generated PNG, never changes) */
+      {
+        urlPattern: /^\/api\/icon(\?.*)?$/i,
+        handler: "CacheFirst",
+        options: {
+          cacheName:  "pwa-icons",
+          expiration: { maxEntries: 10, maxAgeSeconds: 365 * 24 * 60 * 60 },
+          cacheableResponse: { statuses: [0, 200] },
+        },
+      },
+
       /* App API routes — Network First, fall back to cache for 24 h */
       {
-        urlPattern: /^\/api\/.*/i,
+        urlPattern: /^\/api\/(?!icon).*/i,
         handler: "NetworkFirst",
         options: {
           cacheName:  "api-responses",
