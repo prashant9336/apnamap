@@ -3,7 +3,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import YouAreHere            from "./YouAreHere";
-import WalkProgress          from "./WalkProgress";
+import LocalityIndicator     from "./LocalityIndicator";
 import LocalitySection       from "./LocalitySection";
 import LocalityTransition    from "./LocalityTransition";
 import LocalityLeaderboard   from "./LocalityLeaderboard";
@@ -24,7 +24,6 @@ interface Props {
 
 export default function WalkView({ localities, loading, userLat, userLng, userLocality, gpsError }: Props) {
   const scrollRef    = useRef<HTMLDivElement>(null);
-  const [scrollPct,  setSP]     = useState(0);
   const [activeIdx,  setAI]     = useState(0);
   const [currentLoc, setCL]     = useState("");
   const [crowd,      setCrowd]  = useState(142);
@@ -107,11 +106,8 @@ export default function WalkView({ localities, loading, userLat, userLng, userLo
   }, []);
 
   const onScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    const el  = e.currentTarget;
-    const sy  = el.scrollTop;
-    const max = el.scrollHeight - el.clientHeight;
-    const pct = max > 0 ? sy / max : 0;
-    setSP(pct);
+    const el = e.currentTarget;
+    const sy = el.scrollTop;
 
     /* Locality tracking */
     let vis = 0;
@@ -151,51 +147,61 @@ export default function WalkView({ localities, loading, userLat, userLng, userLo
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#05070C" }}>
 
-      {/* Status bar */}
-      <div style={{ flexShrink: 0, height: 44, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 22px" }}>
-        <Clock />
-        <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: "12px", color: "rgba(255,255,255,0.42)" }}>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 2 }}>
-            {[5, 8, 11, 14].map(h => <div key={h} style={{ width: 3, height: h, borderRadius: 1, background: "rgba(255,255,255,0.42)" }} />)}
-          </div>
-          <span>5G</span><span>🔋</span>
-        </div>
-      </div>
-
-      {/* Top nav */}
-      <div style={{ flexShrink: 0, padding: "0 14px 10px", background: "rgba(5,7,12,0.96)", backdropFilter: "blur(20px)" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+      {/* ── Top nav — real header (no fake status bar) ── */}
+      <div style={{ flexShrink: 0, padding: "10px 14px 10px", background: "rgba(5,7,12,0.96)", backdropFilter: "blur(20px)" }}>
+        {/* Row 1: logo · activity count · lang toggle */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
           {/* Logo */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "'Syne',sans-serif", fontSize: "20px", fontWeight: 800, color: "#EDEEF5", letterSpacing: "-0.5px" }}>
-            <div style={{ width: 28, height: 28, borderRadius: 8, background: "#FF5E1A", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "14px", boxShadow: "0 0 16px rgba(255,94,26,0.5), 0 0 32px rgba(255,94,26,0.2)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: "'Syne',sans-serif", fontSize: "19px", fontWeight: 800, color: "#EDEEF5", letterSpacing: "-0.5px", flexShrink: 0 }}>
+            <div style={{ width: 26, height: 26, borderRadius: 7, background: "#FF5E1A", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "13px", boxShadow: "0 0 14px rgba(255,94,26,0.5)" }}>
               📍
             </div>
             ApnaMap
           </div>
-          {/* Lang toggle */}
-          <LangToggle />
-          {/* GPS pill */}
-          <motion.div key={currentLoc}
-            initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-            style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 12px 5px 8px", borderRadius: 100, fontSize: "12px", fontWeight: 600, color: "#1FBB5A", background: "rgba(31,187,90,0.09)", border: "1px solid rgba(31,187,90,0.25)", boxShadow: "0 0 12px rgba(31,187,90,0.1)", cursor: "pointer" }}>
+
+          {/* Location pill */}
+          <motion.div
+            key={currentLoc}
+            initial={{ opacity: 0, scale: 0.92 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.25 }}
+            style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px 4px 7px", borderRadius: 100, fontSize: "11px", fontWeight: 600, color: "#1FBB5A", background: "rgba(31,187,90,0.09)", border: "1px solid rgba(31,187,90,0.22)", flexShrink: 1, minWidth: 0, overflow: "hidden" }}
+          >
             <motion.div
-              style={{ width: 7, height: 7, borderRadius: "50%", background: "#1FBB5A", boxShadow: "0 0 7px #1FBB5A" }}
-              animate={{ boxShadow: ["0 0 0 0 rgba(31,187,90,0.6)", "0 0 0 7px rgba(31,187,90,0)", "0 0 0 0 rgba(31,187,90,0.6)"] }}
+              style={{ width: 6, height: 6, borderRadius: "50%", background: "#1FBB5A", flexShrink: 0 }}
+              animate={{ opacity: [1, 0.3, 1] }}
               transition={{ duration: 2, repeat: Infinity }}
             />
-            {currentLoc || userLocality || "Detecting…"}
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {currentLoc || userLocality || "Detecting…"}
+            </span>
           </motion.div>
+
+          {/* Spacer */}
+          <div style={{ flex: 1 }} />
+
+          {/* Activity count */}
+          <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 4, fontSize: "11px", fontWeight: 600, color: "rgba(255,255,255,0.38)" }}>
+            <motion.span
+              animate={{ opacity: [0.5, 1, 0.5] }}
+              transition={{ duration: 2.4, repeat: Infinity }}
+              style={{ fontSize: "12px" }}
+            >
+              👀
+            </motion.span>
+            <span>{crowd} exploring</span>
+          </div>
+
+          {/* Lang toggle */}
+          <LangToggle />
         </div>
-        {/* Mode tabs */}
+
+        {/* Row 2: mode tabs */}
         <ModeTabs />
       </div>
 
-      {/* Separator */}
-      <div style={{ height: 1, background: "linear-gradient(to right,transparent,rgba(255,255,255,0.07),transparent)", flexShrink: 0 }} />
-
-      {/* Walk progress — clickable locality rail */}
-      <WalkProgress
-        scrollPct={scrollPct}
+      {/* Locality indicator — smooth sliding dot tracks scroll position */}
+      <LocalityIndicator
         localities={rankedLocalities.map(l => l.name)}
         activeIdx={activeIdx}
         onLocality={scrollToLocality}
@@ -254,14 +260,6 @@ export default function WalkView({ localities, loading, userLat, userLng, userLo
       <FloatingDealBar topDeals={topDeals} currentLoc={currentLoc || userLocality} />
     </div>
   );
-}
-
-/* ─── Clock ─────────────────────────────────────────────────── */
-function Clock() {
-  const fmt = () => { const n = new Date(); return `${n.getHours()}:${String(n.getMinutes()).padStart(2,"0")}`; };
-  const [t, setT] = useState(fmt);
-  useEffect(() => { const iv = setInterval(() => setT(fmt), 10000); return () => clearInterval(iv); }, []);
-  return <span style={{ fontFamily:"'Syne',sans-serif", fontSize:"15px", fontWeight:700, color:"#EDEEF5", letterSpacing:"-0.3px" }}>{t}</span>;
 }
 
 /* ─── Mode tabs — navigates to real pages ───────────────────── */
