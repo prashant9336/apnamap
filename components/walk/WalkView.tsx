@@ -24,9 +24,10 @@ interface Props {
 
 export default function WalkView({ localities, loading, userLat, userLng, userLocality, gpsError }: Props) {
   const scrollRef    = useRef<HTMLDivElement>(null);
-  const [activeIdx,  setAI]     = useState(0);
-  const [currentLoc, setCL]     = useState("");
-  const [crowd,      setCrowd]  = useState(142);
+  const [activeIdx,  setAI]       = useState(0);
+  const [scrollProgress, setSP]   = useState(0);   // 0-1 continuous scroll fraction
+  const [currentLoc, setCL]       = useState("");
+  const [crowd,      setCrowd]    = useState(142);
   const raf  = useRef<number>(0);
   const lasy = useRef(0);
 
@@ -106,8 +107,13 @@ export default function WalkView({ localities, loading, userLat, userLng, userLo
   }, []);
 
   const onScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    const el = e.currentTarget;
-    const sy = el.scrollTop;
+    const el  = e.currentTarget;
+    const sy  = el.scrollTop;
+    const max = el.scrollHeight - el.clientHeight;
+
+    /* Continuous scroll progress 0-1, clamped */
+    const prog = max > 0 ? Math.min(1, Math.max(0, sy / max)) : 0;
+    setSP(prog);
 
     /* Locality tracking */
     let vis = 0;
@@ -200,10 +206,11 @@ export default function WalkView({ localities, loading, userLat, userLng, userLo
         <ModeTabs />
       </div>
 
-      {/* Locality indicator — smooth sliding dot tracks scroll position */}
+      {/* Locality indicator — progress line + dot track scroll continuously */}
       <LocalityIndicator
         localities={rankedLocalities.map(l => l.name)}
         activeIdx={activeIdx}
+        scrollProgress={scrollProgress}
         onLocality={scrollToLocality}
       />
 

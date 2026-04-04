@@ -1,143 +1,229 @@
 "use client";
 
-import { useRef, useLayoutEffect, useState, useCallback } from "react";
+import { useRef, useLayoutEffect, useCallback } from "react";
 
 interface Props {
-  localities:  string[];
-  activeIdx:   number;
-  onLocality?: (index: number) => void;
+  localities:      string[];
+  activeIdx:       number;
+  /** Continuous 0-1 fraction of the scroll container's scrollable height. */
+  scrollProgress:  number;
+  onLocality?:     (index: number) => void;
 }
 
 /**
- * Scroll-driven locality indicator.
+ * LocalityIndicator
  *
- * Design:
- *   Civil Lines  ─  Rambagh  ─  Katra
- *                      ●
+ * Visual structure (top → bottom):
  *
- * The dot slides using transform: translateX() — zero layout shift.
- * Transition is 180 ms cubic-bezier(0.25,0,0,1) for a snappy feel.
+ *   Civil Lines    Rambagh    Katra      ← clickable label row
+ *   ─────────────────────────────        ← dim background track
+ *   ████████░░░░░░░░░░░░░░░░░░░░         ← orange progress line (scaleX)
+ *                ●                       ← dot slides via translateX
  *
- * Active locality label: white + slightly larger.
- * Inactive labels: dim (25 % opacity).
- * Completed localities (before active): green tint.
+ * Animation contract:
+ *   • Background track  — static, full width between label centers
+ *   • Progress line     — transform: scaleX(scrollProgress)
+ *                         transformOrigin: left center
+ *                         NO width change → GPU composited, zero layout shift
+ *   • Dot               — transform: translateX(x)
+ *                         x interpolated between measured label-center positions
+ *                         based on scrollProgress
  *
- * Clicking a label scrolls the walk view to that locality.
+ * Both the line and the dot are mutated via direct DOM ref writes inside
+ * useLayoutEffect, so they update synchronously after each React paint
+ * without scheduling an extra React commit.
+ *
+ * Performance: O(1) on every scroll tick — no querySelectorAll, no
+ * getBoundingClientRect inside the hot path.
  */
-export default function LocalityIndicator({ localities, activeIdx, onLocality }: Props) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const labelRefs    = useRef<Array<HTMLButtonElement | null>>([]);
-  const [dotX, setDotX] = useState(0);
+export default function LocalityIndicator({
+  localities,
+  activeIdx,
+  scrollProgress,
+  onLocality,
+}: Props) {
+  const containerRef  = useRef<HTMLDivElement>(null);
+  const trackBgRef    = useRef<HTMLDivElement>(null);
+  const trackFgRef    = useRef<HTMLDivElement>(null);
+  const dotRef        = useRef<HTMLDivElement>(null);
 
-  // Measure the center x of the active label within the container
-  // Uses useLayoutEffect so measurement happens after paint (no flicker)
-  const updateDot = useCallback(() => {
+  // Measured center-x of each label, relative to containerRef left edge.
+  // Populated once after first paint, re-measured on resize.
+  const labelCenters  = useRef<number[]>([]);
+  const labelRefs     = useRef<Array<HTMLButtonElement | null>>([]);
+
+  const DOT_R    = 4;   // dot radius px
+  const DOT_SIZE = DOT_R * 2;
+
+  /* ── Measure label positions ──────────────────────────────────── */
+  const measure = useCallback(() => {
     const container = containerRef.current;
-    const label     = labelRefs.current[activeIdx];
-    if (!container || !label) return;
-
+    if (!container) return;
     const cRect = container.getBoundingClientRect();
-    const lRect = label.getBoundingClientRect();
-    // Center of the label relative to container left edge
-    const center = lRect.left - cRect.left + lRect.width / 2;
-    setDotX(center);
-  }, [activeIdx]);
+    labelCenters.current = labelRefs.current.map(el => {
+      if (!el) return 0;
+      const r = el.getBoundingClientRect();
+      return r.left - cRect.left + r.width / 2;
+    });
+    // Reposition track background to span first→last label
+    applyProgress(scrollProgress);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localities]);   // re-measure when locality list changes
 
   useLayoutEffect(() => {
-    updateDot();
-    // Re-measure on window resize (orientation change on mobile)
-    window.addEventListener("resize", updateDot);
-    return () => window.removeEventListener("resize", updateDot);
-  }, [updateDot]);
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [measure]);
+
+  /* ── Apply progress to DOM directly (no extra React render) ───── */
+  const applyProgress = useCallback((p: number) => {
+    const centers = labelCenters.current;
+    if (!centers.length) return;
+
+    const n         = centers.length;
+    const firstX    = centers[0];
+    const lastX     = centers[n - 1];
+    const trackW    = Math.max(0, lastX - firstX);
+
+    // Position + size the track background once
+    if (trackBgRef.current) {
+      trackBgRef.current.style.left  = `${firstX}px`;
+      trackBgRef.current.style.width = `${trackW}px`;
+    }
+
+    // Progress line: same geometry, scaleX driven by p
+    if (trackFgRef.current) {
+      trackFgRef.current.style.left      = `${firstX}px`;
+      trackFgRef.current.style.width     = `${trackW}px`;
+      trackFgRef.current.style.transform = `scaleX(${p})`;
+    }
+
+    // Dot: interpolate between label centers
+    let dotX: number;
+    if (n === 1) {
+      dotX = firstX;
+    } else {
+      // raw position along the label array (0 → N-1)
+      const raw     = p * (n - 1);
+      const seg     = Math.min(Math.floor(raw), n - 2); // segment index (0 → N-2)
+      const frac    = raw - seg;                         // fraction within segment (0-1)
+      dotX = centers[seg] + frac * (centers[seg + 1] - centers[seg]);
+    }
+
+    if (dotRef.current) {
+      dotRef.current.style.transform = `translateX(${dotX - DOT_R}px)`;
+    }
+  }, [DOT_R]);
+
+  // Run applyProgress every time scrollProgress prop changes
+  useLayoutEffect(() => {
+    applyProgress(scrollProgress);
+  }, [scrollProgress, applyProgress]);
+
+  /* ── Active-label color update (label states) ─────────────────── */
+  // We keep this in React state (labels are few, paint is cheap)
+  // activeIdx is already derived from scroll in WalkView
 
   if (!localities.length) return null;
-
-  const DOT_SIZE   = 6;
-  const DASH_COLOR = "rgba(255,255,255,0.12)";
 
   return (
     <div style={{
       flexShrink: 0,
-      padding: "7px 14px 10px",
-      background: "rgba(5,7,12,0.90)",
+      padding: "8px 14px 12px",
+      background: "rgba(5,7,12,0.92)",
       borderBottom: "1px solid rgba(255,255,255,0.05)",
     }}>
-      {/* ── Locality name rail ── */}
+      {/*
+       * Outer wrapper: relative-positioned so track + dot can be
+       * absolutely positioned below the label row.
+       */}
       <div
         ref={containerRef}
-        style={{
-          position: "relative",
+        style={{ position: "relative", paddingBottom: 10 }}
+      >
+        {/* ── Label row ── */}
+        <div style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          // Horizontal scroll when localities overflow on narrow screens
-          overflowX: localities.length > 5 ? "auto" : "visible",
-          paddingBottom: 10, // room for the dot row below
+          overflowX: localities.length > 6 ? "auto" : "visible",
+          marginBottom: 6,
         }}
-        className="scroll-none"
-      >
-        {localities.map((name, i) => {
-          const isDone    = i < activeIdx;
-          const isCurrent = i === activeIdx;
-          // Short label: first word (or first 8 chars if one very long word)
-          const short = name.split(" ")[0].slice(0, 10);
+          className="scroll-none"
+        >
+          {localities.map((name, i) => {
+            const isDone    = i < activeIdx;
+            const isCurrent = i === activeIdx;
+            const short     = name.split(" ")[0].slice(0, 11);
 
-          return (
-            <div
-              key={`${name}-${i}`}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                flex: i < localities.length - 1 ? 1 : "none",
-                minWidth: 0,
-              }}
-            >
+            return (
               <button
+                key={`${name}-${i}`}
                 ref={el => { labelRefs.current[i] = el; }}
                 onClick={() => onLocality?.(i)}
+                aria-label={`Jump to ${name}`}
+                aria-current={isCurrent ? "true" : undefined}
                 style={{
                   background: "none",
                   border: "none",
-                  padding: "0 2px",
+                  padding: "2px 3px",
                   cursor: onLocality ? "pointer" : "default",
-                  flexShrink: 0,
-                  // transition on color + font-size for active state
-                  transition: "color 180ms ease, opacity 180ms ease",
+                  fontFamily: "'DM Sans', sans-serif",
+                  fontSize:   isCurrent ? "11.5px" : "10.5px",
+                  fontWeight: isCurrent ? 700 : 500,
+                  lineHeight: 1,
+                  whiteSpace: "nowrap",
+                  // Use transition on color only — no layout properties
+                  transition: "color 160ms ease, font-size 160ms ease",
                   color: isCurrent
                     ? "#EDEEF5"
                     : isDone
                       ? "#1FBB5A"
-                      : "rgba(255,255,255,0.25)",
-                  fontSize: isCurrent ? "11.5px" : "10.5px",
-                  fontWeight: isCurrent ? 700 : 500,
-                  fontFamily: "'DM Sans', sans-serif",
-                  whiteSpace: "nowrap",
-                  lineHeight: 1,
+                      : "rgba(255,255,255,0.28)",
                 }}
-                aria-label={`Go to ${name}`}
-                aria-current={isCurrent ? "true" : undefined}
               >
                 {short}
               </button>
+            );
+          })}
+        </div>
 
-              {/* Dash connector between localities */}
-              {i < localities.length - 1 && (
-                <div style={{
-                  flex: 1,
-                  height: 1,
-                  margin: "0 4px",
-                  background: isDone
-                    ? "rgba(31,187,90,0.35)"
-                    : DASH_COLOR,
-                  transition: "background 300ms ease",
-                }} />
-              )}
-            </div>
-          );
-        })}
-
-        {/* ── Sliding dot — transform only, no layout shift ── */}
+        {/* ── Background track ── */}
         <div
+          ref={trackBgRef}
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            bottom: DOT_SIZE / 2 - 1,   // vertically centered on dot
+            height: 2,
+            borderRadius: 2,
+            background: "rgba(255,255,255,0.09)",
+            // left + width set by measure() via ref
+          }}
+        />
+
+        {/* ── Progress line (scaleX animated) ── */}
+        <div
+          ref={trackFgRef}
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            bottom: DOT_SIZE / 2 - 1,
+            height: 2,
+            borderRadius: 2,
+            // Gradient: green (done) → orange (leading edge)
+            background: "linear-gradient(to right, #1FBB5A 0%, #FF5E1A 100%)",
+            // scaleX set by applyProgress() — NO width changes
+            transformOrigin: "left center",
+            transform: "scaleX(0)",
+            willChange: "transform",
+          }}
+        />
+
+        {/* ── Sliding dot ── */}
+        <div
+          ref={dotRef}
           aria-hidden="true"
           style={{
             position: "absolute",
@@ -147,10 +233,10 @@ export default function LocalityIndicator({ localities, activeIdx, onLocality }:
             height: DOT_SIZE,
             borderRadius: "50%",
             background: "#FF5E1A",
-            boxShadow: "0 0 6px rgba(255,94,26,0.70)",
-            // translateX centers the dot under the active label
-            transform: `translateX(${dotX - DOT_SIZE / 2}px)`,
-            transition: "transform 180ms cubic-bezier(0.25, 0, 0, 1)",
+            boxShadow: "0 0 7px rgba(255,94,26,0.80), 0 0 14px rgba(255,94,26,0.30)",
+            // transform set by applyProgress() via ref
+            transform: "translateX(-9999px)", // hidden until first measure
+            willChange: "transform",
             pointerEvents: "none",
           }}
         />
