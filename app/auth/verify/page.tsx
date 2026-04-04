@@ -99,7 +99,7 @@ function VerifyForm() {
         .from("profiles")
         .select("role")
         .eq("id", user.id)
-        .single();
+        .maybeSingle();   // .single() throws if no row — new users have no profile yet
 
       /* 3. Use existing role if present; otherwise apply what user chose */
       const finalRole = existingProfile?.role ?? role;

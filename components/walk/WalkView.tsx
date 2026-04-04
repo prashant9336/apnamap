@@ -8,6 +8,7 @@ import LocalitySection       from "./LocalitySection";
 import LocalityTransition    from "./LocalityTransition";
 import LocalityLeaderboard   from "./LocalityLeaderboard";
 import StreakBadge            from "./StreakBadge";
+import LangToggle             from "@/components/ui/LangToggle";
 import { rankLocalities, topOffersAcrossLocalities } from "@/lib/deal-engine";
 import type { ScoredOffer } from "@/lib/deal-engine";
 import type { WalkLocality, Offer } from "@/types";
@@ -171,6 +172,8 @@ export default function WalkView({ localities, loading, userLat, userLng, userLo
             </div>
             ApnaMap
           </div>
+          {/* Lang toggle */}
+          <LangToggle />
           {/* GPS pill */}
           <motion.div key={currentLoc}
             initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}

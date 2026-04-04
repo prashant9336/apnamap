@@ -472,15 +472,12 @@ export default function ShopCard({ shop, index, side }: Props) {
   );
 }
 
-/* ── Compact offer chip ──────────────────────────────────────────
-   Deal engine classifies the offer type first, then visual style
-   is derived from that classification.
-   - mystery  → blurred teaser, no discount revealed
-   - flash    → amber urgency with countdown front-and-center
-   - big_deal → orange glow pulse (tier-1)
-   - new_deal → neutral chip, discount if available              */
+/* ── Offer chip — two-row dominant layout ────────────────────────
+   Row 1: deal-type badge  •  discount badge  •  countdown  •  claimed
+   Row 2: full offer title (wraps naturally, no JS truncation)
+   Visual hierarchy: BIG DEAL > FLASH > NORMAL              */
 function OfferChip({ offer }: { offer: Offer }) {
-  // 60-s tick so countdown string stays fresh without thrashing
+  // 60-s tick keeps countdown fresh
   const [, tick] = useState(0);
   useEffect(() => {
     if (!offer.ends_at) return;
@@ -492,57 +489,33 @@ function OfferChip({ offer }: { offer: Offer }) {
   const dealType = classifyDealEngineType(offer, now);
   const { discount_type, discount_value, title, ends_at, click_count } = offer;
 
-  // ── Mystery chip — teaser only, no details ─────────────────────
-  if (dealType === "mystery") {
-    return (
-      <div style={{
-        display: "flex", alignItems: "center", gap: 5,
-        padding: "3.5px 8px", borderRadius: 7, marginBottom: 5,
-        background: "rgba(167,139,250,0.07)",
-        border: "1px solid rgba(167,139,250,0.20)",
-      }}>
-        <span style={{ fontSize: "10px", fontWeight: 700, color: "#A78BFA", flexShrink: 0 }}>
-          🎁 Mystery Deal
-        </span>
-        <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.12)", flexShrink: 0 }}>—</span>
-        <span style={{
-          fontSize: "10px", color: "rgba(167,139,250,0.45)",
-          filter: "blur(3px)", userSelect: "none",
-          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-        }}>
-          {title}
-        </span>
-      </div>
-    );
-  }
-
   // ── Style config per deal type ─────────────────────────────────
-  let prefix: string;
-  let color: string;
-  let bg: string;
-  let border: string;
+  type ChipTheme = { label: string; labelColor: string; bg: string; border: string; glow?: string };
 
-  if (dealType === "flash_deal") {
-    prefix = "⚡ Flash";
-    color  = "#E8A800";
-    bg     = "rgba(232,168,0,0.09)";
-    border = "1px solid rgba(232,168,0,0.24)";
-  } else if (dealType === "big_deal") {
-    prefix = "🔥 Big Deal";
-    color  = "#FF6A30";
-    bg     = "rgba(255,80,0,0.09)";
-    border = "1px solid rgba(255,80,0,0.24)";
-  } else if (discount_type === "bogo" || discount_type === "free") {
-    prefix = "🟢 Combo";
-    color  = "#1FBB5A";
-    bg     = "rgba(31,187,90,0.07)";
-    border = "1px solid rgba(31,187,90,0.18)";
-  } else {
-    prefix = "🎯";
-    color  = "rgba(255,255,255,0.35)";
-    bg     = "rgba(255,255,255,0.04)";
-    border = "1px solid rgba(255,255,255,0.07)";
-  }
+  const theme: ChipTheme = (() => {
+    if (dealType === "big_deal") return {
+      label: "🔥 Big Deal", labelColor: "#FF6A30",
+      bg: "rgba(255,80,0,0.09)", border: "1px solid rgba(255,80,0,0.26)",
+      glow: "rgba(255,80,0,0.22)",
+    };
+    if (dealType === "flash_deal") return {
+      label: "⚡ Flash Deal", labelColor: "#E8A800",
+      bg: "rgba(232,168,0,0.09)", border: "1px solid rgba(232,168,0,0.26)",
+      glow: "rgba(232,168,0,0.28)",
+    };
+    if (dealType === "mystery") return {
+      label: "🎁 Mystery", labelColor: "#A78BFA",
+      bg: "rgba(167,139,250,0.07)", border: "1px solid rgba(167,139,250,0.20)",
+    };
+    if (discount_type === "bogo" || discount_type === "free") return {
+      label: "🟢 Combo", labelColor: "#1FBB5A",
+      bg: "rgba(31,187,90,0.07)", border: "1px solid rgba(31,187,90,0.18)",
+    };
+    return {
+      label: "🎯 Offer", labelColor: "rgba(255,255,255,0.50)",
+      bg: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+    };
+  })();
 
   // ── Discount badge ─────────────────────────────────────────────
   let discountBadge: string | null = null;
@@ -551,68 +524,83 @@ function OfferChip({ offer }: { offer: Offer }) {
   else if (discount_type === "bogo")                   discountBadge = "Buy 1 Get 1";
   else if (discount_type === "free")                   discountBadge = "Free";
 
-  // ── Countdown — only within 24 h ──────────────────────────────
   const timeLeft = ends_at ? getTimeLeft(ends_at) : null;
+  const claimed  = click_count ?? 0;
 
-  // ── Social proof ───────────────────────────────────────────────
-  const claimed    = click_count ?? 0;
-  const shortTitle = title.length > 18 ? title.slice(0, 16) + "…" : title;
-
-  // ── Shared inner layout ────────────────────────────────────────
-  const inner = (
-    <>
-      <span style={{ fontSize: "10px", fontWeight: 700, color, flexShrink: 0 }}>{prefix}</span>
-      {discountBadge && (
-        <>
-          <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.15)", flexShrink: 0 }}>•</span>
-          <span style={{ fontSize: "9.5px", fontWeight: 700, color, flexShrink: 0 }}>{discountBadge}</span>
-        </>
-      )}
-      {timeLeft && (
-        <>
-          <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.15)", flexShrink: 0 }}>•</span>
-          <span style={{ fontSize: "9px", fontWeight: 700, color: "#E8A800", flexShrink: 0 }}>
+  const chipContent = (
+    <div style={{
+      padding: "6px 9px", borderRadius: 8,
+      background: theme.bg, border: theme.border,
+      marginBottom: 5,
+    }}>
+      {/* Row 1: deal type + discount + countdown + claimed */}
+      <div style={{
+        display: "flex", alignItems: "center",
+        gap: 5, flexWrap: "wrap", marginBottom: dealType === "mystery" ? 0 : 3,
+      }}>
+        <span style={{ fontSize: "9.5px", fontWeight: 800, color: theme.labelColor }}>
+          {theme.label}
+        </span>
+        {discountBadge && (
+          <span style={{
+            fontSize: "9.5px", fontWeight: 800,
+            color: theme.labelColor,
+            background: "rgba(255,255,255,0.06)",
+            padding: "1px 5px", borderRadius: 100,
+          }}>
+            {discountBadge}
+          </span>
+        )}
+        {timeLeft && (
+          <span style={{
+            fontSize: "9px", fontWeight: 700, color: "#E8A800",
+            background: "rgba(232,168,0,0.10)",
+            padding: "1px 5px", borderRadius: 100,
+          }}>
             ⏱ {timeLeft}
           </span>
-        </>
-      )}
-      <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.12)", flexShrink: 0 }}>—</span>
-      <span style={{
-        fontSize: "10px", fontWeight: 500, color: "rgba(255,255,255,0.48)",
-        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-      }}>
-        {shortTitle}
-      </span>
-      {claimed > 0 && (
+        )}
+        {claimed > 0 && (
+          <span style={{ fontSize: "8.5px", color: "rgba(255,255,255,0.28)", marginLeft: "auto" }}>
+            🔥 {claimed}×
+          </span>
+        )}
+      </div>
+
+      {/* Row 2: full offer title — no truncation, wraps naturally */}
+      {dealType === "mystery" ? (
         <span style={{
-          marginLeft: "auto", flexShrink: 0, paddingLeft: 4,
-          fontSize: "8.5px", color: "rgba(255,255,255,0.22)", whiteSpace: "nowrap",
+          fontSize: "10.5px", color: "rgba(167,139,250,0.45)",
+          filter: "blur(4px)", userSelect: "none",
+          display: "block", lineHeight: 1.4,
         }}>
-          🔥 {claimed}×
+          {title}
+        </span>
+      ) : (
+        <span style={{
+          fontSize: "10.5px", fontWeight: 600,
+          color: "rgba(255,255,255,0.72)",
+          display: "block", lineHeight: 1.4,
+        }}>
+          {title}
         </span>
       )}
-    </>
+    </div>
   );
 
-  const chipStyle = {
-    display: "flex", alignItems: "center", gap: 4,
-    padding: "3.5px 8px", borderRadius: 7,
-    background: bg, border, overflow: "hidden" as const,
-  };
-
-  // Big deal gets a slow outer glow pulse; flash gets a fast amber pulse
+  // Big deal gets slow glow pulse; flash gets fast amber pulse
   if (dealType === "big_deal") {
     return (
       <motion.div
         animate={{ boxShadow: [
           "0 0 0 rgba(255,80,0,0)",
-          "0 0 10px rgba(255,80,0,0.22), inset 0 0 8px rgba(255,80,0,0.05)",
+          `0 0 12px ${theme.glow}, inset 0 0 8px rgba(255,80,0,0.04)`,
           "0 0 0 rgba(255,80,0,0)",
         ]}}
         transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-        style={{ borderRadius: 7, marginBottom: 5 }}
+        style={{ borderRadius: 8 }}
       >
-        <div style={chipStyle}>{inner}</div>
+        {chipContent}
       </motion.div>
     );
   }
@@ -622,18 +610,16 @@ function OfferChip({ offer }: { offer: Offer }) {
       <motion.div
         animate={{ boxShadow: [
           "0 0 0 rgba(232,168,0,0)",
-          "0 0 8px rgba(232,168,0,0.28)",
+          `0 0 8px ${theme.glow}`,
           "0 0 0 rgba(232,168,0,0)",
         ]}}
         transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
-        style={{ borderRadius: 7, marginBottom: 5 }}
+        style={{ borderRadius: 8 }}
       >
-        <div style={chipStyle}>{inner}</div>
+        {chipContent}
       </motion.div>
     );
   }
 
-  return (
-    <div style={{ ...chipStyle, marginBottom: 5 }}>{inner}</div>
-  );
+  return chipContent;
 }

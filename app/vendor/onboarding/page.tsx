@@ -93,7 +93,8 @@ export default function VendorOnboarding() {
   }
 
   // ── Final submit ──────────────────────────────────────────
-  async function submit(skipOffer = false) {
+  // offerTier: "normal" | "flash" | "big" — maps to DB tier 3/2/1
+  async function submit(skipOffer = false, offerTier: "normal"|"flash"|"big" = "normal") {
     setLoading(true); setError("");
     try {
       const { data: { user }, error: userErr } = await supabase.auth.getUser();
@@ -150,15 +151,17 @@ export default function VendorOnboarding() {
       }
 
       if (!skipOffer && form.offer_title.trim()) {
+        // Map visual tier to DB tier column: big=1 (highest), flash=2, normal=3
+        const tierMap: Record<string, number> = { big: 1, flash: 2, normal: 3 };
         await supabase.from("offers").insert({
           shop_id:        shop.id,
           title:          form.offer_title.trim(),
           discount_type:  form.offer_type,
           discount_value: form.offer_value && !isNaN(Number(form.offer_value))
                             ? parseFloat(form.offer_value) : null,
-          tier:       1,
-          is_active:  true,
-          is_featured: false,
+          tier:        tierMap[offerTier] ?? 3,
+          is_active:   true,
+          is_featured: offerTier === "big",
         });
       }
 
@@ -343,55 +346,276 @@ export default function VendorOnboarding() {
 
         {/* ════════════════ STEP 3 ════════════════════════ */}
         {step === 3 && (
-          <div className="space-y-4">
-            <h2 className="font-syne font-black text-xl mt-2">Add Your First Offer</h2>
-            <p className="text-sm" style={{ color: "var(--t2)" }}>
-              Shops with offers get more visits. You can skip this for now.
-            </p>
-
-            <div>
-              <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--t2)" }}>Offer Title</label>
-              <input value={form.offer_title} onChange={e => update("offer_title", e.target.value)}
-                placeholder="e.g. Flat 25% OFF on all sweets" style={inp} />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--t2)" }}>Type</label>
-                <select value={form.offer_type} onChange={e => update("offer_type", e.target.value)} style={inp}>
-                  <option value="percent">% Discount</option>
-                  <option value="flat">Flat Amount Off</option>
-                  <option value="bogo">Buy 1 Get 1</option>
-                  <option value="free">Free Service</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-              {(form.offer_type === "percent" || form.offer_type === "flat") && (
-                <div>
-                  <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--t2)" }}>Value</label>
-                  <input type="number" value={form.offer_value} onChange={e => update("offer_value", e.target.value)}
-                    placeholder={form.offer_type === "percent" ? "25" : "100"} style={inp} />
-                </div>
-              )}
-            </div>
-
-            {error && <p className="text-xs text-red-400">{error}</p>}
-
-            <button onClick={() => submit(false)} disabled={loading}
-              className="w-full py-3.5 rounded-xl font-bold text-white"
-              style={{ background: loading ? "rgba(255,94,26,0.5)" : "var(--accent)", boxShadow: loading ? "none" : "0 0 24px rgba(255,94,26,0.3)" }}>
-              {loading ? "Submitting…" : "🚀 Submit My Shop"}
-            </button>
-
-            <button onClick={() => submit(true)} disabled={loading}
-              className="w-full py-2 text-sm"
-              style={{ background: "none", border: "none", color: "var(--t3)" }}>
-              Skip offer for now
-            </button>
-          </div>
+          <OfferStep
+            form={form}
+            update={update}
+            inp={inp}
+            error={error}
+            loading={loading}
+            onSubmit={submit}
+          />
         )}
 
       </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   OFFER STEP — guided first-offer flow with auto-suggest
+   ══════════════════════════════════════════════════════════════ */
+
+type OfferTier = "normal" | "flash" | "big";
+
+// Keyword-based auto-suggest: scan offer title for urgency / value signals
+function suggestOfferTier(title: string): OfferTier {
+  const t = title.toLowerCase();
+  const flashWords = ["today", "aaj", "limited", "few hours", "abhi", "now", "hurry", "jaldi", "tonight", "kal tak"];
+  const bigWords   = ["mega", "grand", "50%", "60%", "70%", "half price", "aadha", "bumper", "dhamaka", "special"];
+  if (flashWords.some(w => t.includes(w))) return "flash";
+  if (bigWords.some(w => t.includes(w))) return "big";
+  return "normal";
+}
+
+// Auto-suggest tier from discount value alone
+function suggestFromValue(type: string, value: string): OfferTier {
+  const v = parseFloat(value);
+  if (!v) return "normal";
+  if (type === "percent" && v >= 40) return "big";
+  if (type === "flat"    && v >= 500) return "big";
+  return "normal";
+}
+
+const TIER_CONFIG: Record<OfferTier, {
+  label: string; emoji: string;
+  hint: string;
+  color: string; bg: string; border: string;
+}> = {
+  normal: {
+    label: "Normal Offer", emoji: "🎯",
+    hint: "Regular discount or promotion",
+    color: "rgba(255,255,255,0.60)", bg: "rgba(255,255,255,0.05)", border: "rgba(255,255,255,0.12)",
+  },
+  flash: {
+    label: "Flash Deal", emoji: "⚡",
+    hint: "Time-limited — urgency boosts clicks",
+    color: "#E8A800", bg: "rgba(232,168,0,0.08)", border: "rgba(232,168,0,0.30)",
+  },
+  big: {
+    label: "Big Deal", emoji: "🔥",
+    hint: "Mega offer — gets top visibility",
+    color: "#FF6A30", bg: "rgba(255,94,26,0.09)", border: "rgba(255,94,26,0.32)",
+  },
+};
+
+const TEMPLATES: Record<string, string[]> = {
+  percent: ["Flat 25% OFF on all items", "20% discount for today", "30% OFF — limited time"],
+  flat:    ["₹100 OFF on orders above ₹500", "Flat ₹50 OFF today", "₹200 cashback on first visit"],
+  bogo:    ["Buy 1 Get 1 FREE today", "Buy any 2, get 1 free", "Ek lo, ek free pao"],
+  free:    ["Free home delivery today", "Free consultation — first visit", "Free sample with every order"],
+  other:   ["Special offer for new customers", "Walk-in discount available", "Ask us for today's special"],
+};
+
+interface OfferStepProps {
+  form: { offer_title: string; offer_type: string; offer_value: string };
+  update: (k: string, v: string) => void;
+  inp: React.CSSProperties;
+  error: string;
+  loading: boolean;
+  onSubmit: (skip: boolean, tier?: "normal"|"flash"|"big") => void;
+}
+
+function OfferStep({ form, update, inp, error, loading, onSubmit }: OfferStepProps) {
+  const [tier, setTier] = useState<OfferTier>("normal");
+  const [autoSuggested, setAutoSuggested] = useState(false);
+
+  // Auto-suggest tier when title or value changes
+  useEffect(() => {
+    if (!form.offer_title && !form.offer_value) { setAutoSuggested(false); return; }
+    const fromTitle = suggestOfferTier(form.offer_title);
+    const fromValue = suggestFromValue(form.offer_type, form.offer_value);
+    const suggested = fromTitle !== "normal" ? fromTitle : fromValue;
+    if (suggested !== "normal") {
+      setTier(suggested);
+      setAutoSuggested(true);
+    } else {
+      setAutoSuggested(false);
+    }
+  }, [form.offer_title, form.offer_value, form.offer_type]);
+
+  function applyTemplate(tpl: string) {
+    update("offer_title", tpl);
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      <div>
+        <h2 className="font-syne font-black text-xl mt-2">Add Your First Offer</h2>
+        <p className="text-sm" style={{ color: "var(--t2)", marginTop: 6 }}>
+          Shops with offers get <strong style={{ color: "var(--accent)" }}>3× more visits</strong>. Takes 30 seconds.
+        </p>
+      </div>
+
+      {/* ── STEP A: Offer type picker ── */}
+      <div>
+        <p style={{ fontSize: "11px", fontWeight: 700, color: "var(--t3)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.6px" }}>
+          What kind of offer?
+        </p>
+        <div style={{ display: "flex", gap: 8 }}>
+          {(["normal", "flash", "big"] as OfferTier[]).map(t => {
+            const cfg = TIER_CONFIG[t];
+            const active = tier === t;
+            return (
+              <button
+                key={t}
+                onClick={() => { setTier(t); setAutoSuggested(false); }}
+                style={{
+                  flex: 1, padding: "10px 6px", borderRadius: 12,
+                  border: `1.5px solid ${active ? cfg.border : "rgba(255,255,255,0.08)"}`,
+                  background: active ? cfg.bg : "rgba(255,255,255,0.03)",
+                  cursor: "pointer", textAlign: "center",
+                  transition: "all 0.15s",
+                }}
+              >
+                <div style={{ fontSize: 20, marginBottom: 4 }}>{cfg.emoji}</div>
+                <div style={{ fontSize: "10.5px", fontWeight: 700, color: active ? cfg.color : "rgba(255,255,255,0.40)", lineHeight: 1.3 }}>
+                  {cfg.label}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        {autoSuggested && (
+          <p style={{ fontSize: "10px", color: "var(--accent)", marginTop: 6 }}>
+            ✨ Auto-suggested based on your offer
+          </p>
+        )}
+        <p style={{ fontSize: "10px", color: "var(--t3)", marginTop: 4 }}>
+          {TIER_CONFIG[tier].hint}
+        </p>
+      </div>
+
+      {/* ── STEP B: Discount type ── */}
+      <div>
+        <p style={{ fontSize: "11px", fontWeight: 700, color: "var(--t3)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.6px" }}>
+          Discount type
+        </p>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {[
+            { v: "percent", label: "% Off" },
+            { v: "flat",    label: "₹ Flat" },
+            { v: "bogo",    label: "Buy 1 Get 1" },
+            { v: "free",    label: "Free" },
+            { v: "other",   label: "Other" },
+          ].map(({ v, label }) => (
+            <button
+              key={v}
+              onClick={() => { update("offer_type", v); update("offer_value", ""); }}
+              style={{
+                padding: "6px 12px", borderRadius: 100, fontSize: "12px", fontWeight: 700,
+                border: "none", cursor: "pointer",
+                background: form.offer_type === v ? "var(--accent)" : "rgba(255,255,255,0.05)",
+                color: form.offer_type === v ? "#fff" : "rgba(255,255,255,0.45)",
+                outline: form.offer_type !== v ? "1px solid rgba(255,255,255,0.08)" : "none",
+                transition: "all 0.15s",
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Value input for numeric discount types */}
+      {(form.offer_type === "percent" || form.offer_type === "flat") && (
+        <div>
+          <label style={{ display: "block", fontSize: "11px", fontWeight: 700, color: "var(--t3)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.6px" }}>
+            {form.offer_type === "percent" ? "Discount %" : "Amount Off (₹)"}
+          </label>
+          <input
+            type="number"
+            value={form.offer_value}
+            onChange={e => update("offer_value", e.target.value)}
+            placeholder={form.offer_type === "percent" ? "e.g. 25" : "e.g. 100"}
+            style={{ ...inp, fontSize: "18px", fontWeight: 800, textAlign: "center" as const }}
+          />
+        </div>
+      )}
+
+      {/* ── STEP C: Offer title ── */}
+      <div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+          <label style={{ fontSize: "11px", fontWeight: 700, color: "var(--t3)", textTransform: "uppercase", letterSpacing: "0.6px" }}>
+            Offer Title
+          </label>
+          <span style={{ fontSize: "10px", color: "var(--t3)" }}>Quick fill ↓</span>
+        </div>
+        <input
+          value={form.offer_title}
+          onChange={e => update("offer_title", e.target.value)}
+          placeholder="Describe your offer in one line…"
+          style={inp}
+        />
+        {/* Template suggestions */}
+        <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 8 }}>
+          {(TEMPLATES[form.offer_type] ?? TEMPLATES.other).map(tpl => (
+            <button
+              key={tpl}
+              onClick={() => applyTemplate(tpl)}
+              style={{
+                fontSize: "10px", padding: "4px 9px", borderRadius: 100,
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.09)",
+                color: "rgba(255,255,255,0.45)",
+                cursor: "pointer", textAlign: "left" as const,
+                transition: "all 0.15s",
+              }}
+            >
+              {tpl}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Preview ── */}
+      {form.offer_title && (
+        <div style={{
+          padding: "10px 12px", borderRadius: 10,
+          background: TIER_CONFIG[tier].bg,
+          border: `1px solid ${TIER_CONFIG[tier].border}`,
+        }}>
+          <div style={{ fontSize: "10px", fontWeight: 800, color: TIER_CONFIG[tier].color, marginBottom: 4 }}>
+            {TIER_CONFIG[tier].emoji} {TIER_CONFIG[tier].label}
+          </div>
+          <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.75)", lineHeight: 1.4 }}>
+            {form.offer_title}
+          </div>
+        </div>
+      )}
+
+      {error && <p style={{ fontSize: "12px", color: "#F87171" }}>{error}</p>}
+
+      <button
+        onClick={() => onSubmit(false, tier)}
+        disabled={loading}
+        style={{
+          width: "100%", padding: "14px", borderRadius: 13,
+          background: loading ? "rgba(255,94,26,0.5)" : "var(--accent)",
+          color: "#fff", border: "none", cursor: loading ? "not-allowed" : "pointer",
+          fontSize: 15, fontWeight: 800,
+          boxShadow: loading ? "none" : "0 0 24px rgba(255,94,26,0.30)",
+        }}
+      >
+        {loading ? "Submitting…" : "🚀 Submit My Shop"}
+      </button>
+
+      <button
+        onClick={() => onSubmit(true)}
+        disabled={loading}
+        style={{ background: "none", border: "none", color: "var(--t3)", fontSize: 13, cursor: "pointer", padding: 0 }}
+      >
+        Skip offer for now
+      </button>
     </div>
   );
 }

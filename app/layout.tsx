@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { I18nProvider } from "@/lib/i18n/context";
 
 /* ── PWA / SEO metadata ─────────────────────────────────────────── */
 export const metadata: Metadata = {
@@ -69,7 +70,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="theme-color" content="#05070C" media="(prefers-color-scheme: dark)"  />
         <meta name="theme-color" content="#FF5E1A" media="(prefers-color-scheme: light)" />
       </head>
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        <I18nProvider>{children}</I18nProvider>
+      </body>
     </html>
   );
 }
