@@ -148,8 +148,22 @@ export default function ShopCard({ shop, index, side }: Props) {
   // Glow border when open + has a big deal — signals activity without animation cost
   const isHot         = shop.is_open && offer?.tier === 1;
 
+  // ── V2 deal heat signals (derived from offer engagement data) ────
+  const offerViews   = offer?.view_count  ?? 0;
+  const offerClicks  = offer?.click_count ?? 0;
+  const offerCTR     = offerViews > 0 ? offerClicks / offerViews : 0;
+  // Trending: significant views + strong CTR
+  const isTrendingDeal  = !isProperty && offerViews >= 15 && offerCTR >= 0.25;
+  // Selling fast: high absolute click count
+  const isSellingFast   = !isProperty && offerClicks >= 20;
+  // Many people viewing right now proxy: high recent views
+  const activeViewers   = !isProperty && offerViews >= 50
+    ? `${offerViews} views`
+    : null;
+
   const status = getStatus(shop);
-  const hasTags = isNew || isTrending || isRecommended || isHiddenGem || endingSoon;
+  const hasTags = isNew || isTrending || isRecommended || isHiddenGem || endingSoon
+    || isTrendingDeal || isSellingFast || !!activeViewers;
 
   return (
     <motion.div
@@ -160,7 +174,7 @@ export default function ShopCard({ shop, index, side }: Props) {
       whileHover={{ y: -2, scale: 1.01 }}
       whileTap={{ scale: 0.96 }}
       onClick={() => {
-        if (shop.top_offer) trackDealClick(shop.top_offer.id);
+        if (shop.top_offer) trackDealClick(shop.top_offer.id, slug);
         router.push(`/shop/${shop.slug}`);
       }}
       className="relative overflow-hidden cursor-pointer group"
@@ -417,7 +431,34 @@ export default function ShopCard({ shop, index, side }: Props) {
                     ⚡ Ends soon
                   </span>
                 )}
-                {hasViewers && (
+                {isTrendingDeal && (
+                  <span style={{
+                    fontSize: "9px", fontWeight: 700,
+                    color: "#FF5E1A",
+                    background: "rgba(255,94,26,0.08)",
+                    border: "1px solid rgba(255,94,26,0.20)",
+                    padding: "1.5px 6px", borderRadius: 100,
+                  }}>
+                    🔥 Trending
+                  </span>
+                )}
+                {isSellingFast && !isTrendingDeal && (
+                  <span style={{
+                    fontSize: "9px", fontWeight: 700,
+                    color: "#E8A800",
+                    background: "rgba(232,168,0,0.08)",
+                    border: "1px solid rgba(232,168,0,0.20)",
+                    padding: "1.5px 6px", borderRadius: 100,
+                  }}>
+                    ⚡ Selling fast
+                  </span>
+                )}
+                {activeViewers && (
+                  <span style={{ fontSize: "9px", color: "rgba(255,255,255,0.28)" }}>
+                    👀 {activeViewers}
+                  </span>
+                )}
+                {!activeViewers && hasViewers && (
                   <span style={{ fontSize: "9px", color: "rgba(255,255,255,0.22)" }}>
                     👀 {shop.view_count}
                   </span>

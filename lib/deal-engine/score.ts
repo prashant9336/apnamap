@@ -67,3 +67,45 @@ export function scoreOffer(
 
   return Math.round(score * 10) / 10;
 }
+
+/**
+ * scoreOfferV2 — extends scoreOffer with three V2 layers:
+ *
+ * 8. User interest    0–15   Category the user has clicked before gets a bonus.
+ *                            Injected as a function to keep this module pure.
+ * 9. Auto-boost       0–5    High-CTR deals (>25 % with 10+ views) get amplified.
+ * 10. Auto-fade      –10     Stale deals (>48 h) with cold CTR (<5 % with 20+ views)
+ *                            are de-ranked to clear space for fresh inventory.
+ *
+ * final_score = scoreOffer(v1) + user_interest + auto_boost − auto_fade
+ */
+export function scoreOfferV2(
+  offer: Offer,
+  distanceKm: number,
+  now: number,
+  categorySlug: string,
+  getCategoryInterest: (slug: string) => number
+): number {
+  let score = scoreOffer(offer, distanceKm, now);
+
+  /* 8. User interest bonus (0–15) */
+  score += getCategoryInterest(categorySlug);
+
+  /* 9. Auto-boost: high engagement deals surface faster */
+  if (offer.view_count > 10) {
+    const ctr = offer.click_count / offer.view_count;
+    if (ctr > 0.25) score += 5;
+  }
+
+  /* 10. Auto-fade: deprioritise stale cold deals to create room for new ones */
+  const ageHours = (now - new Date(offer.created_at).getTime()) / 3_600_000;
+  if (
+    ageHours > 48 &&
+    offer.view_count > 20 &&
+    offer.click_count / offer.view_count < 0.05
+  ) {
+    score -= 10;
+  }
+
+  return Math.max(0, Math.round(score * 10) / 10);
+}

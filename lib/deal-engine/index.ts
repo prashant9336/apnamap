@@ -1,13 +1,20 @@
 import type { WalkLocality, WalkShop } from "@/types";
-import { scoreOffer }              from "./score";
-import { classifyDealEngineType }  from "./classify";
-import { rotatedOffers }           from "./rotate";
+import { scoreOffer, scoreOfferV2 }  from "./score";
+import { classifyDealEngineType }    from "./classify";
+import { rotatedOffers }             from "./rotate";
+import { getCategoryInterest }       from "./user-interests";
 
 export type { DealEngineType, ScoredOffer } from "./types";
-export { classifyDealEngineType }           from "./classify";
-export { scoreOffer }                       from "./score";
-export { trackDealView, trackDealClick }    from "./track";
-export { markDealSeen }                     from "./rotate";
+export { classifyDealEngineType }            from "./classify";
+export { scoreOffer, scoreOfferV2 }          from "./score";
+export { trackDealView, trackDealClick }     from "./track";
+export { markDealSeen }                      from "./rotate";
+export {
+  recordCategoryInteraction,
+  getCategoryInterest,
+  getAllInterests,
+  clearInterests,
+}                                            from "./user-interests";
 
 /* ── Haversine distance (km) ─────────────────────────────────────── */
 function haversineKm(
@@ -52,8 +59,9 @@ export function rankLocalities(
           ? haversineKm(userLat, userLng, shop.lat, shop.lng)
           : (shop.distance_m ?? 500) / 1000;
 
+      const categorySlug = shop.category?.slug ?? "";
       const dealScore = shop.top_offer
-        ? scoreOffer(shop.top_offer, distKm, now)
+        ? scoreOfferV2(shop.top_offer, distKm, now, categorySlug, getCategoryInterest)
         : 0;
 
       return { ...shop, dealScore };
@@ -92,11 +100,12 @@ export function topOffersAcrossLocalities(
     loc.shops
       .filter(s => s.top_offer)
       .map(shop => {
-        const distKm = haversineKm(userLat, userLng, shop.lat, shop.lng);
-        const offer  = shop.top_offer!;
+        const distKm      = haversineKm(userLat, userLng, shop.lat, shop.lng);
+        const offer       = shop.top_offer!;
+        const categorySlug = shop.category?.slug ?? "";
         return {
           offer,
-          score:    scoreOffer(offer, distKm, now),
+          score:    scoreOfferV2(offer, distKm, now, categorySlug, getCategoryInterest),
           dealType: classifyDealEngineType(offer, now),
         };
       })

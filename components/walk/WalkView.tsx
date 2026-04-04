@@ -2,10 +2,12 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import YouAreHere         from "./YouAreHere";
-import WalkProgress       from "./WalkProgress";
-import LocalitySection    from "./LocalitySection";
-import LocalityTransition from "./LocalityTransition";
+import YouAreHere            from "./YouAreHere";
+import WalkProgress          from "./WalkProgress";
+import LocalitySection       from "./LocalitySection";
+import LocalityTransition    from "./LocalityTransition";
+import LocalityLeaderboard   from "./LocalityLeaderboard";
+import StreakBadge            from "./StreakBadge";
 import { rankLocalities, topOffersAcrossLocalities } from "@/lib/deal-engine";
 import type { ScoredOffer } from "@/lib/deal-engine";
 import type { WalkLocality, Offer } from "@/types";
@@ -221,6 +223,10 @@ export default function WalkView({ localities, loading, userLat, userLng, userLo
         {/* Localities — ranked by deal score */}
         {rankedLocalities.map((loc, i) => (
           <div key={loc.id} data-loc={loc.name} data-loc-idx={i}>
+            {/* Top-3 deal leaderboard — collapsed by default, expands on tap */}
+            <LocalityLeaderboard locality={loc} />
+            {/* Streak badge — fires /api/streak on mount, idempotent per day */}
+            <StreakBadge localityId={loc.id} localityName={loc.name} />
             <LocalitySection locality={loc} index={i} />
             {i < rankedLocalities.length - 1 && (
               <>
