@@ -21,18 +21,19 @@ function getTimeLeft(endsAt: string): string | null {
 
 /* ── Category tints ──────────────────────────────────────────────── */
 const CAT_SKIN: Record<string, string> = {
-  "sweet-shop":    "rgba(255,140,0,0.10)",
-  "restaurant":    "rgba(255,140,0,0.09)",
-  "street-food":   "rgba(255,107,53,0.10)",
-  "grocery":       "rgba(34,197,94,0.07)",
-  "fashion":       "rgba(236,72,153,0.10)",
-  "electronics":   "rgba(56,189,248,0.08)",
-  "salon":         "rgba(167,139,250,0.09)",
-  "mobile-repair": "rgba(56,189,248,0.08)",
-  "jewellery":     "rgba(232,168,0,0.09)",
-  "pharmacy":      "rgba(34,197,94,0.07)",
-  "coaching":      "rgba(99,179,237,0.08)",
-  "gym":           "rgba(52,211,153,0.07)",
+  "sweet-shop":           "rgba(255,140,0,0.10)",
+  "restaurant":           "rgba(255,140,0,0.09)",
+  "street-food":          "rgba(255,107,53,0.10)",
+  "grocery":              "rgba(34,197,94,0.07)",
+  "fashion":              "rgba(236,72,153,0.10)",
+  "electronics":          "rgba(56,189,248,0.08)",
+  "salon":                "rgba(167,139,250,0.09)",
+  "mobile-repair":        "rgba(56,189,248,0.08)",
+  "jewellery":            "rgba(232,168,0,0.09)",
+  "pharmacy":             "rgba(34,197,94,0.07)",
+  "coaching":             "rgba(99,179,237,0.08)",
+  "gym":                  "rgba(52,211,153,0.07)",
+  "real-estate-property": "rgba(255,111,0,0.09)",
 };
 
 /* ── Category icon box colors ────────────────────────────────────── */
@@ -47,8 +48,9 @@ const CAT_ICON_BG: Record<string, { bg: string; border: string }> = {
   "mobile-repair": { bg: "rgba(56,189,248,0.10)",  border: "rgba(56,189,248,0.18)"  },
   "jewellery":     { bg: "rgba(232,168,0,0.10)",   border: "rgba(232,168,0,0.18)"   },
   "pharmacy":      { bg: "rgba(34,197,94,0.09)",   border: "rgba(34,197,94,0.16)"   },
-  "coaching":      { bg: "rgba(99,179,237,0.10)",  border: "rgba(99,179,237,0.18)"  },
-  "gym":           { bg: "rgba(52,211,153,0.09)",  border: "rgba(52,211,153,0.16)"  },
+  "coaching":             { bg: "rgba(99,179,237,0.10)",  border: "rgba(99,179,237,0.18)"  },
+  "gym":                  { bg: "rgba(52,211,153,0.09)",  border: "rgba(52,211,153,0.16)"  },
+  "real-estate-property": { bg: "rgba(255,111,0,0.10)",   border: "rgba(255,111,0,0.20)"   },
 };
 const CAT_ICON_FB = { bg: "rgba(255,255,255,0.07)", border: "rgba(255,255,255,0.10)" };
 
@@ -123,13 +125,14 @@ export default function ShopCard({ shop, index, side }: Props) {
     return () => clearTimeout(t);
   }, [inView, shop.top_offer?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const slug    = shop.category?.slug ?? "";
-  const skinBg  = CAT_SKIN[slug] ?? "rgba(255,255,255,0.05)";
-  const iconCfg = CAT_ICON_BG[slug] ?? CAT_ICON_FB;
-  const icon    = shop.category?.icon ?? "🏪";
-  const catName = shop.category?.name ?? "Shop";
-  const offer   = shop.top_offer;
-  const dx      = side === "left" ? -16 : 16;
+  const slug       = shop.category?.slug ?? "";
+  const skinBg     = CAT_SKIN[slug] ?? "rgba(255,255,255,0.05)";
+  const iconCfg    = CAT_ICON_BG[slug] ?? CAT_ICON_FB;
+  const icon       = shop.category?.icon ?? "🏪";
+  const catName    = shop.category?.name ?? "Shop";
+  const offer      = shop.top_offer;
+  const dx         = side === "left" ? -16 : 16;
+  const isProperty = slug === "real-estate-property";
 
   // ── derived signals ─────────────────────────────────────────────
   const hasRating     = (shop.avg_rating ?? 0) > 0 && (shop.review_count ?? 0) > 0;
@@ -191,7 +194,7 @@ export default function ShopCard({ shop, index, side }: Props) {
       {/* ── Card body ───────────────────────────────────────────── */}
       <div style={{ position: "relative", zIndex: 1, padding: "10px 10px 9px" }}>
 
-        {/* Row 1: icon + name + subtitle (UNCHANGED — name fix preserved) */}
+        {/* ── Row 1: icon + name (shared by all card types) ─────── */}
         <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
           <div style={{
             width: 34, height: 34, borderRadius: 9, flexShrink: 0,
@@ -199,10 +202,10 @@ export default function ShopCard({ shop, index, side }: Props) {
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: 17,
           }}>
-            {icon}
+            {isProperty ? "🏡" : icon}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            {/* Shop name — DO NOT CHANGE */}
+            {/* Shop name */}
             <div className="font-syne" style={{
               fontSize: "12.5px", fontWeight: 700, color: "#EDEEF5",
               lineHeight: 1.3,
@@ -211,7 +214,7 @@ export default function ShopCard({ shop, index, side }: Props) {
             }}>
               {shop.name}
             </div>
-            {/* Subtitle: category · smart status badge */}
+            {/* Subtitle: category · status (skip status for property) */}
             <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 3, minWidth: 0 }}>
               <span style={{
                 fontSize: "10px", color: "rgba(255,255,255,0.20)",
@@ -220,100 +223,208 @@ export default function ShopCard({ shop, index, side }: Props) {
               }}>
                 {catName}
               </span>
-              {/* 3-state status badge */}
-              <span style={{
-                flexShrink: 0, whiteSpace: "nowrap",
-                fontSize: "7.5px", fontWeight: 700,
-                padding: "1.5px 5px", borderRadius: 100,
-                color:   status.color,
-                background: status.bg,
-                border:  status.border,
-              }}>
-                {status.label}
-              </span>
+              {!isProperty && (
+                <span style={{
+                  flexShrink: 0, whiteSpace: "nowrap",
+                  fontSize: "7.5px", fontWeight: 700,
+                  padding: "1.5px 5px", borderRadius: 100,
+                  color:      status.color,
+                  background: status.bg,
+                  border:     status.border,
+                }}>
+                  {status.label}
+                </span>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Row 2: rating (only if real) + distance (only if valid) */}
-        {(hasRating || validDist) && (
-          <div style={{
-            display: "flex", alignItems: "center",
-            gap: 6, marginBottom: 6, fontSize: "11px",
-          }}>
-            {hasRating && (
-              <>
-                <span style={{ color: "#E8A800", fontWeight: 700 }}>
-                  ★ {shop.avg_rating.toFixed(1)}
+        {/* ══════════════════════════════════════════════════════
+            PROPERTY VARIANT — price · location · tags · CTAs
+            ════════════════════════════════════════════════════ */}
+        {isProperty ? (
+          <>
+            {/* Price label */}
+            {shop.price_label && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 5,
+                padding: "4px 8px", borderRadius: 7, marginBottom: 5,
+                background: "rgba(255,111,0,0.09)",
+                border: "1px solid rgba(255,111,0,0.22)",
+              }}>
+                <span style={{ fontSize: "10px", fontWeight: 700, color: "#FF9A3C" }}>
+                  💰 {shop.price_label}
                 </span>
-                <span style={{ fontSize: "9.5px", color: "rgba(255,255,255,0.22)" }}>
-                  ({shop.review_count})
-                </span>
-                {validDist && (
-                  <span style={{ color: "rgba(255,255,255,0.10)" }}>·</span>
-                )}
-              </>
+              </div>
             )}
+
+            {/* Location / description snippet */}
+            {(shop.address || shop.description) && (
+              <div style={{
+                fontSize: "10.5px", color: "rgba(255,255,255,0.38)",
+                marginBottom: 6, lineHeight: 1.4,
+                display: "-webkit-box", WebkitLineClamp: 2,
+                WebkitBoxOrient: "vertical", overflow: "hidden",
+              }}>
+                📍 {shop.address || shop.description}
+              </div>
+            )}
+
+            {/* Property tags from shop.tags */}
+            {shop.tags && shop.tags.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 7 }}>
+                {shop.tags.slice(0, 3).map(tag => {
+                  const isHotProp   = tag.toLowerCase().includes("hot");
+                  const isLimited   = tag.toLowerCase().includes("limited");
+                  const isFast      = tag.toLowerCase().includes("fast") || tag.toLowerCase().includes("selling");
+                  const tagColor    = isHotProp ? "#FF5E1A" : isLimited ? "#E8A800" : isFast ? "#1FBB5A" : "rgba(255,255,255,0.35)";
+                  const tagBg       = isHotProp ? "rgba(255,94,26,0.08)" : isLimited ? "rgba(232,168,0,0.08)" : isFast ? "rgba(31,187,90,0.07)" : "rgba(255,255,255,0.04)";
+                  const tagBorder   = isHotProp ? "rgba(255,94,26,0.22)" : isLimited ? "rgba(232,168,0,0.20)" : isFast ? "rgba(31,187,90,0.16)" : "rgba(255,255,255,0.08)";
+                  return (
+                    <span key={tag} style={{
+                      fontSize: "8.5px", fontWeight: 700,
+                      padding: "2px 6px", borderRadius: 100,
+                      color: tagColor, background: tagBg,
+                      border: `1px solid ${tagBorder}`,
+                    }}>
+                      {isHotProp ? "🔥" : isLimited ? "⚡" : isFast ? "📈" : "🏷"} {tag}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Distance */}
             {validDist && (
-              <span style={{ color: "#1FBB5A", fontWeight: 600 }}>
+              <div style={{ fontSize: "10px", color: "#1FBB5A", fontWeight: 600, marginBottom: 7 }}>
                 📍 {formatDistance(shop.distance_m)}
-              </span>
+              </div>
             )}
-          </div>
-        )}
 
-        {/* Row 3: compact offer chip */}
-        {offer && <OfferChip offer={offer} />}
+            {/* Inline CTA buttons — stop propagation so card nav doesn't fire */}
+            {(shop.phone || shop.whatsapp) && (
+              <div style={{ display: "flex", gap: 6 }} onClick={e => e.stopPropagation()}>
+                {shop.phone && (
+                  <a
+                    href={`tel:${shop.phone}`}
+                    style={{
+                      flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
+                      gap: 5, padding: "7px 0", borderRadius: 9,
+                      background: "rgba(31,187,90,0.10)",
+                      border: "1px solid rgba(31,187,90,0.24)",
+                      color: "#1FBB5A", fontSize: "11px", fontWeight: 700,
+                      textDecoration: "none",
+                    }}
+                  >
+                    📞 Call
+                  </a>
+                )}
+                {(shop.whatsapp || shop.phone) && (
+                  <a
+                    href={`https://wa.me/91${(shop.whatsapp || shop.phone)?.replace(/\D/g, "").slice(-10)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
+                      gap: 5, padding: "7px 0", borderRadius: 9,
+                      background: "rgba(37,211,102,0.08)",
+                      border: "1px solid rgba(37,211,102,0.22)",
+                      color: "#25D366", fontSize: "11px", fontWeight: 700,
+                      textDecoration: "none",
+                    }}
+                  >
+                    💬 WhatsApp
+                  </a>
+                )}
+              </div>
+            )}
+          </>
+        ) : (
+          /* ═══════════════════════════════════════════════════
+             STANDARD SHOP VARIANT — rating · offer · signals
+             ═════════════════════════════════════════════════ */
+          <>
+            {/* Row 2: rating + distance */}
+            {(hasRating || validDist) && (
+              <div style={{
+                display: "flex", alignItems: "center",
+                gap: 6, marginBottom: 6, fontSize: "11px",
+              }}>
+                {hasRating && (
+                  <>
+                    <span style={{ color: "#E8A800", fontWeight: 700 }}>
+                      ★ {shop.avg_rating.toFixed(1)}
+                    </span>
+                    <span style={{ fontSize: "9.5px", color: "rgba(255,255,255,0.22)" }}>
+                      ({shop.review_count})
+                    </span>
+                    {validDist && (
+                      <span style={{ color: "rgba(255,255,255,0.10)" }}>·</span>
+                    )}
+                  </>
+                )}
+                {validDist && (
+                  <span style={{ color: "#1FBB5A", fontWeight: 600 }}>
+                    📍 {formatDistance(shop.distance_m)}
+                  </span>
+                )}
+              </div>
+            )}
 
-        {/* Row 4: trust signals + live viewers */}
-        {(hasTags || hasViewers) && (
-          <div style={{
-            display: "flex", alignItems: "center",
-            gap: 5, flexWrap: "wrap", marginTop: 2,
-          }}>
-            {isNew && !isTrending && !isRecommended && !isHiddenGem && (
-              <span style={{
-                fontSize: "9px", fontWeight: 700,
-                color: "rgba(31,187,90,0.85)",
-                background: "rgba(31,187,90,0.07)",
-                border: "1px solid rgba(31,187,90,0.16)",
-                padding: "1.5px 6px", borderRadius: 100,
+            {/* Row 3: offer chip */}
+            {offer && <OfferChip offer={offer} />}
+
+            {/* Row 4: trust signals + viewers */}
+            {(hasTags || hasViewers) && (
+              <div style={{
+                display: "flex", alignItems: "center",
+                gap: 5, flexWrap: "wrap", marginTop: 2,
               }}>
-                🆕 New
-              </span>
+                {isNew && !isTrending && !isRecommended && !isHiddenGem && (
+                  <span style={{
+                    fontSize: "9px", fontWeight: 700,
+                    color: "rgba(31,187,90,0.85)",
+                    background: "rgba(31,187,90,0.07)",
+                    border: "1px solid rgba(31,187,90,0.16)",
+                    padding: "1.5px 6px", borderRadius: 100,
+                  }}>
+                    🆕 New
+                  </span>
+                )}
+                {isTrending && (
+                  <span style={{ fontSize: "9px", fontWeight: 700, color: "#FF5E1A" }}>
+                    🔥 Hot
+                  </span>
+                )}
+                {isHiddenGem && (
+                  <span style={{
+                    fontSize: "9px", fontWeight: 700,
+                    color: "rgba(167,139,250,0.9)",
+                    background: "rgba(167,139,250,0.07)",
+                    border: "1px solid rgba(167,139,250,0.18)",
+                    padding: "1.5px 6px", borderRadius: 100,
+                  }}>
+                    💎 Hidden gem
+                  </span>
+                )}
+                {isRecommended && !isHiddenGem && (
+                  <span style={{ fontSize: "9px", fontWeight: 700, color: "#E8A800" }}>
+                    ⭐ Recommended
+                  </span>
+                )}
+                {endingSoon && (
+                  <span style={{ fontSize: "9px", fontWeight: 700, color: "#E8A800" }}>
+                    ⚡ Ends soon
+                  </span>
+                )}
+                {hasViewers && (
+                  <span style={{ fontSize: "9px", color: "rgba(255,255,255,0.22)" }}>
+                    👀 {shop.view_count}
+                  </span>
+                )}
+              </div>
             )}
-            {isTrending && (
-              <span style={{ fontSize: "9px", fontWeight: 700, color: "#FF5E1A" }}>
-                🔥 Hot
-              </span>
-            )}
-            {isHiddenGem && (
-              <span style={{
-                fontSize: "9px", fontWeight: 700,
-                color: "rgba(167,139,250,0.9)",
-                background: "rgba(167,139,250,0.07)",
-                border: "1px solid rgba(167,139,250,0.18)",
-                padding: "1.5px 6px", borderRadius: 100,
-              }}>
-                💎 Hidden gem
-              </span>
-            )}
-            {isRecommended && !isHiddenGem && (
-              <span style={{ fontSize: "9px", fontWeight: 700, color: "#E8A800" }}>
-                ⭐ Recommended
-              </span>
-            )}
-            {endingSoon && (
-              <span style={{ fontSize: "9px", fontWeight: 700, color: "#E8A800" }}>
-                ⚡ Ends soon
-              </span>
-            )}
-            {hasViewers && (
-              <span style={{ fontSize: "9px", color: "rgba(255,255,255,0.22)" }}>
-                👀 {shop.view_count}
-              </span>
-            )}
-          </div>
+          </>
         )}
       </div>
     </motion.div>

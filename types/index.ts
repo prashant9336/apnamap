@@ -63,6 +63,7 @@ export interface Shop {
   tags: string[];
   ai_category_confidence: number | null;
   business_input_text: string | null;
+  price_label: string | null;
   name: string;
   slug: string;
   description: string | null;

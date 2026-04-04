@@ -66,7 +66,13 @@ export function rankLocalities(
       return 0;
     });
 
-    return { ...loc, shops: rankedShops };
+    // Visibility rule: real estate max 2 per locality, always shown last.
+    // Prevents property listings from crowding out active shop deals.
+    const RE_SLUG = "real-estate-property";
+    const reShops   = rankedShops.filter(s => s.category?.slug === RE_SLUG).slice(0, 2);
+    const restShops = rankedShops.filter(s => s.category?.slug !== RE_SLUG);
+
+    return { ...loc, shops: [...restShops, ...reShops] };
   });
 }
 
