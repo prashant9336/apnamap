@@ -264,6 +264,7 @@ export default function VendorPostPanel({ shopId, shopName }: Props) {
             <motion.button
               key={String(btn.key)}
               type="button"
+              data-action={String(btn.key)}
               whileTap={{ scale: 0.91 }}
               onClick={() => setModal(modal === btn.key ? null : btn.key)}
               style={{
