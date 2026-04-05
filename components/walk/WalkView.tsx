@@ -10,6 +10,7 @@ import LocalityLeaderboard   from "./LocalityLeaderboard";
 import StreakBadge            from "./StreakBadge";
 import LangToggle             from "@/components/ui/LangToggle";
 import { useI18n }            from "@/lib/i18n/context";
+import { writeSyncLocation }  from "@/lib/mapSync";
 import { rankLocalities, topOffersAcrossLocalities } from "@/lib/deal-engine";
 import type { ScoredOffer } from "@/lib/deal-engine";
 import type { WalkLocality, Offer } from "@/types";
@@ -25,6 +26,7 @@ interface Props {
 
 export default function WalkView({ localities, loading, userLat, userLng, userLocality, gpsError }: Props) {
   const { t }        = useI18n();
+  const router       = useRouter();
   const scrollRef    = useRef<HTMLDivElement>(null);
   const [activeIdx,  setAI]       = useState(0);
   const [scrollProgress, setSP]   = useState(0);   // 0-1 continuous scroll fraction
@@ -135,7 +137,14 @@ export default function WalkView({ localities, loading, userLat, userLng, userLo
         setCL(d.dataset.loc ?? "");
       }
     });
-    if (vis !== activeIdx) setAI(vis);
+    if (vis !== activeIdx) {
+      setAI(vis);
+      /* Sync active locality to Map page via localStorage */
+      const loc = rankedLocalities[vis];
+      if (loc) {
+        writeSyncLocation({ locality: loc.name, lat: loc.lat, lng: loc.lng, source: "walk" });
+      }
+    }
 
     /* Parallax */
     const delta = sy - lasy.current; lasy.current = sy;
@@ -247,6 +256,25 @@ export default function WalkView({ localities, loading, userLat, userLng, userLo
             </motion.span>
             <span>{crowd} {t("exploring")}</span>
           </div>
+
+          {/* Map shortcut — taps write current locality then navigate */}
+          <motion.button
+            whileTap={{ scale: 0.92 }}
+            onClick={() => {
+              const loc = rankedLocalities[activeIdx];
+              if (loc) writeSyncLocation({ locality: loc.name, lat: loc.lat, lng: loc.lng, source: "walk" });
+              router.push("/map");
+            }}
+            style={{
+              flexShrink: 0, padding: "5px 9px", borderRadius: 100,
+              background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)",
+              color: "rgba(255,255,255,0.55)", fontSize: "16px", cursor: "pointer",
+              lineHeight: 1, display: "flex", alignItems: "center",
+            }}
+            title="View on Map"
+          >
+            🗺
+          </motion.button>
 
           {/* Lang toggle */}
           <LangToggle />

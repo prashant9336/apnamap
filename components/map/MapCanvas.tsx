@@ -35,10 +35,15 @@ export interface MapShop {
 }
 
 interface Props {
-  userLat:       number | null;
-  userLng:       number | null;
-  onShopClick:   (shop: MapShop) => void;
-  onShopsLoaded: (shops: MapShop[]) => void;
+  userLat:          number | null;
+  userLng:          number | null;
+  /** Initial center from Walk→Map sync (overrides GPS on first load) */
+  syncLat?:         number | null;
+  syncLng?:         number | null;
+  onShopClick:      (shop: MapShop) => void;
+  onShopsLoaded:    (shops: MapShop[]) => void;
+  /** Fires when the map center settles on a new locality's cluster */
+  onLocalityChange?: (locality: string) => void;
 }
 
 /* ── Map style ───────────────────────────────────────────────────── */
@@ -92,7 +97,7 @@ function debounce<T extends (...args: any[]) => void>(fn: T, ms: number): T {
 }
 
 /* ── MapCanvas ───────────────────────────────────────────────────── */
-export default function MapCanvas({ userLat, userLng, onShopClick, onShopsLoaded }: Props) {
+export default function MapCanvas({ userLat, userLng, syncLat, syncLng, onShopClick, onShopsLoaded, onLocalityChange }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef       = useRef<MLMap | null>(null);
   const userMarker   = useRef<maplibregl.Marker | null>(null);
@@ -142,12 +147,26 @@ export default function MapCanvas({ userLat, userLng, onShopClick, onShopsLoaded
       }
 
       onShopsLoaded(shops);
+
+      /* Tell the parent which locality is now in focus (closest to center) */
+      if (onLocalityChange && shops.length > 0) {
+        const center = map.getCenter();
+        let closest = shops[0];
+        let minDist = Infinity;
+        for (const s of shops) {
+          if (s.locality?.name && s.lat != null && s.lng != null) {
+            const d = Math.hypot(s.lat - center.lat, s.lng - center.lng);
+            if (d < minDist) { minDist = d; closest = s; }
+          }
+        }
+        if (closest.locality?.name) onLocalityChange(closest.locality.name);
+      }
     } catch {
       /* silent — map keeps showing last good data */
     } finally {
       loadingRef.current = false;
     }
-  }, [onShopsLoaded]);
+  }, [onShopsLoaded, onLocalityChange]);
 
   const debouncedFetch = useCallback(
     debounce((map: MLMap) => fetchShopsForBounds(map), 400),
@@ -158,10 +177,14 @@ export default function MapCanvas({ userLat, userLng, onShopClick, onShopsLoaded
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
+    /* Prefer Walk-sync coords → then GPS → then default (Prayagraj) */
+    const initLng = syncLng ?? userLng ?? 81.8463;
+    const initLat = syncLat ?? userLat ?? 25.4358;
+
     const map = new maplibregl.Map({
       container:   containerRef.current,
       style:       buildStyle(),
-      center:      [userLng ?? 81.8463, userLat ?? 25.4358],
+      center:      [initLng, initLat],
       zoom:        14,
       minZoom:     10,
       maxZoom:     19,

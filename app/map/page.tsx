@@ -8,12 +8,13 @@
  *   onShopsLoaded → updates shopCount chip
  */
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import AppShell from "@/components/layout/AppShell";
 import { useGeo } from "@/hooks/useGeo";
 import { formatDistance } from "@/lib/geo/distance";
+import { readSyncLocation, writeSyncLocation } from "@/lib/mapSync";
 import type { MapShop } from "@/components/map/MapCanvas";
 
 /* Load MapCanvas only on the client — maplibre-gl uses browser APIs */
@@ -158,13 +159,30 @@ function ShopStrip({ shops, onTap }: { shops: MapShop[]; onTap: (s: MapShop) => 
 
 /* ── Page ────────────────────────────────────────────────────────── */
 export default function MapPage() {
-  const { geo, detect }    = useGeo();
-  const [selected, setSelected]   = useState<MapShop | null>(null);
-  const [shops,    setShops]      = useState<MapShop[]>([]);
+  const { geo, detect }  = useGeo();
+  const router           = useRouter();
+  const [selected,  setSelected]  = useState<MapShop | null>(null);
+  const [shops,     setShops]     = useState<MapShop[]>([]);
+  const [focusedLocality, setFocusedLocality] = useState<string>("");
 
-  /* Memoised so MapCanvas doesn't re-mount on parent re-renders */
-  const handleShopClick   = useCallback((s: MapShop) => setSelected(s), []);
-  const handleShopsLoaded = useCallback((s: MapShop[]) => setShops(s),  []);
+  /* Read Walk→Map sync payload once on mount */
+  const [syncCoords] = useState<{ lat: number | null; lng: number | null }>(() => {
+    if (typeof window === "undefined") return { lat: null, lng: null };
+    const p = readSyncLocation();
+    if (p?.source === "walk") return { lat: p.lat, lng: p.lng };
+    return { lat: null, lng: null };
+  });
+
+  /* When a shop is selected, write its locality back for Map→Walk sync */
+  const handleShopClick = useCallback((s: MapShop) => {
+    setSelected(s);
+    if (s.locality?.name && s.lat != null && s.lng != null) {
+      writeSyncLocation({ locality: s.locality.name, lat: s.lat, lng: s.lng, source: "map" });
+    }
+  }, []);
+
+  const handleShopsLoaded    = useCallback((s: MapShop[]) => setShops(s), []);
+  const handleLocalityChange = useCallback((l: string) => setFocusedLocality(l), []);
 
   const userLat = useMemo(() => geo.lat ?? null, [geo.lat]);
   const userLng = useMemo(() => geo.lng ?? null, [geo.lng]);
@@ -188,37 +206,47 @@ export default function MapPage() {
         <div
           style={{
             flexShrink: 0, display: "flex", alignItems: "center",
-            justifyContent: "space-between", padding: "12px 16px",
+            gap: 10, padding: "10px 14px",
             background: "rgba(5,7,12,0.96)", backdropFilter: "blur(20px)",
             borderBottom: "1px solid rgba(255,255,255,0.06)", zIndex: 50,
           }}
         >
-          <div>
-            <p className="font-syne" style={{ fontWeight: 800, fontSize: 15, color: "#EDEEF5" }}>
-              🗺 Map View
-            </p>
-            <p style={{ fontSize: 10, color: "rgba(255,255,255,0.30)", marginTop: 1 }}>
+          {/* ← Walk button */}
+          <button
+            onClick={() => router.push("/explore")}
+            style={{
+              flexShrink: 0, padding: "6px 10px", borderRadius: 100,
+              background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)",
+              color: "rgba(255,255,255,0.55)", fontSize: 12, fontWeight: 600, cursor: "pointer",
+              fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 4,
+            }}
+          >
+            ← Walk
+          </button>
+
+          {/* Locality pill — updates as map moves */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="font-syne" style={{ fontWeight: 800, fontSize: 14, color: "#EDEEF5", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {focusedLocality || "🗺 Map View"}
+            </div>
+            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.28)", marginTop: 1 }}>
               {shops.length > 0 ? `${shops.length} shops in view` : "Move map to load shops"}
-            </p>
+            </div>
           </div>
 
+          {/* GPS button */}
           <button
             onClick={detect}
             style={{
-              display: "flex", alignItems: "center", gap: 6,
-              padding: "7px 12px", borderRadius: 100,
+              flexShrink: 0, display: "flex", alignItems: "center", gap: 5,
+              padding: "6px 11px", borderRadius: 100,
               background: "rgba(31,187,90,0.09)", border: "1px solid rgba(31,187,90,0.25)",
               color: "#1FBB5A", fontSize: 11, fontWeight: 600, cursor: "pointer",
               fontFamily: "'DM Sans', sans-serif",
             }}
           >
-            <span
-              style={{
-                width: 6, height: 6, borderRadius: "50%", background: "#1FBB5A",
-                boxShadow: "0 0 5px #1FBB5A",
-              }}
-            />
-            {geo.loading ? "Detecting…" : (geo.locality ?? "My Location")}
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#1FBB5A", boxShadow: "0 0 4px #1FBB5A", flexShrink: 0 }} />
+            {geo.loading ? "…" : "GPS"}
           </button>
         </div>
 
