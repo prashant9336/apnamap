@@ -39,14 +39,9 @@ INSERT INTO categories (id, name, slug, icon, color) VALUES
 ON CONFLICT (slug) DO NOTHING;
 
 -- ─── DEMO VENDOR USER ─────────────────────────────────────────
--- NOTE: Actual vendors are created through auth.
--- For testing, create a user in Supabase Auth UI, then:
--- UPDATE profiles SET role = 'vendor' WHERE id = 'your-user-id';
--- INSERT INTO vendors (id) VALUES ('your-user-id');
--- Then use that vendor_id in the shops below.
-
--- Using placeholder vendor_id — replace with real UUID after creating test account
--- We'll use a demo UUID for seed data structure purposes
+-- Creates the full auth.users → profiles → vendors chain needed
+-- for shops FK. Safe to re-run (ON CONFLICT DO NOTHING everywhere).
+-- Password hash below is bcrypt for literal string "password".
 DO $$
 DECLARE
   demo_vendor_id UUID := '99000000-0000-0000-0000-000000000001';
@@ -55,6 +50,34 @@ DECLARE
   katra_id UUID := '10000000-0000-0000-0000-000000000003';
   rambagh_id UUID := '10000000-0000-0000-0000-000000000004';
 BEGIN
+
+-- 1. Supabase auth user (required root of FK chain)
+INSERT INTO auth.users (
+  id, instance_id, aud, role, email,
+  encrypted_password, email_confirmed_at,
+  created_at, updated_at,
+  raw_app_meta_data, raw_user_meta_data, is_super_admin
+) VALUES (
+  demo_vendor_id,
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated', 'authenticated',
+  'demo-vendor@apnamap.test',
+  '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
+  NOW(), NOW(), NOW(),
+  '{"provider":"email","providers":["email"]}',
+  '{"role":"vendor","name":"Demo Vendor"}',
+  FALSE
+) ON CONFLICT (id) DO NOTHING;
+
+-- 2. Profile row
+INSERT INTO profiles (id, name, phone, role)
+VALUES (demo_vendor_id, 'Demo Vendor', '9400000001', 'vendor')
+ON CONFLICT (id) DO NOTHING;
+
+-- 3. Vendor row
+INSERT INTO vendors (id, business_name, is_verified)
+VALUES (demo_vendor_id, 'ApnaMap Demo Vendor', TRUE)
+ON CONFLICT (id) DO NOTHING;
 
 -- ─── SHOPS ───────────────────────────────────────────────────
 

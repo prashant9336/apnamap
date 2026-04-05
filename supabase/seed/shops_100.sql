@@ -1,6 +1,6 @@
 -- ══════════════════════════════════════════════════════════════════════
 -- ApnaMap — 100 Realistic Prayagraj Shops Seed
--- Run AFTER prayagraj.sql (depends on city, categories, demo vendor)
+-- Run AFTER prayagraj.sql (or standalone — vendor setup is idempotent)
 -- Adds: Jhalwa + Allahpur localities, Cafe category, 100 shops, 65 offers
 -- ══════════════════════════════════════════════════════════════════════
 
@@ -29,6 +29,32 @@ DECLARE
   cafe_id       UUID := '20000000-0000-0000-0000-000000000013';
 
 BEGIN
+
+-- ── Ensure demo vendor exists (idempotent — safe if prayagraj.sql ran first) ──
+INSERT INTO auth.users (
+  id, instance_id, aud, role, email,
+  encrypted_password, email_confirmed_at,
+  created_at, updated_at,
+  raw_app_meta_data, raw_user_meta_data, is_super_admin
+) VALUES (
+  demo_vendor_id,
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated', 'authenticated',
+  'demo-vendor@apnamap.test',
+  '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
+  NOW(), NOW(), NOW(),
+  '{"provider":"email","providers":["email"]}',
+  '{"role":"vendor","name":"Demo Vendor"}',
+  FALSE
+) ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO profiles (id, name, phone, role)
+VALUES (demo_vendor_id, 'Demo Vendor', '9400000001', 'vendor')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO vendors (id, business_name, is_verified)
+VALUES (demo_vendor_id, 'ApnaMap Demo Vendor', TRUE)
+ON CONFLICT (id) DO NOTHING;
 
 -- ── New Localities ─────────────────────────────────────────────────
 INSERT INTO localities (id, city_id, name, slug, description, lat, lng, priority)
