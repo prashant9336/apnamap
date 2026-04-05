@@ -7,17 +7,17 @@ import { useProfile } from "@/hooks/useProfile";
 
 /* ── Tab definitions ─────────────────────────────────────────────── */
 const CUSTOMER_TABS = [
-  { id: "walk",    href: "/explore",  icon: "🚶", label: "Walk"   },
-  { id: "search",  href: "/search",   icon: "🔍", label: "Search" },
-  { id: "offers",  href: "/offers",   icon: "🎯", label: "Offers" },
-  { id: "saved",   href: "/saved",    icon: "❤️",  label: "Saved"  },
-  { id: "profile", href: "/profile",  icon: "👤", label: "Me"     },
+  { id: "walk",    href: "/explore",  icon: "🚶", label: "Walk"    },
+  { id: "explore", href: "/feed",     icon: "✨", label: "Explore" },
+  { id: "offers",  href: "/offers",   icon: "🎯", label: "Offers"  },
+  { id: "saved",   href: "/saved",    icon: "❤️",  label: "Saved"   },
+  { id: "profile", href: "/profile",  icon: "👤", label: "Me"      },
 ];
 
-// Vendors replace "Search" with "My Shop" — they know their area, they need control
+// Vendors get My Shop in place of Offers (they manage, not browse)
 const VENDOR_TABS = [
-  { id: "walk",    href: "/explore",  icon: "🚶", label: "Explore" },
-  { id: "offers",  href: "/offers",   icon: "🎯", label: "Offers"  },
+  { id: "walk",    href: "/explore",  icon: "🚶", label: "Walk"    },
+  { id: "explore", href: "/feed",     icon: "✨", label: "Explore" },
   { id: "myshop",  href: "/my-shop",  icon: "🏪", label: "My Shop" },
   { id: "saved",   href: "/saved",    icon: "❤️",  label: "Saved"   },
   { id: "profile", href: "/profile",  icon: "👤", label: "Me"      },
