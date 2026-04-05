@@ -1,240 +1,252 @@
 "use client";
-/**
- * Map page — thin shell that wraps MapCanvas (dynamic import, SSR disabled)
- * and manages the selected-shop bottom drawer + header UI.
- *
- * MapCanvas owns all MapLibre state and communicates via:
- *   onShopClick   → sets selectedShop
- *   onShopsLoaded → updates shopCount chip
- */
 
-import { useState, useCallback, useMemo } from "react";
-import dynamic from "next/dynamic";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/components/layout/AppShell";
 import { useGeo } from "@/hooks/useGeo";
 import { formatDistance } from "@/lib/geo/distance";
-import type { MapShop } from "@/components/map/MapCanvas";
 
-/* Load MapCanvas only on the client — maplibre-gl uses browser APIs */
-const MapCanvas = dynamic(
-  () => import("@/components/map/MapCanvas"),
-  {
-    ssr: false,
-    loading: () => (
-      <div
-        style={{
-          flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
-          background: "#05070C", color: "rgba(255,255,255,0.25)", fontSize: 13,
-        }}
-      >
-        Loading map…
-      </div>
-    ),
-  },
-);
-
-/* ── Shop bottom drawer ──────────────────────────────────────────── */
-function ShopDrawer({ shop, onClose }: { shop: MapShop; onClose: () => void }) {
-  const router = useRouter();
-  return (
-    <div
-      style={{
-        flexShrink: 0, display: "flex", alignItems: "center", gap: 12,
-        padding: "12px 16px",
-        background: "rgba(10,12,20,0.98)",
-        borderTop: "1px solid rgba(255,255,255,0.09)",
-        zIndex: 60,
-        animation: "slide-up 0.22s cubic-bezier(0.25,0,0,1)",
-      }}
-    >
-      {/* Category icon */}
-      <div
-        style={{
-          width: 44, height: 44, borderRadius: 12, flexShrink: 0,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 20,
-          background: "rgba(255,94,26,0.10)", border: "1px solid rgba(255,94,26,0.22)",
-        }}
-      >
-        {shop.category?.icon ?? "🏪"}
-      </div>
-
-      {/* Info */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div
-          className="font-syne"
-          style={{ fontWeight: 700, fontSize: 13, color: "#EDEEF5", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-        >
-          {shop.name}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2, fontSize: 10, color: "rgba(255,255,255,0.38)" }}>
-          {shop.category?.name && <span>{shop.category.name}</span>}
-          {shop.locality?.name  && <><span>·</span><span>{shop.locality.name}</span></>}
-          {shop.distance_m != null && (
-            <><span>·</span><span style={{ color: "#1FBB5A" }}>📍 {formatDistance(shop.distance_m)}</span></>
-          )}
-        </div>
-        {shop.top_offer && (
-          <div style={{
-            marginTop: 4, fontSize: 10, fontWeight: 600,
-            color: shop.top_offer.tier === 1 ? "#FF5E1A" : shop.top_offer.tier === 2 ? "#E8A800" : "rgba(255,255,255,0.45)",
-          }}>
-            {shop.top_offer.tier === 1 ? "🔥" : shop.top_offer.tier === 2 ? "⚡" : "🎯"} {shop.top_offer.title}
-          </div>
-        )}
-      </div>
-
-      {/* Actions */}
-      <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-        <button
-          onClick={() => router.push(`/shop/${shop.slug}`)}
-          style={{
-            padding: "8px 14px", borderRadius: 10,
-            background: "#FF5E1A", color: "#fff",
-            fontWeight: 700, fontSize: 12, border: "none", cursor: "pointer",
-            fontFamily: "'DM Sans', sans-serif",
-          }}
-        >
-          View →
-        </button>
-        <button
-          onClick={onClose}
-          style={{
-            padding: "8px 10px", borderRadius: 10,
-            background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.5)",
-            fontWeight: 600, fontSize: 12, border: "1px solid rgba(255,255,255,0.08)", cursor: "pointer",
-            fontFamily: "'DM Sans', sans-serif",
-          }}
-        >
-          ✕
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/* ── Shop horizontal strip (no selection) ────────────────────────── */
-function ShopStrip({ shops, onTap }: { shops: MapShop[]; onTap: (s: MapShop) => void }) {
-  if (shops.length === 0) return null;
-  return (
-    <div
-      className="scroll-none"
-      style={{
-        flexShrink: 0, overflowX: "auto",
-        background: "rgba(5,7,12,0.97)",
-        borderTop: "1px solid rgba(255,255,255,0.06)",
-      }}
-    >
-      <div style={{ display: "flex", gap: 8, padding: "10px 12px", width: "max-content" }}>
-        {shops.slice(0, 15).map(shop => (
-          <button
-            key={shop.id}
-            onClick={() => onTap(shop)}
-            style={{
-              display: "flex", alignItems: "center", gap: 8,
-              padding: "8px 12px", borderRadius: 12, flexShrink: 0,
-              background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)",
-              cursor: "pointer", fontFamily: "'DM Sans', sans-serif",
-            }}
-          >
-            <span style={{ fontSize: 16 }}>{shop.category?.icon ?? "🏪"}</span>
-            <div style={{ textAlign: "left" }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: "#EDEEF5", maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {shop.name}
-              </div>
-              {shop.distance_m != null && (
-                <div style={{ fontSize: 9, color: "#1FBB5A", marginTop: 1 }}>
-                  📍 {formatDistance(shop.distance_m)}
-                </div>
-              )}
-            </div>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ── Page ────────────────────────────────────────────────────────── */
 export default function MapPage() {
-  const { geo, detect }    = useGeo();
-  const [selected, setSelected]   = useState<MapShop | null>(null);
-  const [shops,    setShops]      = useState<MapShop[]>([]);
+  const mapRef      = useRef<HTMLDivElement>(null);
+  const leafletRef  = useRef<any>(null);
+  const shopLayerRef = useRef<any>(null);
+  const userLayerRef = useRef<any>(null);
 
-  /* Memoised so MapCanvas doesn't re-mount on parent re-renders */
-  const handleShopClick   = useCallback((s: MapShop) => setSelected(s), []);
-  const handleShopsLoaded = useCallback((s: MapShop[]) => setShops(s),  []);
+  const { geo, detect } = useGeo();
+  const router = useRouter();
+  const [shops,   setShops]   = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<any | null>(null);
 
-  const userLat = useMemo(() => geo.lat ?? null, [geo.lat]);
-  const userLng = useMemo(() => geo.lng ?? null, [geo.lng]);
+  // Init map once
+  useEffect(() => {
+    let mounted = true;
+
+    async function init() {
+      if (!mapRef.current || leafletRef.current) return;
+      const L = await import("leaflet");
+      if (!mounted || !mapRef.current || leafletRef.current) return;
+
+      // Suppress default icon path errors
+      delete (L.Icon.Default.prototype as any)._getIconUrl;
+      L.Icon.Default.mergeOptions({
+        iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+        iconUrl:       "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+        shadowUrl:     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+      });
+
+      const lat = geo.lat ?? 25.4358;
+      const lng = geo.lng ?? 81.8463;
+
+      const map = L.map(mapRef.current, {
+        center: [lat, lng],
+        zoom: 14,
+        zoomControl: true,
+        attributionControl: false,
+      });
+
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        maxZoom: 19,
+        subdomains: "abcd",
+      }).addTo(map);
+
+      L.control.attribution({ prefix: "© OpenStreetMap · CartoDB" }).addTo(map);
+
+      const shopLayer = L.layerGroup().addTo(map);
+      const userLayer = L.layerGroup().addTo(map);
+
+      leafletRef.current   = { map, L };
+      shopLayerRef.current = shopLayer;
+      userLayerRef.current = userLayer;
+
+      setTimeout(() => map.invalidateSize(), 400);
+    }
+
+    init();
+    return () => {
+      mounted = false;
+      if (leafletRef.current?.map) {
+        leafletRef.current.map.remove();
+        leafletRef.current = null;
+      }
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Update user location pin whenever GPS changes
+  useEffect(() => {
+    if (!leafletRef.current || !userLayerRef.current) return;
+    const { map, L } = leafletRef.current;
+    const userLayer  = userLayerRef.current;
+
+    if (!geo.lat || !geo.lng) return;
+
+    userLayer.clearLayers();
+
+    const pulseIcon = L.divIcon({
+      className: "",
+      html: `<div style="
+        width:16px;height:16px;border-radius:50%;
+        background:rgba(56,189,248,0.9);
+        border:2.5px solid #fff;
+        box-shadow:0 0 0 6px rgba(56,189,248,0.25),0 0 18px rgba(56,189,248,0.5);
+      "></div>`,
+      iconSize: [16, 16],
+      iconAnchor: [8, 8],
+    });
+
+    L.marker([geo.lat, geo.lng], { icon: pulseIcon })
+      .addTo(userLayer)
+      .bindPopup("<b>📍 You are here</b>");
+
+    map.setView([geo.lat, geo.lng], 14, { animate: true });
+  }, [geo.lat, geo.lng]);
+
+  // Load shops whenever GPS changes
+  useEffect(() => {
+    if (!leafletRef.current || !shopLayerRef.current) return;
+    const { map, L } = leafletRef.current;
+    const shopLayer  = shopLayerRef.current;
+
+    const lat = geo.lat ?? 25.4358;
+    const lng = geo.lng ?? 81.8463;
+
+    async function loadShops() {
+      setLoading(true);
+      try {
+        const res  = await fetch(`/api/shops?lat=${lat}&lng=${lng}&radius=10000`, { cache: "no-store" });
+        const json = await res.json();
+        const data = Array.isArray(json?.shops) ? json.shops : [];
+        setShops(data);
+
+        shopLayer.clearLayers();
+
+        data.forEach((shop: any) => {
+          if (typeof shop.lat !== "number" || typeof shop.lng !== "number") return;
+
+          const shopIcon = L.divIcon({
+            className: "",
+            html: `<div style="
+              width:30px;height:30px;border-radius:50%;
+              background:rgba(255,94,26,0.92);
+              border:2px solid rgba(255,255,255,0.8);
+              display:flex;align-items:center;justify-content:center;
+              font-size:14px;
+              box-shadow:0 2px 10px rgba(255,94,26,0.5);
+              cursor:pointer;
+            ">${shop.category?.icon ?? "🏪"}</div>`,
+            iconSize: [30, 30],
+            iconAnchor: [15, 15],
+          });
+
+          L.marker([shop.lat, shop.lng], { icon: shopIcon })
+            .addTo(shopLayer)
+            .on("click", () => setSelected(shop));
+        });
+
+        if (data.length > 0) {
+          const bounds = L.latLngBounds(
+            data
+              .filter((s: any) => typeof s.lat === "number")
+              .map((s: any) => [s.lat, s.lng])
+          );
+          if (bounds.isValid()) {
+            setTimeout(() => map.fitBounds(bounds, { padding: [60, 60], maxZoom: 15 }), 300);
+          }
+        }
+
+        setTimeout(() => map.invalidateSize(), 600);
+      } catch {
+        setShops([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadShops();
+  }, [geo.lat, geo.lng]);
 
   return (
     <AppShell activeTab="walk">
-      {/* Inject slide-up animation once */}
-      <style>{`
-        @keyframes slide-up {
-          from { transform:translateY(100%); opacity:0; }
-          to   { transform:translateY(0);   opacity:1; }
-        }
-        /* Remove MapLibre's default attribution background in dark theme */
-        .maplibregl-ctrl-attrib { background:rgba(5,7,12,0.7)!important; color:rgba(255,255,255,0.3)!important; font-size:9px!important; }
-        .maplibregl-ctrl-attrib a { color:rgba(255,255,255,0.4)!important; }
-      `}</style>
+      <div className="flex flex-col h-full" style={{ background: "var(--bg)" }}>
 
-      <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#05070C" }}>
-
-        {/* ── Header ──────────────────────────────────────────── */}
-        <div
-          style={{
-            flexShrink: 0, display: "flex", alignItems: "center",
-            justifyContent: "space-between", padding: "12px 16px",
-            background: "rgba(5,7,12,0.96)", backdropFilter: "blur(20px)",
-            borderBottom: "1px solid rgba(255,255,255,0.06)", zIndex: 50,
-          }}
-        >
+        {/* Header */}
+        <div className="flex-shrink-0 flex items-center justify-between px-4 py-3"
+          style={{ background: "rgba(5,7,12,0.96)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(255,255,255,0.06)", zIndex: 50 }}>
           <div>
-            <p className="font-syne" style={{ fontWeight: 800, fontSize: 15, color: "#EDEEF5" }}>
-              🗺 Map View
-            </p>
-            <p style={{ fontSize: 10, color: "rgba(255,255,255,0.30)", marginTop: 1 }}>
-              {shops.length > 0 ? `${shops.length} shops in view` : "Move map to load shops"}
+            <p className="font-syne font-black text-base">🗺 Map View</p>
+            <p className="text-[10px]" style={{ color: "var(--t3)" }}>
+              {loading ? "Loading shops…" : `${shops.length} shops nearby`}
             </p>
           </div>
-
-          <button
-            onClick={detect}
-            style={{
-              display: "flex", alignItems: "center", gap: 6,
-              padding: "7px 12px", borderRadius: 100,
-              background: "rgba(31,187,90,0.09)", border: "1px solid rgba(31,187,90,0.25)",
-              color: "#1FBB5A", fontSize: 11, fontWeight: 600, cursor: "pointer",
-              fontFamily: "'DM Sans', sans-serif",
-            }}
-          >
-            <span
-              style={{
-                width: 6, height: 6, borderRadius: "50%", background: "#1FBB5A",
-                boxShadow: "0 0 5px #1FBB5A",
-              }}
-            />
-            {geo.loading ? "Detecting…" : (geo.locality ?? "My Location")}
+          <button onClick={detect}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold"
+            style={{ background: "rgba(31,187,90,0.09)", border: "1px solid rgba(31,187,90,0.25)", color: "var(--green)" }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--green)", display: "inline-block" }} />
+            {geo.loading ? "Detecting…" : geo.locality ?? "Use My Location"}
           </button>
         </div>
 
-        {/* ── Map (WebGL via MapLibre) ─────────────────────────── */}
-        <MapCanvas
-          userLat={userLat}
-          userLng={userLng}
-          onShopClick={handleShopClick}
-          onShopsLoaded={handleShopsLoaded}
-        />
+        {/* Leaflet CSS */}
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
-        {/* ── Bottom: selected shop drawer OR shop strip ───────── */}
-        {selected
-          ? <ShopDrawer shop={selected} onClose={() => setSelected(null)} />
-          : <ShopStrip shops={shops}  onTap={setSelected} />
-        }
+        {/* Map */}
+        <div ref={mapRef} style={{ flex: 1, minHeight: 0 }} />
+
+        {/* Selected shop drawer */}
+        {selected && (
+          <div
+            className="flex-shrink-0 flex items-center gap-3 px-4 py-3"
+            style={{ background: "rgba(10,12,20,0.98)", borderTop: "1px solid rgba(255,255,255,0.09)", zIndex: 60 }}>
+            <div className="w-11 h-11 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
+              style={{ background: "rgba(255,94,26,0.1)", border: "1px solid rgba(255,94,26,0.22)" }}>
+              {selected.category?.icon ?? "🏪"}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-syne font-bold text-sm truncate">{selected.name}</p>
+              <p className="text-[10px] mt-0.5" style={{ color: "var(--t3)" }}>
+                {selected.category?.name} · {selected.locality?.name}
+                {typeof selected.distance_m === "number" && ` · 📍 ${formatDistance(selected.distance_m)}`}
+              </p>
+            </div>
+            <div className="flex gap-2 flex-shrink-0">
+              <button
+                onClick={() => router.push(`/shop/${selected.slug}`)}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold text-white"
+                style={{ background: "var(--accent)" }}>
+                View →
+              </button>
+              <button
+                onClick={() => setSelected(null)}
+                className="px-2 py-1.5 rounded-xl text-xs"
+                style={{ background: "rgba(255,255,255,0.06)", color: "var(--t2)" }}>
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Shop count strip — only when no shop selected */}
+        {!selected && shops.length > 0 && (
+          <div className="flex-shrink-0 overflow-x-auto scroll-none"
+            style={{ background: "rgba(5,7,12,0.97)", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+            <div className="flex gap-2 px-3 py-2.5" style={{ width: "max-content" }}>
+              {shops.slice(0, 12).map((shop) => (
+                <button key={shop.id}
+                  onClick={() => setSelected(shop)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl flex-shrink-0 transition-all"
+                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                  <span>{shop.category?.icon ?? "🏪"}</span>
+                  <div className="text-left">
+                    <p className="text-xs font-semibold" style={{ color: "var(--t1)" }}>{shop.name}</p>
+                    {typeof shop.distance_m === "number" && (
+                      <p className="text-[9px]" style={{ color: "var(--green)" }}>📍 {formatDistance(shop.distance_m)}</p>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </AppShell>
   );
