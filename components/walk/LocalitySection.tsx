@@ -45,10 +45,13 @@ export default function LocalitySection({ locality, index }: { locality: WalkLoc
       data-loc={locality.name}
     >
       {/* Locality header — matches .loc-head */}
-      <div style={{
-        display: "flex", alignItems: "flex-end", justifyContent: "space-between",
-        margin: "20px 13px 4px",
-      }}>
+      <div
+        data-section-bg="1"
+        style={{
+          display: "flex", alignItems: "flex-end", justifyContent: "space-between",
+          margin: "20px 13px 4px",
+          willChange: "transform",
+        }}>
         <div>
           <h2 className="font-syne" style={{
             fontSize: "24px", fontWeight: 800, color: "#EDEEF5",

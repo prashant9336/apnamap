@@ -114,9 +114,33 @@ interface Props { shop: WalkShop; index: number; side: "left" | "right" }
 
 /* ── ShopCard ────────────────────────────────────────────────────── */
 export default function ShopCard({ shop, index, side }: Props) {
-  const ref    = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once: true, margin: "-30px 0px" });
-  const router = useRouter();
+  const ref      = useRef<HTMLDivElement>(null);
+  const focusRef = useRef<HTMLDivElement>(null);
+  const inView   = useInView(ref, { once: true, margin: "-30px 0px" });
+  const router   = useRouter();
+
+  // Focus zone: cards near the vertical center of the viewport scale up slightly;
+  // peripheral cards dim. Driven by IntersectionObserver on a wrapper div so it
+  // never conflicts with Framer Motion's own transform on the inner motion.div.
+  useEffect(() => {
+    const wrapper = focusRef.current;
+    if (!wrapper) return;
+    // Add transition after first paint — avoids animating the initial render
+    const raf = requestAnimationFrame(() => {
+      wrapper.style.transition = "transform 320ms cubic-bezier(0.25,0,0,1), opacity 280ms ease";
+      wrapper.style.willChange = "transform, opacity";
+    });
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        wrapper.style.transform = entry.isIntersecting ? "scale(1.015)" : "scale(0.975)";
+        wrapper.style.opacity   = entry.isIntersecting ? "1" : "0.75";
+      },
+      // "-30% 0px -30% 0px" = only the middle 40% of viewport triggers "focused"
+      { rootMargin: "-30% 0px -30% 0px", threshold: 0 },
+    );
+    obs.observe(wrapper);
+    return () => { obs.disconnect(); cancelAnimationFrame(raf); };
+  }, []);
 
   // Track deal view 2 s after the card enters the viewport — fire once per session
   useEffect(() => {
@@ -166,6 +190,7 @@ export default function ShopCard({ shop, index, side }: Props) {
     || isTrendingDeal || isSellingFast || !!activeViewers;
 
   return (
+    <div ref={focusRef}>
     <motion.div
       ref={ref}
       initial={{ opacity: 0, x: dx, scale: 0.97 }}
@@ -469,6 +494,7 @@ export default function ShopCard({ shop, index, side }: Props) {
         )}
       </div>
     </motion.div>
+    </div>
   );
 }
 

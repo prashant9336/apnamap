@@ -28,7 +28,9 @@ export default function WalkView({ localities, loading, userLat, userLng, userLo
   const [scrollProgress, setSP]   = useState(0);   // 0-1 continuous scroll fraction
   const [currentLoc, setCL]       = useState("");
   const [crowd,      setCrowd]    = useState(142);
-  const raf  = useRef<number>(0);
+  const raf            = useRef<number>(0);
+  const inertiaRaf     = useRef<number>(0);
+  const scrollEndTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lasy = useRef(0);
 
   /* Deal engine — rank shops by score, memoised until localities / GPS change */
@@ -57,6 +59,14 @@ export default function WalkView({ localities, loading, userLat, userLng, userLo
   useEffect(() => {
     setCL(localities.length > 0 ? localities[0].name : userLocality);
   }, [localities, userLocality]);
+
+  /* Cleanup inertia + scroll-end timer on unmount */
+  useEffect(() => {
+    return () => {
+      cancelAnimationFrame(inertiaRaf.current);
+      if (scrollEndTimer.current) clearTimeout(scrollEndTimer.current);
+    };
+  }, []);
 
   /* Crowd ticker */
   useEffect(() => {
@@ -128,6 +138,7 @@ export default function WalkView({ localities, loading, userLat, userLng, userLo
     /* Parallax */
     const delta = sy - lasy.current; lasy.current = sy;
     cancelAnimationFrame(raf.current);
+    cancelAnimationFrame(inertiaRaf.current);  // stop any ongoing ease-back
     raf.current = requestAnimationFrame(() => {
       el.querySelectorAll<HTMLElement>(".scol-l").forEach(c => {
         const cur = parseFloat(c.dataset.px ?? "0");
@@ -139,7 +150,44 @@ export default function WalkView({ localities, loading, userLat, userLng, userLo
         const nxt = Math.max(-10, Math.min(10, cur + delta * 0.045));
         c.dataset.px = String(nxt); c.style.transform = `translateX(${nxt}px)`;
       });
+      // Section headers scroll 20% slower than the rest → depth parallax
+      // Positive delta (scroll down) → header shifts up less → appears further back
+      el.querySelectorAll<HTMLElement>("[data-section-bg]").forEach(c => {
+        const cur = parseFloat(c.dataset.bgpy ?? "0");
+        const nxt = Math.max(-8, Math.min(8, cur - delta * 0.022));
+        c.dataset.bgpy = String(nxt); c.style.transform = `translateY(${nxt}px)`;
+      });
     });
+
+    /* Inertia ease-back: when scroll stops, columns drift back to neutral */
+    if (scrollEndTimer.current) clearTimeout(scrollEndTimer.current);
+    scrollEndTimer.current = setTimeout(() => {
+      const target = scrollRef.current;
+      if (!target) return;
+      function easeStep() {
+        let anyMoving = false;
+        target!.querySelectorAll<HTMLElement>(".scol-l, .scol-r").forEach(c => {
+          const cur = parseFloat(c.dataset.px ?? "0");
+          if (Math.abs(cur) < 0.12) {
+            c.dataset.px = "0"; c.style.transform = "translateX(0px)"; return;
+          }
+          const nxt = cur * 0.80;  // exponential decay toward 0
+          c.dataset.px = String(nxt); c.style.transform = `translateX(${nxt}px)`;
+          anyMoving = true;
+        });
+        target!.querySelectorAll<HTMLElement>("[data-section-bg]").forEach(c => {
+          const cur = parseFloat(c.dataset.bgpy ?? "0");
+          if (Math.abs(cur) < 0.12) {
+            c.dataset.bgpy = "0"; c.style.transform = "translateY(0px)"; return;
+          }
+          const nxt = cur * 0.80;
+          c.dataset.bgpy = String(nxt); c.style.transform = `translateY(${nxt}px)`;
+          anyMoving = true;
+        });
+        if (anyMoving) inertiaRaf.current = requestAnimationFrame(easeStep);
+      }
+      inertiaRaf.current = requestAnimationFrame(easeStep);
+    }, 130);
 
     /* Footstep trail — throttled 280ms */
     if (!footTimer.current) {
