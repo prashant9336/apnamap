@@ -1,10 +1,12 @@
 "use client";
 import { useRef } from "react";
 import { motion, useInView } from "framer-motion";
+import { useI18n } from "@/lib/i18n/context";
 
 export default function LocalityTransition({ fromName, toName }: { fromName: string; toName: string }) {
   const ref    = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { once: true, margin: "-10px 0px" });
+  const { t }  = useI18n();
   return (
     <div ref={ref} style={{ position: "relative", margin: "8px 0", display: "flex", alignItems: "center", justifyContent: "center", padding: "14px 0" }}>
       {/* Horizontal rule */}
@@ -39,7 +41,7 @@ export default function LocalityTransition({ fromName, toName }: { fromName: str
           ))}
         </div>
 
-        <span style={{ color: "rgba(255,255,255,0.28)" }}>Leaving</span>
+        <span style={{ color: "rgba(255,255,255,0.28)" }}>{t("leaving")}</span>
         <span style={{ color: "rgba(255,255,255,0.50)", fontWeight: 600 }}>{fromName}</span>
 
         <motion.span
@@ -52,7 +54,7 @@ export default function LocalityTransition({ fromName, toName }: { fromName: str
 
         <span style={{ color: "rgba(255,255,255,0.18)" }}>→</span>
 
-        <span style={{ color: "rgba(255,255,255,0.28)" }}>Entering</span>
+        <span style={{ color: "rgba(255,255,255,0.28)" }}>{t("entering")}</span>
         <span style={{ color: "#FF5E1A", fontWeight: 700 }}>{toName}</span>
       </motion.div>
     </div>

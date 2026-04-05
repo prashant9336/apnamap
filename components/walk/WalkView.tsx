@@ -9,6 +9,7 @@ import LocalityTransition    from "./LocalityTransition";
 import LocalityLeaderboard   from "./LocalityLeaderboard";
 import StreakBadge            from "./StreakBadge";
 import LangToggle             from "@/components/ui/LangToggle";
+import { useI18n }            from "@/lib/i18n/context";
 import { rankLocalities, topOffersAcrossLocalities } from "@/lib/deal-engine";
 import type { ScoredOffer } from "@/lib/deal-engine";
 import type { WalkLocality, Offer } from "@/types";
@@ -23,6 +24,7 @@ interface Props {
 }
 
 export default function WalkView({ localities, loading, userLat, userLng, userLocality, gpsError }: Props) {
+  const { t }        = useI18n();
   const scrollRef    = useRef<HTMLDivElement>(null);
   const [activeIdx,  setAI]       = useState(0);
   const [scrollProgress, setSP]   = useState(0);   // 0-1 continuous scroll fraction
@@ -227,7 +229,7 @@ export default function WalkView({ localities, loading, userLat, userLng, userLo
               transition={{ duration: 2, repeat: Infinity }}
             />
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {currentLoc || userLocality || "Detecting…"}
+              {currentLoc || userLocality || t("detecting")}
             </span>
           </motion.div>
 
@@ -243,7 +245,7 @@ export default function WalkView({ localities, loading, userLat, userLng, userLo
             >
               👀
             </motion.span>
-            <span>{crowd} exploring</span>
+            <span>{crowd} {t("exploring")}</span>
           </div>
 
           {/* Lang toggle */}
@@ -319,27 +321,28 @@ export default function WalkView({ localities, loading, userLat, userLng, userLo
 
 /* ─── Mode tabs — navigates to real pages ───────────────────── */
 function ModeTabs() {
-  const router  = useRouter();
-  const path    = usePathname();
+  const router   = useRouter();
+  const path     = usePathname();
+  const { t }    = useI18n();
   const TABS = [
-    { label: "🚶 Walk",    href: "/explore"  },
-    { label: "🗺 Map",     href: "/map"       },
-    { label: "🎯 Offers",  href: "/offers"    },
-    { label: "📍 Near Me", href: "/near-me"   },
+    { label: `🚶 ${t("walk")}`,    href: "/explore"  },
+    { label: `🗺 ${t("mapTab")}`,  href: "/map"       },
+    { label: `🎯 ${t("offersTab")}`, href: "/offers"  },
+    { label: `📍 ${t("nearMe")}`,  href: "/near-me"   },
   ];
   return (
     <div style={{ display:"flex", alignItems:"center", gap:6, overflowX:"auto" }} className="scroll-none">
-      {TABS.map((t) => {
-        const active = path === t.href || (t.href === "/explore" && path === "/");
+      {TABS.map((tab) => {
+        const active = path === tab.href || (tab.href === "/explore" && path === "/");
         return (
-          <button key={t.href} onClick={() => router.push(t.href)} style={{
+          <button key={tab.href} onClick={() => router.push(tab.href)} style={{
             flexShrink:0, padding:"6px 13px", borderRadius:100,
             fontSize:"12px", fontWeight:600, cursor:"pointer", border:"none",
             fontFamily:"'DM Sans',sans-serif", transition:"all .2s",
             ...(active
               ? { background:"#FF5E1A", color:"#fff", boxShadow:"0 0 18px rgba(255,94,26,0.4)" }
               : { background:"rgba(255,255,255,0.04)", color:"rgba(255,255,255,0.42)", outline:"1px solid rgba(255,255,255,0.07)" }),
-          }}>{t.label}</button>
+          }}>{tab.label}</button>
         );
       })}
     </div>
@@ -424,6 +427,7 @@ function LiveFeedStrip({ localities }: { localities: WalkLocality[] }) {
 
 /* ─── Crowd banner ───────────────────────────────────────────── */
 function CrowdBanner({ crowd, localities }: { crowd: number; localities: WalkLocality[] }) {
+  const { t } = useI18n();
   const totalOffers = localities.reduce(
     (sum, l) => sum + l.shops.filter(s => s.top_offer).length, 0
   );
@@ -464,7 +468,7 @@ function CrowdBanner({ crowd, localities }: { crowd: number; localities: WalkLoc
           borderRadius: 100, padding: "3px 9px", whiteSpace: "nowrap",
         }}
       >
-        🧑 {crowd} exploring
+        🧑 {crowd} {t("exploring")}
       </motion.span>
     </motion.div>
   );

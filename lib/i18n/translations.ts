@@ -65,6 +65,22 @@ export const translations = {
     rewardUnlocked: "Reward unlocked!",
     daysToReward: "more days to unlock a reward",
 
+    // Mode tabs
+    walk:         "Walk",
+    mapTab:       "Map",
+    offersTab:    "Offers",
+    nearMe:       "Near Me",
+
+    // Crowd
+    exploring:    "exploring",
+    mostVisited:  "Most visited today",
+    busyNow:      "Busy right now",
+    quietNow:     "Quiet now",
+
+    // Locality transition
+    leaving:      "Leaving",
+    entering:     "Entering",
+
     // Leaderboard
     topDeals:     "Top deals in",
   },
@@ -122,6 +138,22 @@ export const translations = {
     dayStreak:    "दिन की स्ट्रीक",
     rewardUnlocked: "इनाम मिल गया!",
     daysToReward: "दिन बाद इनाम मिलेगा",
+
+    // Mode tabs
+    walk:         "वॉक",
+    mapTab:       "नक्शा",
+    offersTab:    "ऑफर",
+    nearMe:       "पास में",
+
+    // Crowd
+    exploring:    "देख रहे हैं",
+    mostVisited:  "आज सबसे ज़्यादा आए",
+    busyNow:      "अभी भीड़ है",
+    quietNow:     "अभी शांत है",
+
+    // Locality transition
+    leaving:      "छोड़ रहे हैं",
+    entering:     "आ रहे हैं",
 
     // Leaderboard
     topDeals:     "टॉप ऑफर",

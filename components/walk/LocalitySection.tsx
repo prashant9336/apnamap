@@ -3,6 +3,7 @@ import { useRef } from "react";
 import { motion, useInView } from "framer-motion";
 import ShopCard from "./ShopCard";
 import RoadDivider from "./RoadDivider";
+import { useI18n } from "@/lib/i18n/context";
 import type { WalkLocality } from "@/types";
 
 const STRIP_LABEL: Record<string,string> = {
@@ -16,15 +17,16 @@ const STRIP_LABEL: Record<string,string> = {
 export default function LocalitySection({ locality, index }: { locality: WalkLocality; index: number }) {
   const ref    = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { once: true, margin: "-20px 0px" });
+  const { t }  = useI18n();
 
   const left  = locality.shops.filter((_, i) => i % 2 === 0);
   const right = locality.shops.filter((_, i) => i % 2 !== 0);
 
   // Crowd config from badge
   const crowdCfg = {
-    hot:   { dotBg: "#FF5E1A", dotShadow: "#FF5E1A", badgeClass: "hot",  badgeStyle: { background:"rgba(255,94,26,0.14)",  color:"#FF5E1A", border:"1px solid rgba(255,94,26,0.28)"  }, em: "🔥", lbl: "Most visited today" },
-    busy:  { dotBg: "#E8A800", dotShadow: "#E8A800", badgeClass: "busy", badgeStyle: { background:"rgba(232,168,0,0.12)",  color:"#E8A800", border:"1px solid rgba(232,168,0,0.26)"  }, em: "⚡", lbl: "Busy right now" },
-    quiet: { dotBg: "rgba(255,255,255,0.30)", dotShadow: "transparent", badgeClass: "quiet", badgeStyle: { background:"rgba(255,255,255,0.05)", color:"rgba(255,255,255,0.20)", border:"1px solid rgba(255,255,255,0.068)" }, em: "🔵", lbl: "Quiet now" },
+    hot:   { dotBg: "#FF5E1A", dotShadow: "#FF5E1A", badgeClass: "hot",  badgeStyle: { background:"rgba(255,94,26,0.14)",  color:"#FF5E1A", border:"1px solid rgba(255,94,26,0.28)"  }, em: "🔥", lbl: t("mostVisited") },
+    busy:  { dotBg: "#E8A800", dotShadow: "#E8A800", badgeClass: "busy", badgeStyle: { background:"rgba(232,168,0,0.12)",  color:"#E8A800", border:"1px solid rgba(232,168,0,0.26)"  }, em: "⚡", lbl: t("busyNow") },
+    quiet: { dotBg: "rgba(255,255,255,0.30)", dotShadow: "transparent", badgeClass: "quiet", badgeStyle: { background:"rgba(255,255,255,0.05)", color:"rgba(255,255,255,0.20)", border:"1px solid rgba(255,255,255,0.068)" }, em: "🔵", lbl: t("quietNow") },
   };
   const cc = crowdCfg[locality.crowd_badge] ?? crowdCfg.quiet;
 

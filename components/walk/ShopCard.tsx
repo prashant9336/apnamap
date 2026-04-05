@@ -4,6 +4,8 @@ import { motion, useInView } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { formatDistance } from "@/lib/geo/distance";
 import { classifyDealEngineType, trackDealView, trackDealClick } from "@/lib/deal-engine";
+import { useI18n } from "@/lib/i18n/context";
+import type { TranslationKey } from "@/lib/i18n/translations";
 import type { WalkShop, Offer } from "@/types";
 
 /* ── Time-left helper ────────────────────────────────────────────── */
@@ -70,7 +72,9 @@ interface StatusConfig {
   border: string;
 }
 
-function getStatus(shop: WalkShop): StatusConfig {
+type TFn = (k: TranslationKey) => string;
+
+function getStatus(shop: WalkShop, tFn: TFn): StatusConfig {
   const now = new Date();
   const currentMins = now.getHours() * 60 + now.getMinutes();
   const closeMins   = parseTimeMins(shop.close_time);
@@ -82,7 +86,7 @@ function getStatus(shop: WalkShop): StatusConfig {
       const minsLeft = closeMins - currentMins;
       if (minsLeft > 0 && minsLeft <= 45) {
         return {
-          label:  `🟡 Closes in ${minsLeft}m`,
+          label:  `🟡 ${tFn("closingSoon")} (${minsLeft}m)`,
           color:  "#E8A800",
           bg:     "rgba(232,168,0,0.10)",
           border: "1px solid rgba(232,168,0,0.24)",
@@ -90,7 +94,7 @@ function getStatus(shop: WalkShop): StatusConfig {
       }
     }
     return {
-      label:  "🟢 Open now",
+      label:  `🟢 ${tFn("openNow")}`,
       color:  "#1FBB5A",
       bg:     "rgba(31,187,90,0.10)",
       border: "1px solid rgba(31,187,90,0.22)",
@@ -99,8 +103,8 @@ function getStatus(shop: WalkShop): StatusConfig {
 
   // Closed — show opens-at time if available
   const opensLabel = openMins !== null
-    ? `🔴 Opens ${shop.open_time}`
-    : "🔴 Closed";
+    ? `🔴 ${shop.open_time}`
+    : `🔴 ${tFn("closed")}`;
   return {
     label:  opensLabel,
     color:  "rgba(255,255,255,0.30)",
@@ -118,6 +122,7 @@ export default function ShopCard({ shop, index, side }: Props) {
   const focusRef = useRef<HTMLDivElement>(null);
   const inView   = useInView(ref, { once: true, margin: "-30px 0px" });
   const router   = useRouter();
+  const { t }    = useI18n();
 
   // Focus zone: cards near the vertical center of the viewport scale up slightly;
   // peripheral cards dim. Driven by IntersectionObserver on a wrapper div so it
@@ -185,7 +190,7 @@ export default function ShopCard({ shop, index, side }: Props) {
     ? `${offerViews} views`
     : null;
 
-  const status = getStatus(shop);
+  const status = getStatus(shop, t);
   const hasTags = isNew || isTrending || isRecommended || isHiddenGem || endingSoon
     || isTrendingDeal || isSellingFast || !!activeViewers;
 
@@ -427,12 +432,12 @@ export default function ShopCard({ shop, index, side }: Props) {
                     border: "1px solid rgba(31,187,90,0.16)",
                     padding: "1.5px 6px", borderRadius: 100,
                   }}>
-                    🆕 New
+                    🆕 {t("newShop")}
                   </span>
                 )}
                 {isTrending && (
                   <span style={{ fontSize: "9px", fontWeight: 700, color: "#FF5E1A" }}>
-                    🔥 Hot
+                    🔥 {t("trending")}
                   </span>
                 )}
                 {isHiddenGem && (
@@ -443,17 +448,17 @@ export default function ShopCard({ shop, index, side }: Props) {
                     border: "1px solid rgba(167,139,250,0.18)",
                     padding: "1.5px 6px", borderRadius: 100,
                   }}>
-                    💎 Hidden gem
+                    💎 {t("hiddenGem")}
                   </span>
                 )}
                 {isRecommended && !isHiddenGem && (
                   <span style={{ fontSize: "9px", fontWeight: 700, color: "#E8A800" }}>
-                    ⭐ Recommended
+                    ⭐ {t("recommended")}
                   </span>
                 )}
                 {endingSoon && (
                   <span style={{ fontSize: "9px", fontWeight: 700, color: "#E8A800" }}>
-                    ⚡ Ends soon
+                    ⚡ {t("endsSoon")}
                   </span>
                 )}
                 {isTrendingDeal && (
@@ -464,7 +469,7 @@ export default function ShopCard({ shop, index, side }: Props) {
                     border: "1px solid rgba(255,94,26,0.20)",
                     padding: "1.5px 6px", borderRadius: 100,
                   }}>
-                    🔥 Trending
+                    🔥 {t("trendingDeal")}
                   </span>
                 )}
                 {isSellingFast && !isTrendingDeal && (
@@ -475,7 +480,7 @@ export default function ShopCard({ shop, index, side }: Props) {
                     border: "1px solid rgba(232,168,0,0.20)",
                     padding: "1.5px 6px", borderRadius: 100,
                   }}>
-                    ⚡ Selling fast
+                    ⚡ {t("sellingFast")}
                   </span>
                 )}
                 {activeViewers && (
@@ -505,6 +510,7 @@ export default function ShopCard({ shop, index, side }: Props) {
 function OfferChip({ offer }: { offer: Offer }) {
   // 60-s tick keeps countdown fresh
   const [, tick] = useState(0);
+  const { t }    = useI18n();
   useEffect(() => {
     if (!offer.ends_at) return;
     const iv = setInterval(() => tick(n => n + 1), 60_000);
@@ -520,25 +526,25 @@ function OfferChip({ offer }: { offer: Offer }) {
 
   const theme: ChipTheme = (() => {
     if (dealType === "big_deal") return {
-      label: "🔥 Big Deal", labelColor: "#FF6A30",
+      label: `🔥 ${t("bigDeal")}`, labelColor: "#FF6A30",
       bg: "rgba(255,80,0,0.09)", border: "1px solid rgba(255,80,0,0.26)",
       glow: "rgba(255,80,0,0.22)",
     };
     if (dealType === "flash_deal") return {
-      label: "⚡ Flash Deal", labelColor: "#E8A800",
+      label: `⚡ ${t("flashDeal")}`, labelColor: "#E8A800",
       bg: "rgba(232,168,0,0.09)", border: "1px solid rgba(232,168,0,0.26)",
       glow: "rgba(232,168,0,0.28)",
     };
     if (dealType === "mystery") return {
-      label: "🎁 Mystery", labelColor: "#A78BFA",
+      label: `🎁 ${t("mysteryDeal")}`, labelColor: "#A78BFA",
       bg: "rgba(167,139,250,0.07)", border: "1px solid rgba(167,139,250,0.20)",
     };
     if (discount_type === "bogo" || discount_type === "free") return {
-      label: "🟢 Combo", labelColor: "#1FBB5A",
+      label: `🟢 ${t("combo")}`, labelColor: "#1FBB5A",
       bg: "rgba(31,187,90,0.07)", border: "1px solid rgba(31,187,90,0.18)",
     };
     return {
-      label: "🎯 Offer", labelColor: "rgba(255,255,255,0.50)",
+      label: `🎯 ${t("offer")}`, labelColor: "rgba(255,255,255,0.50)",
       bg: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
     };
   })();
