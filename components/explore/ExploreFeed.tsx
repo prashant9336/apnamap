@@ -1,23 +1,26 @@
 "use client";
 /**
- * ExploreFeed — TikTok/Reels-style vertical scroll of deal cards.
+ * ExploreFeed — vertical snap reel of deal + shop cards.
  *
- * Performance contract:
- * - CSS scroll-snap-type: y mandatory → native 60fps snapping, no JS scroll math
- * - IntersectionObserver per card → zero RAF loops, no scroll listeners
- * - Items are loaded in batches of 15; more fetched when 3 from end
- * - Max ~45 items in DOM at once (manageable; each card has no heavy media)
- * - transform + opacity only → compositor-only animations
+ * The feed is NEVER empty:
+ *   - API always returns fallback shop cards + invite CTA
+ *   - Error path shows an inline retry card, not an empty screen
+ *
+ * Performance:
+ * - scroll-snap-type: y mandatory → native 60fps snapping
+ * - IntersectionObserver (threshold 0.6) tracks active card
+ * - Batch loads 15 items; prefetches next batch 3 cards before end
+ * - transform + opacity only
  */
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useGeo } from "@/hooks/useGeo";
 import ExploreCard, { type ExploreItem } from "./ExploreCard";
 
-const BATCH  = 15;
-const PREFETCH_THRESHOLD = 3; // fetch more when this many cards from end
+const BATCH               = 15;
+const PREFETCH_THRESHOLD  = 3;
 
-/* ── Skeleton placeholder ────────────────────────────────────────── */
+/* ── Skeleton ────────────────────────────────────────────────────── */
 function Skeleton() {
   return (
     <div style={{
@@ -37,31 +40,29 @@ function Skeleton() {
   );
 }
 
-/* ── Empty state ─────────────────────────────────────────────────── */
-function EmptyState({ onRetry }: { onRetry: () => void }) {
+/* ── Inline retry card (shown inside the reel, not as empty screen) */
+function RetryCard({ onRetry }: { onRetry: () => void }) {
   return (
     <div style={{
+      scrollSnapAlign: "start", flexShrink: 0,
       height: "100%", display: "flex", flexDirection: "column",
-      alignItems: "center", justifyContent: "center", gap: 14,
-      padding: "0 32px",
+      alignItems: "center", justifyContent: "center", gap: 16,
+      padding: "0 32px 80px",
     }}>
-      <div style={{ fontSize: 48 }}>🏙️</div>
-      <div className="font-syne" style={{ fontSize: 18, fontWeight: 800, color: "#EDEEF5", textAlign: "center" }}>
-        No active deals nearby
-      </div>
-      <div style={{ fontSize: 13, color: "rgba(255,255,255,0.38)", textAlign: "center" }}>
-        Check back soon — shops add deals throughout the day.
+      <div style={{ fontSize: 40 }}>🔄</div>
+      <div style={{ fontSize: 15, fontWeight: 600, color: "rgba(255,255,255,0.55)", textAlign: "center" }}>
+        Couldn't load deals
       </div>
       <button
         onClick={onRetry}
         style={{
-          marginTop: 8, padding: "10px 22px", borderRadius: 12,
+          padding: "10px 24px", borderRadius: 12,
           background: "#FF5E1A", color: "#fff",
           fontWeight: 700, fontSize: 13, border: "none", cursor: "pointer",
           fontFamily: "'DM Sans', sans-serif",
         }}
       >
-        Refresh
+        Try Again
       </button>
     </div>
   );
@@ -76,13 +77,13 @@ export default function ExploreFeed() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore,     setHasMore]     = useState(true);
   const [activeIdx,   setActiveIdx]   = useState(0);
-  const [error,       setError]       = useState(false);
+  const [fetchError,  setFetchError]  = useState(false);
 
-  const offsetRef   = useRef(0);
-  const fetchingRef = useRef(false);
+  const offsetRef    = useRef(0);
+  const fetchingRef  = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  /* ── Fetch a batch of deals ──────────────────────────────────── */
+  /* ── Fetch batch ───────────────────────────────────────────────── */
   const fetchBatch = useCallback(async (reset = false) => {
     if (fetchingRef.current) return;
     fetchingRef.current = true;
@@ -103,7 +104,7 @@ export default function ExploreFeed() {
         setItems(batch);
         offsetRef.current = batch.length;
         setActiveIdx(0);
-        setError(false);
+        setFetchError(false);
       } else {
         setItems(prev => [...prev, ...batch]);
         offsetRef.current += batch.length;
@@ -111,7 +112,7 @@ export default function ExploreFeed() {
 
       setHasMore(batch.length === BATCH);
     } catch {
-      if (reset) setError(true);
+      if (reset) setFetchError(true);
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -119,14 +120,14 @@ export default function ExploreFeed() {
     }
   }, [geo.lat, geo.lng]);
 
-  /* Initial load — runs once geo is ready */
+  /* Initial load once geo settles */
   useEffect(() => {
     if (geo.loading) return;
     setLoading(true);
     fetchBatch(true);
   }, [geo.loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ── IntersectionObserver: track active card + trigger preload ─ */
+  /* ── IntersectionObserver: active card tracking + prefetch ────── */
   useEffect(() => {
     const container = containerRef.current;
     if (!container || items.length === 0) return;
@@ -140,120 +141,110 @@ export default function ExploreFeed() {
           const idx = parseInt((entry.target as HTMLElement).dataset.exploreIdx ?? "0");
           setActiveIdx(idx);
 
-          /* Preload next batch when 3 from the end */
           if (hasMore && !loadingMore && idx >= items.length - PREFETCH_THRESHOLD) {
             setLoadingMore(true);
             fetchBatch(false);
           }
         }
       },
-      {
-        root:       container,
-        threshold:  0.6,  // card must be 60% visible to be "active"
-      },
+      { root: container, threshold: 0.6 },
     );
 
     cards.forEach(c => obs.observe(c));
     return () => obs.disconnect();
   }, [items, hasMore, loadingMore, fetchBatch]);
 
-  if (loading) {
-    return (
-      <div style={{ height: "100%", background: "#05070C", position: "relative" }}>
-        <style>{`
-          @keyframes explore-pulse {
-            0%,100% { opacity:0.5; } 50% { opacity:0.15; }
-          }
-        `}</style>
-        <Skeleton />
-      </div>
-    );
-  }
-
-  if (error || items.length === 0) {
-    return (
-      <div style={{ height: "100%", background: "#05070C" }}>
-        <EmptyState onRetry={() => { setLoading(true); fetchBatch(true); }} />
-      </div>
-    );
-  }
-
+  /* ── Render ────────────────────────────────────────────────────── */
   return (
-    <div
-      style={{ height: "100%", background: "#05070C", position: "relative" }}
-    >
-      {/* Inject pulse keyframe once */}
+    <div style={{ height: "100%", background: "#05070C", position: "relative" }}>
       <style>{`
         @keyframes explore-pulse {
           0%,100% { opacity:0.5; } 50% { opacity:0.15; }
         }
       `}</style>
 
-      {/* Progress dots — right rail */}
-      <div style={{
-        position:   "absolute", right: 12, top: "50%",
-        transform:  "translateY(-50%)",
-        display:    "flex", flexDirection: "column", gap: 5,
-        zIndex:     10, pointerEvents: "none",
-      }}>
-        {items.slice(0, Math.min(items.length, 12)).map((_, i) => (
-          <div key={i} style={{
-            width:        i === activeIdx ? 4 : 3,
-            height:       i === activeIdx ? 18 : 5,
-            borderRadius: 4,
-            background:   i === activeIdx ? "#FF5E1A" : "rgba(255,255,255,0.20)",
-            transition:   "all 280ms cubic-bezier(0.25,0,0,1)",
-          }} />
-        ))}
-        {items.length > 12 && (
+      {loading ? (
+        <Skeleton />
+      ) : fetchError ? (
+        /* Error — show retry card directly in the reel layout */
+        <div style={{
+          height: "100%", overflowY: "scroll",
+          scrollSnapType: "y mandatory", overscrollBehavior: "contain",
+          scrollbarWidth: "none",
+        }} className="scroll-none">
+          <RetryCard onRetry={() => { setLoading(true); fetchBatch(true); }} />
+        </div>
+      ) : (
+        <>
+          {/* Progress dots — right rail */}
           <div style={{
-            width: 3, height: 3, borderRadius: "50%",
-            background: "rgba(255,255,255,0.15)",
-          }} />
-        )}
-      </div>
-
-      {/* Scroll container with native snap */}
-      <div
-        ref={containerRef}
-        style={{
-          height:               "100%",
-          overflowY:            "scroll",
-          scrollSnapType:       "y mandatory",
-          overscrollBehavior:   "contain",
-          WebkitOverflowScrolling: "touch",
-          /* Hide scrollbar — purely cosmetic */
-          scrollbarWidth:       "none",
-          msOverflowStyle:      "none",
-        }}
-        className="scroll-none"
-      >
-        {items.map((item, idx) => (
-          <div
-            key={item.offerId}
-            data-explore-idx={idx}
-            style={{ height: "100%", flexShrink: 0 }}
-          >
-            <ExploreCard
-              item={item}
-              isActive={idx === activeIdx}
-            />
-          </div>
-        ))}
-
-        {/* Loading more indicator */}
-        {loadingMore && (
-          <div style={{
-            height:         "100%", display: "flex",
-            alignItems:     "center", justifyContent: "center",
-            scrollSnapAlign:"start", flexShrink: 0,
+            position: "absolute", right: 12, top: "50%",
+            transform: "translateY(-50%)",
+            display: "flex", flexDirection: "column", gap: 5,
+            zIndex: 10, pointerEvents: "none",
           }}>
-            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.25)" }}>
-              Loading more deals…
-            </div>
+            {items.slice(0, Math.min(items.length, 12)).map((item, i) => {
+              const isInvite = item.itemType === "invite_cta";
+              return (
+                <div key={i} style={{
+                  width:        i === activeIdx ? 4 : 3,
+                  height:       i === activeIdx ? 18 : isInvite ? 8 : 5,
+                  borderRadius: 4,
+                  background:   i === activeIdx
+                    ? "#FF5E1A"
+                    : isInvite
+                    ? "rgba(255,94,26,0.35)"
+                    : "rgba(255,255,255,0.20)",
+                  transition: "all 280ms cubic-bezier(0.25,0,0,1)",
+                }} />
+              );
+            })}
+            {items.length > 12 && (
+              <div style={{
+                width: 3, height: 3, borderRadius: "50%",
+                background: "rgba(255,255,255,0.15)",
+              }} />
+            )}
           </div>
-        )}
-      </div>
+
+          {/* Scroll container */}
+          <div
+            ref={containerRef}
+            style={{
+              height:                  "100%",
+              overflowY:               "scroll",
+              scrollSnapType:          "y mandatory",
+              overscrollBehavior:      "contain",
+              WebkitOverflowScrolling: "touch",
+              scrollbarWidth:          "none",
+              msOverflowStyle:         "none",
+            }}
+            className="scroll-none"
+          >
+            {items.map((item, idx) => (
+              <div
+                key={item.offerId}
+                data-explore-idx={idx}
+                style={{ height: "100%", flexShrink: 0 }}
+              >
+                <ExploreCard item={item} isActive={idx === activeIdx} />
+              </div>
+            ))}
+
+            {loadingMore && (
+              <div style={{
+                height: "100%", display: "flex",
+                alignItems: "center", justifyContent: "center",
+                scrollSnapAlign: "start", flexShrink: 0,
+              }}>
+                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.22)" }}>
+                  Loading more…
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
