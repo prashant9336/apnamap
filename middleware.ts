@@ -6,13 +6,19 @@ const PUBLIC_FILE = /\.(.*)$/;
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow Next internals, images/files, favicon, auth routes, and unlock routes
+  // Allow Next internals, images/files, favicon, auth routes, unlock routes,
+  // and vendor public routes (join, login, set-password — no unlock cookie needed)
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon.ico") ||
     pathname.startsWith("/unlock") ||
     pathname.startsWith("/api/unlock") ||
     pathname.startsWith("/auth") ||
+    pathname.startsWith("/vendor/join") ||
+    pathname.startsWith("/vendor/login") ||
+    pathname.startsWith("/vendor/set-password") ||
+    pathname.startsWith("/api/vendor/request") ||
+    pathname.startsWith("/api/vendor/activate") ||
     PUBLIC_FILE.test(pathname)
   ) {
     return await updateSession(request);
