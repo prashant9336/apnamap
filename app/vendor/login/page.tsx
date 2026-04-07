@@ -46,8 +46,9 @@ function VendorLoginForm() {
 
     setLoading(true);
     try {
+      // Vendor accounts use synthetic email (no phone provider needed)
       const { data, error: signInErr } = await supabase.auth.signInWithPassword({
-        phone:    `+91${digits}`,
+        email:    `${digits}@vendor.apnamap.in`,
         password,
       });
 
