@@ -33,7 +33,7 @@ export default function SignupPage() {
   const [name,     setName]     = useState("");
   const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
-  const [role,     setRole]     = useState<"customer"|"vendor">("customer");
+  const [role] = useState<"customer">("customer");
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState("");
   const [done,     setDone]     = useState(false);
@@ -151,15 +151,17 @@ export default function SignupPage() {
           <p style={{ fontSize:13, color:"rgba(255,255,255,0.40)" }}>Discover your city, unlock offers</p>
         </div>
 
-        {/* Role toggle */}
+        {/* Role toggle — vendor goes to dedicated join flow */}
         <div style={{ display:"flex", borderRadius:12, padding:4, background:"rgba(255,255,255,0.06)", marginBottom:20 }}>
-          {(["customer","vendor"] as const).map(r => (
-            <button key={r} onClick={() => setRole(r)} style={{ flex:1, padding:"10px", borderRadius:9, border:"none", cursor:"pointer", fontSize:13, fontWeight:600, fontFamily:"'DM Sans',sans-serif", transition:"all .2s",
-              background: role===r ? "#FF5E1A" : "transparent",
-              color: role===r ? "#fff" : "rgba(255,255,255,0.45)" }}>
-              {r==="customer" ? "👤 Customer" : "🏪 Shop Owner"}
-            </button>
-          ))}
+          <button style={{ flex:1, padding:"10px", borderRadius:9, border:"none", cursor:"default", fontSize:13, fontWeight:600, fontFamily:"'DM Sans',sans-serif",
+            background: "#FF5E1A", color: "#fff" }}>
+            👤 Customer
+          </button>
+          <button onClick={() => { window.location.href = "/vendor/join"; }} style={{ flex:1, padding:"10px", borderRadius:9, border:"none", cursor:"pointer", fontSize:13, fontWeight:600, fontFamily:"'DM Sans',sans-serif", transition:"all .2s",
+            background: "transparent",
+            color: "rgba(255,255,255,0.45)" }}>
+            🏪 Shop Owner →
+          </button>
         </div>
 
         <form onSubmit={handleSignup}>
