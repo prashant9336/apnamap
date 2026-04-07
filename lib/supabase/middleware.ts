@@ -46,6 +46,17 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (path.startsWith("/vendor")) {
+    // Fully public vendor paths — no auth required at all
+    const publicVendorPaths = [
+      "/vendor/join",
+      "/vendor/login",
+      "/vendor/set-password",
+    ];
+    if (publicVendorPaths.some((p) => path.startsWith(p))) {
+      return response; // let through with no checks
+    }
+
+    // Everything else under /vendor requires a session
     if (!user) {
       const url = request.nextUrl.clone();
       url.pathname = "/auth/login";
@@ -53,14 +64,8 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    // These paths are fully public — no auth or vendor role required
-    const openVendorPaths = [
-      "/vendor/onboarding",
-      "/vendor/claim",
-      "/vendor/join",        // vendor request form (pre-auth)
-      "/vendor/login",       // vendor mobile+password login
-      "/vendor/set-password", // password setup after admin approval
-    ];
+    // These paths are open to any logged-in user (role upgrade flows)
+    const openVendorPaths = ["/vendor/onboarding", "/vendor/claim"];
     if (!openVendorPaths.some((p) => path.startsWith(p))) {
       if (role !== "vendor" && role !== "admin") {
         return NextResponse.redirect(new URL("/vendor/onboarding", request.url));
