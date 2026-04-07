@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/server";
 
 export async function POST(req: NextRequest) {
   try {
@@ -27,7 +27,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid request type" }, { status: 400 });
     }
 
-    const supabase = createClient();
+    // Use service role — bypasses RLS, safe because this is a server-side API route
+    const supabase = createAdminClient();
 
     // Block duplicate active requests (pending or approved) from same mobile
     const { data: existing } = await supabase
