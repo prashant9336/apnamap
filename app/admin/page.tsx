@@ -190,6 +190,24 @@ export default function AdminPage() {
     <div className="p-4">
       <h2 className="text-lg font-bold mb-4">Admin Panel</h2>
 
+      {/* Quick link to vendor requests */}
+      <Link
+        href="/admin/vendor-requests"
+        style={{
+          display: "flex", alignItems: "center", gap: 10,
+          padding: "12px 14px", borderRadius: 12, marginBottom: 16,
+          background: "rgba(255,94,26,0.10)", border: "1px solid rgba(255,94,26,0.30)",
+          textDecoration: "none",
+        }}
+      >
+        <span style={{ fontSize: 20 }}>🏪</span>
+        <div>
+          <p style={{ fontWeight: 700, fontSize: 14, color: "#FF5E1A", margin: 0 }}>Vendor Requests</p>
+          <p style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", margin: 0 }}>Review pending vendor onboarding requests</p>
+        </div>
+        <span style={{ marginLeft: "auto", color: "rgba(255,255,255,0.40)", fontSize: 16 }}>→</span>
+      </Link>
+
       <input
         placeholder="Search..."
         value={query}
