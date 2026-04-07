@@ -1,42 +1,77 @@
 "use client";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
-/*
- * ─── SMTP SETUP (action required in Supabase dashboard) ─────────────
- * Root cause: Supabase's shared email relay is rate-limited and lands in
- * Gmail Promotions / Spam in production.
- *
- * Fix — use Resend (free tier: 3k emails/mo, 100/day):
- *
- * 1. Create account at resend.com → get API key
- * 2. Supabase Dashboard → Settings → Auth → SMTP Settings
- *    Host:     smtp.resend.com
- *    Port:     465
- *    Username: resend
- *    Password: <your-resend-api-key>
- *    Sender:   ApnaMap <noreply@yourdomain.com>
- * 3. Verify your domain in Resend (add 3 DNS records)
- * 4. Test by signing up with a real email
- *
- * Alternative: Gmail SMTP (less reliable, daily limits)
- *    Host:     smtp.gmail.com
- *    Port:     587
- *    Username: your.gmail@gmail.com
- *    Password: <Gmail App Password — not your main password>
- * ────────────────────────────────────────────────────────────────────
- */
+const S = {
+  pg:    { minHeight:"100vh", display:"flex", flexDirection:"column" as const, alignItems:"center", justifyContent:"center", padding:"24px 20px", background:"#05070C" },
+  card:  { width:"100%", maxWidth:360 },
+  input: { width:"100%", padding:"13px 14px", borderRadius:12, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", color:"#F2F5FF", fontSize:15, outline:"none", fontFamily:"'DM Sans',sans-serif", display:"block", marginBottom:12, boxSizing:"border-box" as const },
+  btn:   (dis:boolean): React.CSSProperties => ({ width:"100%", padding:"14px", borderRadius:12, background:dis?"rgba(255,94,26,0.5)":"#FF5E1A", color:"#fff", border:"none", cursor:dis?"not-allowed":"pointer", fontSize:15, fontWeight:700, fontFamily:"'DM Sans',sans-serif", boxShadow:dis?"none":"0 0 24px rgba(255,94,26,0.35)" }),
+  label: { display:"block" as const, fontSize:11, fontWeight:700, color:"rgba(255,255,255,0.40)", textTransform:"uppercase" as const, letterSpacing:"0.8px", marginBottom:6 },
+  err:   { padding:"10px 13px", borderRadius:10, background:"rgba(239,68,68,0.10)", border:"1px solid rgba(239,68,68,0.22)", color:"#F87171", fontSize:12, marginBottom:14 },
+};
 
-export default function SignupPage() {
-  const [name,     setName]     = useState("");
-  const [email,    setEmail]    = useState("");
-  const [password, setPassword] = useState("");
-  const [role] = useState<"customer">("customer");
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState("");
-  const [done,     setDone]     = useState(false);
+/* ── Step 1 — Role picker ─────────────────────────────────────── */
+function RolePicker({ onCustomer }: { onCustomer: () => void }) {
+  return (
+    <div style={S.pg}>
+      <div style={S.card}>
+        <div style={{ textAlign:"center", marginBottom:36 }}>
+          <div style={{ width:52, height:52, borderRadius:14, background:"#FF5E1A", display:"flex", alignItems:"center", justifyContent:"center", fontSize:24, margin:"0 auto 14px", boxShadow:"0 0 28px rgba(255,94,26,0.45)" }}>
+            📍
+          </div>
+          <h1 style={{ fontFamily:"'Syne',sans-serif", fontSize:22, fontWeight:900, color:"#F2F5FF", letterSpacing:"-0.4px", marginBottom:6 }}>
+            Join ApnaMap
+          </h1>
+          <p style={{ fontSize:13, color:"rgba(255,255,255,0.40)" }}>
+            Who are you signing up as?
+          </p>
+        </div>
+
+        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          {/* Customer */}
+          <button
+            onClick={onCustomer}
+            style={{ width:"100%", padding:"18px 16px", borderRadius:14, border:"1.5px solid rgba(255,255,255,0.10)", background:"rgba(255,255,255,0.04)", cursor:"pointer", textAlign:"left" as const, display:"flex", alignItems:"center", gap:14 }}
+          >
+            <span style={{ fontSize:28, flexShrink:0 }}>👤</span>
+            <div>
+              <p style={{ fontFamily:"'Syne',sans-serif", fontSize:15, fontWeight:800, color:"#F2F5FF", margin:"0 0 3px" }}>Customer</p>
+              <p style={{ fontSize:12, color:"rgba(255,255,255,0.38)", margin:0 }}>Browse shops, save offers, explore nearby deals</p>
+            </div>
+          </button>
+
+          {/* Vendor */}
+          <button
+            onClick={() => { window.location.href = "/vendor/join"; }}
+            style={{ width:"100%", padding:"18px 16px", borderRadius:14, border:"1.5px solid rgba(255,94,26,0.35)", background:"rgba(255,94,26,0.07)", cursor:"pointer", textAlign:"left" as const, display:"flex", alignItems:"center", gap:14 }}
+          >
+            <span style={{ fontSize:28, flexShrink:0 }}>🏪</span>
+            <div>
+              <p style={{ fontFamily:"'Syne',sans-serif", fontSize:15, fontWeight:800, color:"#FF5E1A", margin:"0 0 3px" }}>Shop Owner / Vendor</p>
+              <p style={{ fontSize:12, color:"rgba(255,255,255,0.38)", margin:0 }}>List your shop, post offers, manage customers</p>
+            </div>
+          </button>
+        </div>
+
+        <p style={{ textAlign:"center", fontSize:13, marginTop:24, color:"rgba(255,255,255,0.40)" }}>
+          Already have an account?{" "}
+          <Link href="/auth/login" style={{ color:"#FF5E1A", fontWeight:600, textDecoration:"none" }}>Sign in</Link>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ── Step 2 — Customer signup form ───────────────────────────── */
+function CustomerSignupForm({ onBack }: { onBack: () => void }) {
+  const [name,      setName]      = useState("");
+  const [email,     setEmail]     = useState("");
+  const [password,  setPassword]  = useState("");
+  const [loading,   setLoading]   = useState(false);
+  const [error,     setError]     = useState("");
+  const [done,      setDone]      = useState(false);
   const [resending, setResending] = useState(false);
   const [resent,    setResent]    = useState(false);
   const sb = createClient();
@@ -47,7 +82,7 @@ export default function SignupPage() {
     setLoading(true); setError("");
     const { error: err } = await sb.auth.signUp({
       email, password,
-      options: { data: { name, role } },
+      options: { data: { name, role: "customer" } },
     });
     if (err) { setError(err.message); setLoading(false); return; }
     setDone(true); setLoading(false);
@@ -59,25 +94,13 @@ export default function SignupPage() {
     await sb.auth.resend({ type: "signup", email });
     setResending(false);
     setResent(true);
-    // Allow resend again after 60 s
     setTimeout(() => setResent(false), 60_000);
   }
 
-  const S = {
-    pg:    { minHeight:"100vh", display:"flex", flexDirection:"column" as const, alignItems:"center", justifyContent:"center", padding:20, background:"#05070C" },
-    card:  { width:"100%", maxWidth:360 },
-    input: { width:"100%", padding:"13px 14px", borderRadius:12, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", color:"#F2F5FF", fontSize:15, outline:"none", fontFamily:"'DM Sans',sans-serif", display:"block", marginBottom:12 },
-    btn:   (dis:boolean) => ({ width:"100%", padding:"14px", borderRadius:12, background:dis?"rgba(255,94,26,0.5)":"#FF5E1A", color:"#fff", border:"none", cursor:"pointer", fontSize:15, fontWeight:700, fontFamily:"'DM Sans',sans-serif" }),
-    label: { display:"block" as const, fontSize:11, fontWeight:700, color:"rgba(255,255,255,0.40)", textTransform:"uppercase" as const, letterSpacing:"0.8px", marginBottom:6 },
-    err:   { padding:"10px 13px", borderRadius:10, background:"rgba(239,68,68,0.10)", border:"1px solid rgba(239,68,68,0.22)", color:"#F87171", fontSize:12, marginBottom:14 },
-  };
-
   if (done) return (
-    <div style={{ ...S.pg }}>
+    <div style={S.pg}>
       <div style={{ ...S.card, textAlign:"center" }}>
-        {/* Icon */}
         <div style={{ fontSize:52, marginBottom:16 }}>📧</div>
-
         <h2 style={{ fontFamily:"'Syne',sans-serif", fontSize:20, fontWeight:900, color:"#F2F5FF", marginBottom:8 }}>
           Check your email
         </h2>
@@ -86,55 +109,27 @@ export default function SignupPage() {
           <strong style={{ color:"#F2F5FF" }}>{email}</strong>.
           <br />Click it to activate your account.
         </p>
-
-        {/* Spam warning — the most common reason emails don't arrive */}
-        <div style={{
-          padding: "10px 14px", borderRadius: 10, marginBottom: 20,
-          background: "rgba(232,168,0,0.08)",
-          border: "1px solid rgba(232,168,0,0.22)",
-          textAlign: "left",
-        }}>
-          <p style={{ fontSize:12, color:"#E8A800", fontWeight:700, margin:"0 0 4px" }}>
-            📬 Not seeing it?
-          </p>
+        <div style={{ padding:"10px 14px", borderRadius:10, marginBottom:20, background:"rgba(232,168,0,0.08)", border:"1px solid rgba(232,168,0,0.22)", textAlign:"left" }}>
+          <p style={{ fontSize:12, color:"#E8A800", fontWeight:700, margin:"0 0 4px" }}>📬 Not seeing it?</p>
           <p style={{ fontSize:12, color:"rgba(255,255,255,0.50)", margin:0, lineHeight:1.6 }}>
             Check your <strong style={{ color:"rgba(255,255,255,0.70)" }}>Spam</strong>,{" "}
             <strong style={{ color:"rgba(255,255,255,0.70)" }}>Promotions</strong>, or{" "}
             <strong style={{ color:"rgba(255,255,255,0.70)" }}>Updates</strong> folder.
-            Gmail often filters new senders there.
           </p>
         </div>
-
-        {/* Resend button */}
         <button
           onClick={handleResend}
           disabled={resending || resent}
-          style={{
-            width: "100%", padding: "12px", borderRadius: 12, marginBottom: 12,
-            background: resent ? "rgba(31,187,90,0.12)" : "rgba(255,255,255,0.06)",
-            border: resent ? "1px solid rgba(31,187,90,0.25)" : "1px solid rgba(255,255,255,0.10)",
-            color: resent ? "#1FBB5A" : "rgba(255,255,255,0.55)",
-            fontSize: 13, fontWeight: 700, cursor: resent ? "default" : "pointer",
-          }}
+          style={{ width:"100%", padding:"12px", borderRadius:12, marginBottom:12, background:resent?"rgba(31,187,90,0.12)":"rgba(255,255,255,0.06)", border:resent?"1px solid rgba(31,187,90,0.25)":"1px solid rgba(255,255,255,0.10)", color:resent?"#1FBB5A":"rgba(255,255,255,0.55)", fontSize:13, fontWeight:700, cursor:resent?"default":"pointer" }}
         >
           {resending ? "Sending…" : resent ? "✓ Email resent!" : "Resend confirmation email"}
         </button>
-
-        <Link href="/auth/login" style={{
-          display:"block", padding:"13px", borderRadius:12,
-          background:"#FF5E1A", color:"#fff",
-          fontSize:13, fontWeight:700, textDecoration:"none",
-          boxShadow:"0 0 24px rgba(255,94,26,0.35)",
-        }}>
+        <Link href="/auth/login" style={{ display:"block", padding:"13px", borderRadius:12, background:"#FF5E1A", color:"#fff", fontSize:13, fontWeight:700, textDecoration:"none", boxShadow:"0 0 24px rgba(255,94,26,0.35)" }}>
           Go to Login →
         </Link>
-
-        <p style={{ fontSize:11, color:"rgba(255,255,255,0.22)", marginTop:16, lineHeight:1.6 }}>
+        <p style={{ fontSize:11, color:"rgba(255,255,255,0.22)", marginTop:16 }}>
           Wrong email?{" "}
-          <button
-            onClick={() => { setDone(false); setEmail(""); setResent(false); }}
-            style={{ background:"none", border:"none", color:"rgba(255,255,255,0.40)", fontSize:11, cursor:"pointer", textDecoration:"underline", padding:0 }}
-          >
+          <button onClick={() => { setDone(false); setEmail(""); setResent(false); }} style={{ background:"none", border:"none", color:"rgba(255,255,255,0.40)", fontSize:11, cursor:"pointer", textDecoration:"underline", padding:0 }}>
             Start over
           </button>
         </p>
@@ -145,23 +140,14 @@ export default function SignupPage() {
   return (
     <div style={S.pg}>
       <div style={S.card}>
+        <button onClick={onBack} style={{ background:"none", border:"none", cursor:"pointer", color:"rgba(255,255,255,0.50)", fontSize:22, marginBottom:24, padding:0, display:"flex", alignItems:"center", gap:6 }}>
+          ← <span style={{ fontSize:13, fontWeight:600 }}>Back</span>
+        </button>
+
         <div style={{ textAlign:"center", marginBottom:28 }}>
           <div style={{ width:52, height:52, borderRadius:14, background:"#FF5E1A", display:"flex", alignItems:"center", justifyContent:"center", fontSize:24, margin:"0 auto 14px", boxShadow:"0 0 24px rgba(255,94,26,0.45)" }}>📍</div>
-          <h1 style={{ fontFamily:"'Syne',sans-serif", fontSize:22, fontWeight:900, color:"#F2F5FF", letterSpacing:"-0.4px", marginBottom:4 }}>Join ApnaMap</h1>
-          <p style={{ fontSize:13, color:"rgba(255,255,255,0.40)" }}>Discover your city, unlock offers</p>
-        </div>
-
-        {/* Role toggle — vendor goes to dedicated join flow */}
-        <div style={{ display:"flex", borderRadius:12, padding:4, background:"rgba(255,255,255,0.06)", marginBottom:20 }}>
-          <button style={{ flex:1, padding:"10px", borderRadius:9, border:"none", cursor:"default", fontSize:13, fontWeight:600, fontFamily:"'DM Sans',sans-serif",
-            background: "#FF5E1A", color: "#fff" }}>
-            👤 Customer
-          </button>
-          <button onClick={() => { window.location.href = "/vendor/join"; }} style={{ flex:1, padding:"10px", borderRadius:9, border:"none", cursor:"pointer", fontSize:13, fontWeight:600, fontFamily:"'DM Sans',sans-serif", transition:"all .2s",
-            background: "transparent",
-            color: "rgba(255,255,255,0.45)" }}>
-            🏪 Shop Owner →
-          </button>
+          <h1 style={{ fontFamily:"'Syne',sans-serif", fontSize:22, fontWeight:900, color:"#F2F5FF", letterSpacing:"-0.4px", marginBottom:4 }}>Create Account</h1>
+          <p style={{ fontSize:13, color:"rgba(255,255,255,0.40)" }}>Join as a customer</p>
         </div>
 
         <form onSubmit={handleSignup}>
@@ -184,4 +170,12 @@ export default function SignupPage() {
       </div>
     </div>
   );
+}
+
+/* ── Page root ───────────────────────────────────────────────── */
+export default function SignupPage() {
+  const [step, setStep] = useState<"pick" | "customer">("pick");
+
+  if (step === "customer") return <CustomerSignupForm onBack={() => setStep("pick")} />;
+  return <RolePicker onCustomer={() => setStep("customer")} />;
 }
