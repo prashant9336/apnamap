@@ -22,6 +22,24 @@ export async function POST(req: NextRequest) {
     const email = vendorEmail(digits);
     const admin = createAdminClient();
 
+    // Require OTP verification within the last 15 minutes
+    const otpCutoff = new Date(Date.now() - 15 * 60_000).toISOString();
+    const { data: otpSession } = await admin
+      .from("otp_sessions")
+      .select("id")
+      .eq("mobile", digits)
+      .eq("verified", true)
+      .gt("expires_at", otpCutoff)
+      .limit(1)
+      .maybeSingle();
+
+    if (!otpSession) {
+      return NextResponse.json(
+        { error: "Phone verification required. Please verify your mobile number first.", otpRequired: true },
+        { status: 403 }
+      );
+    }
+
     // Find an approved request for this mobile
     const { data: vr, error: vrErr } = await admin
       .from("vendor_requests")

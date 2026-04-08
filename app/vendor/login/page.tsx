@@ -70,8 +70,19 @@ function VendorLoginForm() {
         return;
       }
 
+      // Check if vendor must change temporary password
+      const { data: vendorRow } = await supabase
+        .from("vendors")
+        .select("must_change_password")
+        .eq("id", data.user.id)
+        .maybeSingle();
+
       // Full-page navigation so session cookies are applied before Next.js renders
-      window.location.href = "/my-shop";
+      if (vendorRow?.must_change_password) {
+        window.location.href = "/vendor/change-password";
+      } else {
+        window.location.href = "/my-shop";
+      }
     } catch {
       setError("Network error. Please try again.");
       setLoading(false);

@@ -190,23 +190,31 @@ export default function AdminPage() {
     <div className="p-4">
       <h2 className="text-lg font-bold mb-4">Admin Panel</h2>
 
-      {/* Quick link to vendor requests */}
-      <Link
-        href="/admin/vendor-requests"
-        style={{
-          display: "flex", alignItems: "center", gap: 10,
-          padding: "12px 14px", borderRadius: 12, marginBottom: 16,
-          background: "rgba(255,94,26,0.10)", border: "1px solid rgba(255,94,26,0.30)",
-          textDecoration: "none",
-        }}
-      >
-        <span style={{ fontSize: 20 }}>🏪</span>
-        <div>
-          <p style={{ fontWeight: 700, fontSize: 14, color: "#FF5E1A", margin: 0 }}>Vendor Requests</p>
-          <p style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", margin: 0 }}>Review pending vendor onboarding requests</p>
-        </div>
-        <span style={{ marginLeft: "auto", color: "rgba(255,255,255,0.40)", fontSize: 16 }}>→</span>
-      </Link>
+      {/* Quick links */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
+        <Link
+          href="/admin/onboard-vendor"
+          style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 12, background: "rgba(255,94,26,0.10)", border: "1px solid rgba(255,94,26,0.30)", textDecoration: "none" }}
+        >
+          <span style={{ fontSize: 20 }}>⚡</span>
+          <div>
+            <p style={{ fontWeight: 700, fontSize: 14, color: "#FF5E1A", margin: 0 }}>Onboard Vendor</p>
+            <p style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", margin: 0 }}>Create shop + offer + credentials on the spot</p>
+          </div>
+          <span style={{ marginLeft: "auto", color: "rgba(255,255,255,0.40)", fontSize: 16 }}>→</span>
+        </Link>
+        <Link
+          href="/admin/vendor-requests"
+          style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", textDecoration: "none" }}
+        >
+          <span style={{ fontSize: 20 }}>🏪</span>
+          <div>
+            <p style={{ fontWeight: 700, fontSize: 14, color: "rgba(255,255,255,0.70)", margin: 0 }}>Vendor Requests</p>
+            <p style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", margin: 0 }}>Review pending vendor onboarding requests</p>
+          </div>
+          <span style={{ marginLeft: "auto", color: "rgba(255,255,255,0.40)", fontSize: 16 }}>→</span>
+        </Link>
+      </div>
 
       <input
         placeholder="Search..."
