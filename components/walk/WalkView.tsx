@@ -15,15 +15,16 @@ import type { ScoredOffer } from "@/lib/deal-engine";
 import type { WalkLocality, Offer } from "@/types";
 
 interface Props {
-  localities:   WalkLocality[];
-  loading:      boolean;
-  userLat:      number;
-  userLng:      number;
-  userLocality: string;
-  gpsError?:    string | null;
+  localities:         WalkLocality[];
+  nearestLocalityIdx: number;
+  loading:            boolean;
+  userLat:            number;
+  userLng:            number;
+  userLocality:       string;
+  gpsError?:          string | null;
 }
 
-export default function WalkView({ localities, loading, userLat, userLng, userLocality, gpsError }: Props) {
+export default function WalkView({ localities, nearestLocalityIdx, loading, userLat, userLng, userLocality, gpsError }: Props) {
   const { t }        = useI18n();
   const scrollRef    = useRef<HTMLDivElement>(null);
   const [activeIdx,  setAI]       = useState(0);
@@ -260,6 +261,7 @@ export default function WalkView({ localities, loading, userLat, userLng, userLo
       <LocalityIndicator
         localities={rankedLocalities.map(l => l.name)}
         activeIdx={activeIdx}
+        nearestIdx={nearestLocalityIdx}
         scrollProgress={scrollProgress}
         onLocality={scrollToLocality}
       />

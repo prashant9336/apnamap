@@ -5,6 +5,7 @@ import { useRef, useLayoutEffect, useCallback } from "react";
 interface Props {
   localities:      string[];
   activeIdx:       number;
+  nearestIdx?:     number;   // index of GPS-nearest locality — gets a 📍 pin
   /** Continuous 0-1 fraction of the scroll container's scrollable height. */
   scrollProgress:  number;
   onLocality?:     (index: number) => void;
@@ -39,6 +40,7 @@ interface Props {
 export default function LocalityIndicator({
   localities,
   activeIdx,
+  nearestIdx = 0,
   scrollProgress,
   onLocality,
 }: Props) {
@@ -155,6 +157,7 @@ export default function LocalityIndicator({
           {localities.map((name, i) => {
             const isDone    = i < activeIdx;
             const isCurrent = i === activeIdx;
+            const isNearest = i === nearestIdx;
             const short     = name.split(" ")[0].slice(0, 11);
 
             return (
@@ -174,15 +177,26 @@ export default function LocalityIndicator({
                   fontWeight: isCurrent ? 700 : 500,
                   lineHeight: 1,
                   whiteSpace: "nowrap",
-                  // Use transition on color only — no layout properties
                   transition: "color 160ms ease, font-size 160ms ease",
                   color: isCurrent
                     ? "#EDEEF5"
                     : isDone
                       ? "#1FBB5A"
                       : "rgba(255,255,255,0.28)",
+                  position: "relative",
                 }}
               >
+                {/* GPS "you are here" dot on nearest locality */}
+                {isNearest && (
+                  <span style={{
+                    position: "absolute",
+                    top: -5,
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    fontSize: "7px",
+                    lineHeight: 1,
+                  }}>📍</span>
+                )}
                 {short}
               </button>
             );
