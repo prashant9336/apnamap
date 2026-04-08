@@ -53,6 +53,8 @@ export async function POST(req: NextRequest) {
       category_id:  string;
       locality_id:  string;
       description?: string;
+      lat?:         number;
+      lng?:         number;
       offer: {
         title:          string;
         deal_type:      string;
@@ -122,8 +124,8 @@ export async function POST(req: NextRequest) {
       description: body.description?.trim() || null,
       phone:       phone,
       whatsapp:    phone,
-      lat:         parseFloat(process.env.NEXT_PUBLIC_DEFAULT_LAT ?? "25.4358"),
-      lng:         parseFloat(process.env.NEXT_PUBLIC_DEFAULT_LNG ?? "81.8463"),
+      lat:         body.lat  ?? parseFloat(process.env.NEXT_PUBLIC_DEFAULT_LAT ?? "25.4358"),
+      lng:         body.lng  ?? parseFloat(process.env.NEXT_PUBLIC_DEFAULT_LNG ?? "81.8463"),
       open_time:   "09:00",
       close_time:  "21:00",
       open_days:   ["mon","tue","wed","thu","fri","sat"],
