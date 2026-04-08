@@ -267,7 +267,7 @@ function OnboardTab({ localities, categories }: { localities: Meta[]; categories
         <button type="button" onClick={captureGPS} disabled={gpsLoading}
           style={{
             width: "100%", padding: "13px", borderRadius: 12, fontSize: 14, fontWeight: 700,
-            cursor: gpsLoading ? "wait" : "pointer", border: "none", fontFamily: "'DM Sans',sans-serif",
+            cursor: gpsLoading ? "wait" : "pointer", fontFamily: "'DM Sans',sans-serif",
             ...(lat
               ? { background: "rgba(31,187,90,0.10)", border: "1px solid rgba(31,187,90,0.30)", color: "#1FBB5A" }
               : { background: "rgba(255,94,26,0.08)", border: "1px dashed rgba(255,94,26,0.40)", color: "#FF5E1A" }),
