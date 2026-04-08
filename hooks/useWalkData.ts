@@ -41,12 +41,13 @@ export function useWalkData(
         const [locResult, shopsRes] = await Promise.all([
           supabase
             .from("localities")
-            .select("id, name, slug, lat, lng, type, zone, priority, city:cities(id, name, slug)")
+            .select("*, city:cities(id, name, slug)")
             .order("priority"),
           fetch(`/api/shops?lat=${lat}&lng=${lng}&radius=${radiusM}`, { cache: "no-store" }),
         ]);
 
         if (locResult.error) {
+          console.error("[useWalkData] localities fetch error:", locResult.error.message);
           setError(locResult.error.message);
           setLoading(false);
           return;
@@ -54,6 +55,7 @@ export function useWalkData(
 
         const json = await shopsRes.json();
         if (!shopsRes.ok) {
+          console.error("[useWalkData] shops fetch error:", json?.error);
           setError(json?.error || "Failed to load shops");
           setLoading(false);
           return;
