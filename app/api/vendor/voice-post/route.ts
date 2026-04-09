@@ -45,15 +45,17 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Verify vendor owns this shop
-  const { data: shop, error: shopErr } = await supabase
+  // Verify vendor owns this shop — use admin client to bypass RLS for the lookup
+  const { createAdminClient } = await import("@/lib/supabase/server");
+  const adminDb = createAdminClient();
+  const { data: shop } = await adminDb
     .from("shops")
     .select("id")
     .eq("id", shop_id)
     .eq("vendor_id", user.id)
-    .single();
+    .maybeSingle();
 
-  if (shopErr || !shop) {
+  if (!shop) {
     return NextResponse.json(
       { error: "Shop not found or not authorized" },
       { status: 403 },

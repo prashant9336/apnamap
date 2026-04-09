@@ -5,11 +5,18 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { createClient } from "@/lib/supabase/server";
 
 async function requireAdmin() {
+  // Use createClient() only to validate the session (reads cookies)
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  return (profile?.role ?? user.user_metadata?.role) === "admin" ? user : null;
+  const { data: { user }, error: userErr } = await supabase.auth.getUser();
+  if (userErr || !user) return null;
+
+  // Use admin client to read profiles (bypasses RLS — profile SELECT policy may not exist)
+  const admin = createAdminClient();
+  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
+
+  // Check role in priority order: DB profile → user_metadata → app_metadata
+  const role = profile?.role || user.user_metadata?.role || user.app_metadata?.role || "customer";
+  return role === "admin" ? user : null;
 }
 
 // GET /api/admin/offers?shop_id=X — all offers for a shop (including inactive/expired)

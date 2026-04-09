@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 
 /* ── GET /api/vendor/deals?shop_id=xxx ─────────────────────────────
    Returns the vendor's deals (all tiers) for a shop, most recent first.
@@ -12,13 +12,14 @@ export async function GET(req: NextRequest) {
   const shopId = new URL(req.url).searchParams.get("shop_id");
   if (!shopId) return NextResponse.json({ error: "shop_id required" }, { status: 400 });
 
-  // Verify ownership before exposing analytics
-  const { data: shop } = await supabase
+  // Verify ownership — admin client bypasses RLS for the lookup
+  const adminDb = createAdminClient();
+  const { data: shop } = await adminDb
     .from("shops")
     .select("id")
     .eq("id", shopId)
     .eq("vendor_id", user.id)
-    .single();
+    .maybeSingle();
   if (!shop) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { data, error } = await supabase
@@ -65,13 +66,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "shop_id and title required" }, { status: 400 });
   }
 
-  // Verify ownership
-  const { data: shop } = await supabase
+  // Verify ownership — admin client bypasses RLS for the lookup
+  const adminDb = createAdminClient();
+  const { data: shop } = await adminDb
     .from("shops")
     .select("id, name")
     .eq("id", shop_id)
     .eq("vendor_id", user.id)
-    .single();
+    .maybeSingle();
   if (!shop) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   // Map deal_type → tier
@@ -146,12 +148,13 @@ export async function PATCH(req: NextRequest) {
   const { id, title, description, is_active } = body;
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
-  // Verify ownership via shop join
-  const { data: existing } = await supabase
+  // Verify ownership via shop join — admin client bypasses RLS
+  const adminDb = createAdminClient();
+  const { data: existing } = await adminDb
     .from("offers")
     .select("id, shop:shops(vendor_id)")
     .eq("id", id)
-    .single();
+    .maybeSingle();
 
   const shopRow = existing?.shop as { vendor_id: string } | { vendor_id: string }[] | null;
   const ownerId = Array.isArray(shopRow) ? shopRow[0]?.vendor_id : shopRow?.vendor_id;
