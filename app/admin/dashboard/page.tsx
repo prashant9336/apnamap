@@ -794,15 +794,20 @@ function OfferFormModal({ shopId, existing, onClose, onSaved }:
   { shopId: string; existing: any | null; onClose: () => void; onSaved: (o: any) => void }) {
   const isEdit = !!existing;
   const [form, setForm] = useState({
-    title:          existing?.title          ?? "",
-    description:    existing?.description    ?? "",
-    discount_type:  existing?.discount_type  ?? "other",
-    discount_value: existing?.discount_value != null ? String(existing.discount_value) : "",
-    tier:           existing?.tier           ?? 2,
-    coupon_code:    existing?.coupon_code    ?? "",
-    expiry_hours:   0,
-    is_active:      existing?.is_active      ?? true,
-    is_featured:    existing?.is_featured    ?? false,
+    title:            existing?.title            ?? "",
+    description:      existing?.description      ?? "",
+    discount_type:    existing?.discount_type    ?? "other",
+    discount_value:   existing?.discount_value   != null ? String(existing.discount_value) : "",
+    tier:             existing?.tier             ?? 2,
+    coupon_code:      existing?.coupon_code      ?? "",
+    badge_override:   existing?.badge_override   ?? "",
+    expiry_hours:     0,
+    is_active:        existing?.is_active        ?? true,
+    is_featured:      existing?.is_featured      ?? false,
+    is_flash:         existing?.is_flash         ?? false,
+    is_big_deal:      existing?.is_big_deal      ?? false,
+    is_recommended:   existing?.is_recommended   ?? false,
+    manual_priority:  String(existing?.manual_priority ?? "0"),
   });
   const up = (k: string, v: unknown) => setForm(f => ({ ...f, [k]: v }));
   const [saving, setSaving] = useState(false);
@@ -816,19 +821,23 @@ function OfferFormModal({ shopId, existing, onClose, onSaved }:
     const endsAt = !isEdit && form.expiry_hours > 0
       ? new Date(Date.now() + form.expiry_hours * 3_600_000).toISOString() : undefined;
 
+    const sharedFields = {
+      title:           form.title,
+      description:     form.description,
+      discount_type:   form.discount_type,
+      discount_value:  form.discount_value ? parseFloat(form.discount_value) : null,
+      tier:            form.tier,
+      coupon_code:     form.coupon_code || null,
+      badge_override:  form.badge_override || null,
+      is_featured:     form.is_featured,
+      is_flash:        form.is_flash,
+      is_big_deal:     form.is_big_deal,
+      is_recommended:  form.is_recommended,
+      manual_priority: form.manual_priority ? parseInt(form.manual_priority) : 0,
+    };
     const payload = isEdit
-      ? { offer_id: existing.id, action: "edit", fields: {
-          title: form.title, description: form.description,
-          discount_type: form.discount_type,
-          discount_value: form.discount_value ? parseFloat(form.discount_value) : null,
-          tier: form.tier, coupon_code: form.coupon_code,
-          is_featured: form.is_featured, is_active: form.is_active,
-        }}
-      : { shop_id: shopId, title: form.title, description: form.description,
-          discount_type: form.discount_type,
-          discount_value: form.discount_value ? parseFloat(form.discount_value) : null,
-          tier: form.tier, coupon_code: form.coupon_code,
-          is_featured: form.is_featured, ends_at: endsAt, source_type: "admin_manual" };
+      ? { offer_id: existing.id, action: "edit", fields: { ...sharedFields, is_active: form.is_active } }
+      : { shop_id: shopId, ...sharedFields, is_active: true, ends_at: endsAt, source_type: "admin_manual" };
 
     const r = await fetch("/api/admin/offers", {
       method: isEdit ? "PATCH" : "POST",
@@ -872,15 +881,27 @@ function OfferFormModal({ shopId, existing, onClose, onSaved }:
             </div>
           )}
           <div><label style={LBL}>Coupon Code (optional)</label><input value={form.coupon_code} onChange={e => up("coupon_code", e.target.value)} style={INP} placeholder="e.g. SAVE20" /></div>
-          <div style={{ display: "flex", gap: 10 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: "rgba(255,255,255,0.60)" }}>
-              <input type="checkbox" checked={form.is_featured} onChange={e => up("is_featured", e.target.checked)} /> Featured
-            </label>
-            {isEdit && (
-              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: "rgba(255,255,255,0.60)" }}>
-                <input type="checkbox" checked={form.is_active} onChange={e => up("is_active", e.target.checked)} /> Active
-              </label>
-            )}
+          <div><label style={LBL}>Badge Override (optional)</label><input value={form.badge_override} onChange={e => up("badge_override", e.target.value)} style={INP} placeholder="e.g. Staff Pick, Today Only…" /></div>
+          {/* ── Admin badge overrides ── */}
+          <div>
+            <p style={{ fontSize: 11, fontWeight: 800, color: "rgba(255,255,255,0.30)", letterSpacing: "0.8px", textTransform: "uppercase" as const, marginBottom: 10 }}>Force Labels</p>
+            <div style={{ display: "flex", gap: 14, flexWrap: "wrap" as const, marginBottom: 10 }}>
+              {([
+                { key: "is_big_deal",   label: "🔥 Force Big Deal" },
+                { key: "is_flash",      label: "⚡ Force Flash" },
+                { key: "is_recommended",label: "⭐ Recommended" },
+                { key: "is_featured",   label: "📌 Featured" },
+                ...(isEdit ? [{ key: "is_active", label: "● Active" }] : []),
+              ] as const).map(({ key, label }) => (
+                <label key={key} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: (form as any)[key] ? "#F2F5FF" : "rgba(255,255,255,0.50)" }}>
+                  <input type="checkbox" checked={(form as any)[key] as boolean} onChange={e => up(key, e.target.checked)} /> {label}
+                </label>
+              ))}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div><label style={LBL}>Priority (0–10)</label><input type="number" min={0} max={10} value={form.manual_priority} onChange={e => up("manual_priority", e.target.value)} style={INP} placeholder="0" /></div>
+            </div>
+            <p style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", marginTop: 6 }}>Force Big Deal / Flash overrides the automatic deal engine classification.</p>
           </div>
           {error && <div style={ERR}>{error}</div>}
           <div style={{ display: "flex", gap: 10 }}>
@@ -897,19 +918,26 @@ function OfferFormModal({ shopId, existing, onClose, onSaved }:
 function ShopEditModal({ shop, localities, categories, onClose, onSaved }:
   { shop: any; localities: Meta[]; categories: Meta[]; onClose: () => void; onSaved: (s: any) => void }) {
   const [form, setForm] = useState({
-    name:        shop.name        ?? "",
-    description: shop.description ?? "",
-    phone:       shop.phone       ?? "",
-    whatsapp:    shop.whatsapp    ?? "",
-    address:     shop.address     ?? "",
-    category_id: shop.category_id ?? "",
-    locality_id: shop.locality_id ?? "",
-    open_time:   shop.open_time   ?? "",
-    close_time:  shop.close_time  ?? "",
-    is_active:   shop.is_active   ?? true,
-    is_featured: shop.is_featured ?? false,
-    lat:         String(shop.lat  ?? ""),
-    lng:         String(shop.lng  ?? ""),
+    name:                 shop.name                 ?? "",
+    description:          shop.description          ?? "",
+    phone:                shop.phone                ?? "",
+    whatsapp:             shop.whatsapp             ?? "",
+    address:              shop.address              ?? "",
+    category_id:          shop.category_id          ?? "",
+    locality_id:          shop.locality_id          ?? "",
+    open_time:            shop.open_time            ?? "",
+    close_time:           shop.close_time           ?? "",
+    is_active:            shop.is_active            ?? true,
+    is_featured:          shop.is_featured          ?? false,
+    is_boosted:           shop.is_boosted           ?? false,
+    is_trending:          shop.is_trending          ?? false,
+    is_recommended:       shop.is_recommended       ?? false,
+    is_hidden_gem:        shop.is_hidden_gem        ?? false,
+    manual_priority:      String(shop.manual_priority ?? "0"),
+    display_rating:       shop.display_rating       != null ? String(shop.display_rating)       : "",
+    display_rating_count: shop.display_rating_count != null ? String(shop.display_rating_count) : "",
+    lat:                  String(shop.lat  ?? ""),
+    lng:                  String(shop.lng  ?? ""),
   });
   const up = (k: string, v: unknown) => setForm(f => ({ ...f, [k]: v }));
   const [saving, setSaving] = useState(false);
@@ -927,8 +955,11 @@ function ShopEditModal({ shop, localities, categories, onClose, onSaved }:
         action: "edit",
         fields: {
           ...form,
-          lat: form.lat ? parseFloat(form.lat) : undefined,
-          lng: form.lng ? parseFloat(form.lng) : undefined,
+          lat:                  form.lat                  ? parseFloat(form.lat)                  : undefined,
+          lng:                  form.lng                  ? parseFloat(form.lng)                  : undefined,
+          manual_priority:      form.manual_priority      ? parseInt(form.manual_priority)         : 0,
+          display_rating:       form.display_rating       ? parseFloat(form.display_rating)        : null,
+          display_rating_count: form.display_rating_count ? parseInt(form.display_rating_count)    : null,
         },
       }),
     });
@@ -970,14 +1001,55 @@ function ShopEditModal({ shop, localities, categories, onClose, onSaved }:
             <div><label style={LBL}>Lat</label><input value={form.lat} onChange={e => up("lat", e.target.value)} style={INP} placeholder="25.4484" /></div>
             <div><label style={LBL}>Lng</label><input value={form.lng} onChange={e => up("lng", e.target.value)} style={INP} placeholder="81.8428" /></div>
           </div>
-          <div style={{ display: "flex", gap: 16 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: "rgba(255,255,255,0.60)" }}>
-              <input type="checkbox" checked={form.is_active} onChange={e => up("is_active", e.target.checked)} /> Active
-            </label>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: "rgba(255,255,255,0.60)" }}>
-              <input type="checkbox" checked={form.is_featured} onChange={e => up("is_featured", e.target.checked)} /> Featured
-            </label>
+          {/* ── Visibility ── */}
+          <div>
+            <p style={{ fontSize: 11, fontWeight: 800, color: "rgba(255,255,255,0.30)", letterSpacing: "0.8px", textTransform: "uppercase" as const, marginBottom: 10 }}>Visibility</p>
+            <div style={{ display: "flex", gap: 16, flexWrap: "wrap" as const }}>
+              {([
+                { key: "is_active",   label: "● Active" },
+                { key: "is_featured", label: "⭐ Featured" },
+              ] as const).map(({ key, label }) => (
+                <label key={key} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: "rgba(255,255,255,0.65)" }}>
+                  <input type="checkbox" checked={form[key] as boolean} onChange={e => up(key, e.target.checked)} /> {label}
+                </label>
+              ))}
+            </div>
           </div>
+
+          {/* ── Boost & Badges ── */}
+          <div>
+            <p style={{ fontSize: 11, fontWeight: 800, color: "rgba(255,255,255,0.30)", letterSpacing: "0.8px", textTransform: "uppercase" as const, marginBottom: 10 }}>Boost &amp; Badges</p>
+            <div style={{ display: "flex", gap: 14, flexWrap: "wrap" as const, marginBottom: 12 }}>
+              {([
+                { key: "is_boosted",     label: "🚀 Boosted",     tip: "Ranks higher in walk view" },
+                { key: "is_trending",    label: "🔥 Trending",    tip: "Shows trending badge" },
+                { key: "is_recommended", label: "⭐ Recommended", tip: "Shows recommended badge" },
+                { key: "is_hidden_gem",  label: "💎 Hidden Gem",  tip: "Shows hidden gem badge" },
+              ] as const).map(({ key, label, tip }) => (
+                <label key={key} title={tip} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: form[key] ? "#F2F5FF" : "rgba(255,255,255,0.50)" }}>
+                  <input type="checkbox" checked={form[key] as boolean} onChange={e => up(key, e.target.checked)} /> {label}
+                </label>
+              ))}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+              <div>
+                <label style={LBL}>Priority (0–10)</label>
+                <input type="number" min={0} max={10} value={form.manual_priority} onChange={e => up("manual_priority", e.target.value)} style={INP} placeholder="0" />
+              </div>
+              <div>
+                <label style={LBL}>Display Rating</label>
+                <input type="number" step="0.1" min={0} max={5} value={form.display_rating} onChange={e => up("display_rating", e.target.value)} style={INP} placeholder="auto" />
+              </div>
+              <div>
+                <label style={LBL}>Rating Count</label>
+                <input type="number" min={0} value={form.display_rating_count} onChange={e => up("display_rating_count", e.target.value)} style={INP} placeholder="auto" />
+              </div>
+            </div>
+            <p style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", marginTop: 6 }}>
+              Priority 1–10 pushes shop above others. Display rating overrides the computed avg — leave blank to use real rating.
+            </p>
+          </div>
+
           {error && <div style={ERR}>{error}</div>}
           <div style={{ display: "flex", gap: 10 }}>
             <button type="button" onClick={onClose} style={{ flex: 1, padding: "13px", borderRadius: 12, background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.55)", border: "none", cursor: "pointer", fontSize: 13, fontFamily: "'DM Sans',sans-serif" }}>Cancel</button>

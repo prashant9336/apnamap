@@ -65,6 +65,14 @@ export function scoreOffer(
   /* 7. Featured boost */
   if (offer.is_featured) score += 8;
 
+  /* 8. Admin-forced labels */
+  if (offer.is_big_deal)  score += 15;
+  if (offer.is_flash)     score += 12;
+  if (offer.is_recommended) score += 6;
+
+  /* 9. Manual priority: each point is worth ~5 score units */
+  score += (offer.manual_priority ?? 0) * 5;
+
   return Math.round(score * 10) / 10;
 }
 

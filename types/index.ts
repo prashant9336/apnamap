@@ -77,6 +77,14 @@ export interface Shop {
   is_approved: boolean;
   is_active: boolean;
   is_featured: boolean;
+  // admin badge overrides
+  is_boosted: boolean;
+  is_recommended: boolean;
+  is_hidden_gem: boolean;
+  is_trending: boolean;
+  manual_priority: number;
+  display_rating: number | null;
+  display_rating_count: number | null;
   open_time: string | null;
   close_time: string | null;
   open_days: string[];
@@ -106,6 +114,16 @@ export interface Offer {
   ends_at: string | null;
   is_active: boolean;
   is_featured: boolean;
+  // admin badge overrides
+  is_flash: boolean;
+  is_big_deal: boolean;
+  is_recommended: boolean;
+  manual_priority: number;
+  badge_override: string | null;
+  trending_override: boolean;
+  // source tracking (from migration 011)
+  source_type: string;
+  created_by_admin: string | null;
   view_count: number;
   click_count: number;
   tier: 1 | 2 | 3; // 1=big deal, 2=normal, 3=basic

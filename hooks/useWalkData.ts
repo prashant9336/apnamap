@@ -97,8 +97,10 @@ export function useWalkData(
                 ? isShopOpen(shop.open_time, shop.close_time, shop.open_days)
                 : false,
             top_offer:   shop.top_offer ?? null,
-            is_trending: (shop.top_offer?.tier ?? 5) <= 2 && Math.random() > 0.5,
-            is_busy:     dist < 2000 && Math.random() > 0.4,
+            // Use DB is_trending flag; fall back to tier signal (no random)
+            is_trending: shop.is_trending ?? ((shop.top_offer?.tier ?? 5) <= 1),
+            // Busy = nearby + has real engagement
+            is_busy:     dist < 2000 && (shop.view_count ?? 0) > 10,
           };
 
           if (!localityShopMap.has(shop.locality_id)) {
@@ -115,7 +117,13 @@ export function useWalkData(
         const walkLocs: WalkLocality[] = allLocalities
           .map((loc: any) => {
             const locShops = (localityShopMap.get(loc.id) ?? [])
-              .sort((a: any, b: any) => a.distance_m - b.distance_m);
+              .sort((a: WalkShop, b: WalkShop) => {
+                // Boosted / prioritised shops float to the top within their locality
+                const aBoost = (a.is_boosted ? 100_000 : 0) + (a.manual_priority ?? 0) * 10_000;
+                const bBoost = (b.is_boosted ? 100_000 : 0) + (b.manual_priority ?? 0) * 10_000;
+                if (aBoost !== bBoost) return bBoost - aBoost;
+                return a.distance_m - b.distance_m;
+              });
 
             if (locShops.length === 0) return null;
 

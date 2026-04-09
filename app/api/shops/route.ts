@@ -63,9 +63,12 @@ export async function GET(req: Request) {
     const finalShops = shopsWithDistance
       .filter((shop: any) => shop.distance_m <= radius)
       .sort((a: any, b: any) => {
-        if (a.distance_m !== b.distance_m) {
-          return a.distance_m - b.distance_m;
-        }
+        // Boosted shops get a virtual 50 km head start; each manual_priority point = 5 km
+        const aBoost = (a.is_boosted ? 50_000 : 0) + (a.manual_priority ?? 0) * 5_000;
+        const bBoost = (b.is_boosted ? 50_000 : 0) + (b.manual_priority ?? 0) * 5_000;
+        const aEff = a.distance_m - aBoost;
+        const bEff = b.distance_m - bBoost;
+        if (aEff !== bEff) return aEff - bEff;
         return (b.top_offer?.tier ?? 5) - (a.top_offer?.tier ?? 5);
       });
 

@@ -5,17 +5,24 @@ import type { DealEngineType } from "./types";
  * Classify a single offer into one of four engine deal types.
  *
  * Priority order (first match wins):
- *   1. mystery  — offer.is_mystery flag
- *   2. flash    — ends_at within 6 hours
- *   3. big_deal — tier=1 OR ≥30 % discount
- *   4. new_deal — fallback
+ *   0. admin override — is_big_deal or is_flash set by admin
+ *   1. mystery        — offer.is_mystery flag
+ *   2. flash          — ends_at within 6 hours OR is_flash flag
+ *   3. big_deal       — tier=1 OR ≥30% discount OR is_big_deal flag
+ *   4. new_deal       — fallback
  */
 export function classifyDealEngineType(
   offer: Offer,
   now: number = Date.now()
 ): DealEngineType {
+  // 0a. Admin-forced big deal
+  if (offer.is_big_deal) return "big_deal";
+
+  // 0b. Admin-forced flash
+  if (offer.is_flash) return "flash_deal";
+
   // 1. Explicitly marked mystery
-  if ((offer as Offer & { is_mystery?: boolean }).is_mystery) return "mystery";
+  if (offer.is_mystery) return "mystery";
 
   // 2. Flash: active ends_at within 6 hours (360 min)
   if (offer.ends_at) {

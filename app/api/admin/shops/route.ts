@@ -109,6 +109,9 @@ export async function PATCH(req: NextRequest) {
       "category_id","locality_id","lat","lng",
       "open_time","close_time","open_days",
       "is_active","is_featured","logo_url","cover_url",
+      // badge/boost controls
+      "is_boosted","is_recommended","is_hidden_gem","is_trending",
+      "manual_priority","display_rating","display_rating_count",
     ] as const;
     for (const key of allowed) {
       if (key in fields) updates[key] = fields[key];

@@ -96,16 +96,26 @@ export async function PATCH(req: NextRequest) {
   } else if (body.action === "deactivate") {
     updates = { ...updates, is_active: false };
   } else if (body.action === "edit" && body.fields) {
-    const { title, description, discount_type, discount_value, tier, ends_at, coupon_code, is_featured, is_active } = body.fields as any;
-    if (title !== undefined)          updates.title          = String(title).trim();
-    if (description !== undefined)    updates.description    = description ? String(description).trim() : null;
-    if (discount_type !== undefined)  updates.discount_type  = discount_type;
-    if (discount_value !== undefined) updates.discount_value = discount_value;
-    if (tier !== undefined)           updates.tier           = tier;
-    if (ends_at !== undefined)        updates.ends_at        = ends_at;
-    if (coupon_code !== undefined)    updates.coupon_code    = coupon_code ? String(coupon_code).trim() : null;
-    if (is_featured !== undefined)    updates.is_featured    = is_featured;
-    if (is_active !== undefined)      updates.is_active      = is_active;
+    const f = body.fields as any;
+    const setIfDefined = (key: string, val: unknown, transform?: (v: unknown) => unknown) => {
+      if (val !== undefined) updates[key] = transform ? transform(val) : val;
+    };
+    setIfDefined("title",           f.title,           (v) => String(v).trim());
+    setIfDefined("description",     f.description,     (v) => v ? String(v).trim() : null);
+    setIfDefined("discount_type",   f.discount_type);
+    setIfDefined("discount_value",  f.discount_value);
+    setIfDefined("tier",            f.tier);
+    setIfDefined("ends_at",         f.ends_at);
+    setIfDefined("coupon_code",     f.coupon_code,     (v) => v ? String(v).trim() : null);
+    setIfDefined("is_featured",     f.is_featured);
+    setIfDefined("is_active",       f.is_active);
+    // badge overrides
+    setIfDefined("is_flash",        f.is_flash);
+    setIfDefined("is_big_deal",     f.is_big_deal);
+    setIfDefined("is_recommended",  f.is_recommended);
+    setIfDefined("manual_priority", f.manual_priority);
+    setIfDefined("badge_override",  f.badge_override,  (v) => v ? String(v).trim() : null);
+    setIfDefined("trending_override", f.trending_override);
   } else {
     return NextResponse.json({ error: "Invalid action or missing fields" }, { status: 400 });
   }

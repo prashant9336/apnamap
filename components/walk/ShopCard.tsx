@@ -163,13 +163,17 @@ export default function ShopCard({ shop, index, side }: Props) {
   const dx         = side === "left" ? -16 : 16;
   const isProperty = slug === "real-estate-property";
 
+  // ── display overrides (admin-set takes priority over computed) ──
+  const dispRating    = shop.display_rating    ?? shop.avg_rating;
+  const dispCount     = shop.display_rating_count ?? shop.review_count;
+
   // ── derived signals ─────────────────────────────────────────────
-  const hasRating     = (shop.avg_rating ?? 0) > 0 && (shop.review_count ?? 0) > 0;
+  const hasRating     = (dispRating ?? 0) > 0 && (dispCount ?? 0) > 0;
   const isNew         = !hasRating;
-  const isTrending    = !!shop.is_featured;
-  const isRecommended = hasRating && shop.avg_rating >= 4.0 && shop.review_count >= 5;
-  // Hidden gem: high quality but low discovery — deserves a spotlight
-  const isHiddenGem   = hasRating && shop.avg_rating >= 4.5 && (shop.view_count ?? 0) < 200 && shop.review_count >= 3;
+  // Admin override first, then computed fallback
+  const isTrending    = !!shop.is_trending || !!shop.is_featured;
+  const isRecommended = !!shop.is_recommended || (hasRating && dispRating >= 4.0 && dispCount >= 5);
+  const isHiddenGem   = !!shop.is_hidden_gem  || (hasRating && dispRating >= 4.5 && (shop.view_count ?? 0) < 200 && dispCount >= 3);
   const validDist     = (shop.distance_m ?? 0) > 0 && shop.distance_m < 50_000;
   const endingSoon    = !!(offer?.ends_at &&
     new Date(offer.ends_at).getTime() - Date.now() < 86_400_000 * 3);
@@ -397,10 +401,10 @@ export default function ShopCard({ shop, index, side }: Props) {
                 {hasRating && (
                   <>
                     <span style={{ color: "#E8A800", fontWeight: 700 }}>
-                      ★ {shop.avg_rating.toFixed(1)}
+                      ★ {(dispRating ?? 0).toFixed(1)}
                     </span>
                     <span style={{ fontSize: "9.5px", color: "rgba(255,255,255,0.22)" }}>
-                      ({shop.review_count})
+                      ({dispCount})
                     </span>
                     {validDist && (
                       <span style={{ color: "rgba(255,255,255,0.10)" }}>·</span>
@@ -519,7 +523,7 @@ function OfferChip({ offer }: { offer: Offer }) {
 
   const now      = Date.now();
   const dealType = classifyDealEngineType(offer, now);
-  const { discount_type, discount_value, title, ends_at, click_count } = offer;
+  const { discount_type, discount_value, title, ends_at, click_count, badge_override } = offer;
 
   // ── Style config per deal type ─────────────────────────────────
   type ChipTheme = { label: string; labelColor: string; bg: string; border: string; glow?: string };
@@ -571,7 +575,7 @@ function OfferChip({ offer }: { offer: Offer }) {
         gap: 5, flexWrap: "wrap", marginBottom: dealType === "mystery" ? 0 : 3,
       }}>
         <span style={{ fontSize: "9.5px", fontWeight: 800, color: theme.labelColor }}>
-          {theme.label}
+          {badge_override ? `🏷 ${badge_override}` : theme.label}
         </span>
         {discountBadge && (
           <span style={{
