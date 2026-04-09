@@ -1,38 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 
-async function requireAdmin(supabase: ReturnType<typeof createClient>) {
-  const {
-    data: { user },
-    error: userErr,
-  } = await supabase.auth.getUser();
+async function requireAdmin(req: NextRequest) {
+  const adminSb = createAdminClient();
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const token = authHeader.replace("Bearer ", "").trim();
 
-  if (userErr || !user) return null;
+  let user = null;
+  if (token) {
+    const { data } = await adminSb.auth.getUser(token);
+    user = data.user;
+  } else {
+    const { data } = await createClient().auth.getUser();
+    user = data.user;
+  }
+  if (!user) return null;
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  const role =
-    profile?.role ||
-    user.user_metadata?.role ||
-    user.app_metadata?.role ||
-    "customer";
-
+  const { data: profile } = await adminSb.from("profiles").select("role").eq("id", user.id).maybeSingle();
+  const role = profile?.role || user.user_metadata?.role || user.app_metadata?.role || "customer";
   return role === "admin" ? user : null;
 }
 
-export async function GET() {
-  const supabase = createClient();
-  const admin = await requireAdmin(supabase);
+export async function GET(req: NextRequest) {
+  const admin = await requireAdmin(req);
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  if (!admin) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const { data: shops, error } = await supabase
+  const adminSb = createAdminClient();
+  const { data: shops, error } = await adminSb
     .from("shops")
     .select(`
       id,
@@ -49,29 +43,21 @@ export async function GET() {
     `)
     .order("created_at", { ascending: false });
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const safeShops = shops ?? [];
-
   const stats = {
-    total: safeShops.length,
+    total:    safeShops.length,
     approved: safeShops.filter((s: any) => s.is_approved).length,
-    pending: safeShops.filter((s: any) => !s.is_approved).length,
-    active: safeShops.filter((s: any) => s.is_active).length,
+    pending:  safeShops.filter((s: any) => !s.is_approved).length,
+    active:   safeShops.filter((s: any) => s.is_active).length,
   };
-
   return NextResponse.json({ shops: safeShops, stats });
 }
 
 export async function PATCH(req: NextRequest) {
-  const supabase = createClient();
-  const admin = await requireAdmin(supabase);
-
-  if (!admin) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const admin = await requireAdmin(req);
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json() as {
     shop_id: string;
@@ -79,15 +65,9 @@ export async function PATCH(req: NextRequest) {
     fields?: Record<string, unknown>;
   };
   const { shop_id, action, fields } = body;
+  if (!shop_id || !action) return NextResponse.json({ error: "Missing shop_id or action" }, { status: 400 });
 
-  if (!shop_id || !action) {
-    return NextResponse.json({ error: "Missing shop_id or action" }, { status: 400 });
-  }
-
-  // Use admin client for editing so RLS doesn't block cross-vendor edits
-  const { createAdminClient } = await import("@/lib/supabase/server");
   const adminClient = createAdminClient();
-
   let updates: Record<string, unknown> = {};
 
   if (action === "approve") {
@@ -95,21 +75,15 @@ export async function PATCH(req: NextRequest) {
   } else if (action === "reject") {
     updates = { is_approved: false, is_active: false };
   } else if (action === "toggle_active") {
-    const { data: current } = await supabase
-      .from("shops")
-      .select("is_active")
-      .eq("id", shop_id)
-      .single();
-
+    const { data: current } = await adminClient
+      .from("shops").select("is_active").eq("id", shop_id).single();
     updates = { is_active: !current?.is_active };
   } else if (action === "edit" && fields) {
-    // Full shop field edit by admin
     const allowed = [
       "name","description","phone","whatsapp","address",
       "category_id","locality_id","lat","lng",
       "open_time","close_time","open_days",
       "is_active","is_featured","logo_url","cover_url",
-      // badge/boost controls
       "is_boosted","is_recommended","is_hidden_gem","is_trending",
       "manual_priority","display_rating","display_rating_count",
     ] as const;
@@ -137,9 +111,6 @@ export async function PATCH(req: NextRequest) {
     `)
     .single();
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ shop: data });
 }

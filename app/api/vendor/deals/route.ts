@@ -1,27 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 
+async function getUser(req: NextRequest) {
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const token = authHeader.replace("Bearer ", "").trim();
+  const adminSb = createAdminClient();
+  if (token) {
+    const { data } = await adminSb.auth.getUser(token);
+    return data.user;
+  }
+  const { data } = await createClient().auth.getUser();
+  return data.user;
+}
+
 /* ── GET /api/vendor/deals?shop_id=xxx ─────────────────────────────
    Returns the vendor's deals (all tiers) for a shop, most recent first.
    Includes view/click counts for mini-analytics.               */
 export async function GET(req: NextRequest) {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getUser(req);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const shopId = new URL(req.url).searchParams.get("shop_id");
   if (!shopId) return NextResponse.json({ error: "shop_id required" }, { status: 400 });
 
-  // Verify ownership — admin client bypasses RLS for the lookup
+  // Verify ownership — admin client bypasses RLS
   const adminDb = createAdminClient();
   const { data: shop } = await adminDb
-    .from("shops")
-    .select("id")
-    .eq("id", shopId)
-    .eq("vendor_id", user.id)
-    .maybeSingle();
+    .from("shops").select("id").eq("id", shopId).eq("vendor_id", user.id).maybeSingle();
   if (!shop) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  const supabase = createClient();
   const { data, error } = await supabase
     .from("offers")
     .select(
@@ -38,15 +46,9 @@ export async function GET(req: NextRequest) {
 }
 
 /* ── POST /api/vendor/deals ────────────────────────────────────────
-   Creates an offer AND a matching quick_post in one call.
-   The dual-write ensures the deal appears in:
-     - Walk View (via offers table + top_offer query)
-     - Offers tab  (same)
-     - Near Me     (same)
-     - Live feed   (via quick_posts)                            */
+   Creates an offer AND a matching quick_post in one call.          */
 export async function POST(req: NextRequest) {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getUser(req);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json() as {
@@ -62,24 +64,17 @@ export async function POST(req: NextRequest) {
   const { shop_id, title, description, deal_type = "new_deal",
           discount_type = "other", discount_value = null, expires_in_hours = null } = body;
 
-  if (!shop_id || !title?.trim()) {
+  if (!shop_id || !title?.trim())
     return NextResponse.json({ error: "shop_id and title required" }, { status: 400 });
-  }
 
-  // Verify ownership — admin client bypasses RLS for the lookup
+  // Verify ownership — admin client bypasses RLS
   const adminDb = createAdminClient();
   const { data: shop } = await adminDb
-    .from("shops")
-    .select("id, name")
-    .eq("id", shop_id)
-    .eq("vendor_id", user.id)
-    .maybeSingle();
+    .from("shops").select("id, name").eq("id", shop_id).eq("vendor_id", user.id).maybeSingle();
   if (!shop) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  // Map deal_type → tier
   const tier = deal_type === "big_deal" ? 1 : deal_type === "flash_deal" ? 2 : 3;
 
-  // Compute ends_at
   let ends_at: string | null = null;
   if (expires_in_hours) {
     const d = new Date();
@@ -87,7 +82,7 @@ export async function POST(req: NextRequest) {
     ends_at = d.toISOString();
   }
 
-  // Insert into offers
+  const supabase = createClient();
   const { data: offer, error: offerErr } = await supabase
     .from("offers")
     .insert({
@@ -104,14 +99,10 @@ export async function POST(req: NextRequest) {
     .select()
     .single();
 
-  if (offerErr || !offer) {
-    return NextResponse.json(
-      { error: offerErr?.message ?? "Failed to create deal" },
-      { status: 500 }
-    );
-  }
+  if (offerErr || !offer)
+    return NextResponse.json({ error: offerErr?.message ?? "Failed to create deal" }, { status: 500 });
 
-  // Dual-write: quick_post for real-time Walk View feed (fire-and-forget)
+  // Dual-write to quick_posts (fire-and-forget)
   const qpType = deal_type === "flash_deal" ? "flash_deal" : "custom_note";
   const qpMsg =
     discount_type === "percent" && discount_value
@@ -133,10 +124,9 @@ export async function POST(req: NextRequest) {
 }
 
 /* ── PATCH /api/vendor/deals ───────────────────────────────────────
-   Edit title/description, or expire (is_active = false).      */
+   Edit title/description, or expire (is_active = false).          */
 export async function PATCH(req: NextRequest) {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getUser(req);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json() as {
@@ -158,21 +148,17 @@ export async function PATCH(req: NextRequest) {
 
   const shopRow = existing?.shop as { vendor_id: string } | { vendor_id: string }[] | null;
   const ownerId = Array.isArray(shopRow) ? shopRow[0]?.vendor_id : shopRow?.vendor_id;
-  if (!existing || ownerId !== user.id) {
+  if (!existing || ownerId !== user.id)
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
 
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (title       !== undefined) updates.title       = title.trim();
   if (description !== undefined) updates.description = description?.trim() ?? null;
   if (is_active   !== undefined) updates.is_active   = is_active;
 
+  const supabase = createClient();
   const { data, error } = await supabase
-    .from("offers")
-    .update(updates)
-    .eq("id", id)
-    .select()
-    .single();
+    .from("offers").update(updates).eq("id", id).select().single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ deal: data });

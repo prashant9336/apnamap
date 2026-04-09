@@ -625,6 +625,7 @@ function VendorsTab() {
 ═══════════════════════════════════════════════════════════ */
 function AdminOffersTab({ categories }: { categories: Meta[] }) {
   const sb = createClient();
+  const getToken = async () => { const { data: { session } } = await sb.auth.getSession(); return session?.access_token ?? ""; };
   const [shopSearch, setShopSearch] = useState("");
   const [shops,      setShops]      = useState<any[]>([]);
   const [shopSrchLoading, setShopSrchLoading] = useState(false);
@@ -654,7 +655,8 @@ function AdminOffersTab({ categories }: { categories: Meta[] }) {
   async function selectShop(shop: any) {
     setSelectedShop(shop); setShops([]); setShopSearch(shop.name);
     setOffersLoading(true);
-    const r = await fetch(`/api/admin/offers?shop_id=${shop.id}`);
+    const tok = await getToken();
+    const r = await fetch(`/api/admin/offers?shop_id=${shop.id}`, { headers: { "Authorization": `Bearer ${tok}` } });
     const d = await r.json();
     setOffers(d.offers ?? []);
     setOffersLoading(false);
@@ -662,7 +664,8 @@ function AdminOffersTab({ categories }: { categories: Meta[] }) {
 
   async function expireOffer(id: string) {
     setActing(id);
-    const r = await fetch("/api/admin/offers", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offer_id: id, action: "expire" }) });
+    const tok = await getToken();
+    const r = await fetch("/api/admin/offers", { method: "PATCH", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${tok}` }, body: JSON.stringify({ offer_id: id, action: "expire" }) });
     const d = await r.json();
     if (r.ok) setOffers(o => o.map(x => x.id === id ? d.offer : x));
     setActing(null);
@@ -670,8 +673,9 @@ function AdminOffersTab({ categories }: { categories: Meta[] }) {
 
   async function toggleActive(id: string, current: boolean) {
     setActing(id);
+    const tok = await getToken();
     const action = current ? "deactivate" : "activate";
-    const r = await fetch("/api/admin/offers", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offer_id: id, action }) });
+    const r = await fetch("/api/admin/offers", { method: "PATCH", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${tok}` }, body: JSON.stringify({ offer_id: id, action }) });
     const d = await r.json();
     if (r.ok) setOffers(o => o.map(x => x.id === id ? d.offer : x));
     setActing(null);
@@ -680,7 +684,8 @@ function AdminOffersTab({ categories }: { categories: Meta[] }) {
   async function deleteOffer(id: string) {
     if (!confirm("Delete this offer permanently?")) return;
     setActing(id);
-    const r = await fetch(`/api/admin/offers?offer_id=${id}`, { method: "DELETE" });
+    const tok = await getToken();
+    const r = await fetch(`/api/admin/offers?offer_id=${id}`, { method: "DELETE", headers: { "Authorization": `Bearer ${tok}` } });
     if (r.ok) setOffers(o => o.filter(x => x.id !== id));
     setActing(null);
   }
@@ -792,6 +797,8 @@ function AdminOffersTab({ categories }: { categories: Meta[] }) {
 /* ─── Offer form modal (used by AdminOffersTab) ──────────────────── */
 function OfferFormModal({ shopId, existing, onClose, onSaved }:
   { shopId: string; existing: any | null; onClose: () => void; onSaved: (o: any) => void }) {
+  const sb = createClient();
+  const getToken = async () => { const { data: { session } } = await sb.auth.getSession(); return session?.access_token ?? ""; };
   const isEdit = !!existing;
   const [form, setForm] = useState({
     title:            existing?.title            ?? "",
@@ -839,9 +846,10 @@ function OfferFormModal({ shopId, existing, onClose, onSaved }:
       ? { offer_id: existing.id, action: "edit", fields: { ...sharedFields, is_active: form.is_active } }
       : { shop_id: shopId, ...sharedFields, is_active: true, ends_at: endsAt, source_type: "admin_manual" };
 
+    const tok = await getToken();
     const r = await fetch("/api/admin/offers", {
       method: isEdit ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${tok}` },
       body: JSON.stringify(payload),
     });
     const d = await r.json();
@@ -917,6 +925,8 @@ function OfferFormModal({ shopId, existing, onClose, onSaved }:
 /* ─── Shop Edit Modal ────────────────────────────────────────────── */
 function ShopEditModal({ shop, localities, categories, onClose, onSaved }:
   { shop: any; localities: Meta[]; categories: Meta[]; onClose: () => void; onSaved: (s: any) => void }) {
+  const sb = createClient();
+  const getToken = async () => { const { data: { session } } = await sb.auth.getSession(); return session?.access_token ?? ""; };
   const [form, setForm] = useState({
     name:                 shop.name                 ?? "",
     description:          shop.description          ?? "",
@@ -947,9 +957,10 @@ function ShopEditModal({ shop, localities, categories, onClose, onSaved }:
     e.preventDefault();
     if (!form.name.trim()) { setError("Name is required"); return; }
     setSaving(true); setError("");
+    const tok = await getToken();
     const r = await fetch("/api/admin/shops", {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${tok}` },
       body: JSON.stringify({
         shop_id: shop.id,
         action: "edit",

@@ -34,9 +34,14 @@ export default function VoicePostModal({ shopId, onClose, onPublished }: Props) 
     setPhase("processing");
     setError("");
     try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch("/api/vendor/voice-post", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session?.access_token ?? ""}`,
+        },
         body: JSON.stringify({ transcript, shop_id: shopId }),
       });
       const data = await res.json();
@@ -55,17 +60,21 @@ export default function VoicePostModal({ shopId, onClose, onPublished }: Props) 
     setLoading(true);
     setError("");
     try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
       // 1. Mark draft as published via API
       const res = await fetch("/api/vendor/voice-post", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session?.access_token ?? ""}`,
+        },
         body: JSON.stringify({ ...updated, is_published: true }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Publish failed");
 
       // 2. Also push to quick_posts so it appears in real-time feed
-      const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const expiresAt = updated.valid_until
@@ -97,9 +106,14 @@ export default function VoicePostModal({ shopId, onClose, onPublished }: Props) 
     setLoading(true);
     setError("");
     try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch("/api/vendor/voice-post", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session?.access_token ?? ""}`,
+        },
         body: JSON.stringify({ ...updated, is_published: false }),
       });
       const data = await res.json();

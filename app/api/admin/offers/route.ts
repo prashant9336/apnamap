@@ -1,27 +1,34 @@
 // app/api/admin/offers/route.ts
 // Admin-only offer management: GET, POST, PATCH, DELETE
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 
-async function requireAdmin() {
-  // Use createClient() only to validate the session (reads cookies)
-  const supabase = createClient();
-  const { data: { user }, error: userErr } = await supabase.auth.getUser();
-  if (userErr || !user) return null;
+async function requireAdmin(req: NextRequest) {
+  const adminSb = createAdminClient();
 
-  // Use admin client to read profiles (bypasses RLS — profile SELECT policy may not exist)
-  const admin = createAdminClient();
-  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
+  // Prefer Bearer token (sent explicitly by client) over cookies
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const token = authHeader.replace("Bearer ", "").trim();
 
-  // Check role in priority order: DB profile → user_metadata → app_metadata
+  let user = null;
+  if (token) {
+    const { data } = await adminSb.auth.getUser(token);
+    user = data.user;
+  } else {
+    // Fallback: cookie-based session (middleware keeps these fresh)
+    const { data } = await createClient().auth.getUser();
+    user = data.user;
+  }
+  if (!user) return null;
+
+  const { data: profile } = await adminSb.from("profiles").select("role").eq("id", user.id).maybeSingle();
   const role = profile?.role || user.user_metadata?.role || user.app_metadata?.role || "customer";
   return role === "admin" ? user : null;
 }
 
 // GET /api/admin/offers?shop_id=X — all offers for a shop (including inactive/expired)
 export async function GET(req: NextRequest) {
-  const caller = await requireAdmin();
+  const caller = await requireAdmin(req);
   if (!caller) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { searchParams } = new URL(req.url);
@@ -41,7 +48,7 @@ export async function GET(req: NextRequest) {
 
 // POST /api/admin/offers — create offer for any shop
 export async function POST(req: NextRequest) {
-  const caller = await requireAdmin();
+  const caller = await requireAdmin(req);
   if (!caller) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json() as {
@@ -82,7 +89,7 @@ export async function POST(req: NextRequest) {
 
 // PATCH /api/admin/offers — edit or expire an offer
 export async function PATCH(req: NextRequest) {
-  const caller = await requireAdmin();
+  const caller = await requireAdmin(req);
   if (!caller) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json() as {
@@ -134,7 +141,7 @@ export async function PATCH(req: NextRequest) {
 
 // DELETE /api/admin/offers?offer_id=X
 export async function DELETE(req: NextRequest) {
-  const caller = await requireAdmin();
+  const caller = await requireAdmin(req);
   if (!caller) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { searchParams } = new URL(req.url);
