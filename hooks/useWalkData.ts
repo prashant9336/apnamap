@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getDistanceMetres, isShopOpen } from "@/lib/utils/cn";
-import type { WalkLocality, WalkShop } from "@/types";
+import type { WalkLocality, WalkShop, Offer } from "@/types";
 
 function getLiveCrowd(h: number) {
   if (h >= 9  && h <= 12) return { base: 20, label: "morning rush",  badge: "busy"  as const };
@@ -88,15 +88,23 @@ export function useWalkData(
 
           if (dist > radiusM) return;
 
+          const now = Date.now();
+          const activeOffers: Offer[] = Array.isArray(shop.offers)
+            ? shop.offers.filter((o: Offer) =>
+                o.is_active && (!o.ends_at || new Date(o.ends_at).getTime() > now)
+              )
+            : [];
+
           const walkShop: WalkShop = {
             ...shop,
-            locality:    shop.locality ?? localityMetaMap.get(shop.locality_id) ?? null,
-            distance_m:  dist,
+            locality:      shop.locality ?? localityMetaMap.get(shop.locality_id) ?? null,
+            distance_m:    dist,
             is_open:
               shop.open_time && shop.close_time
                 ? isShopOpen(shop.open_time, shop.close_time, shop.open_days)
                 : false,
-            top_offer:   shop.top_offer ?? null,
+            top_offer:     shop.top_offer ?? activeOffers[0] ?? null,
+            active_offers: activeOffers,
             // Use DB is_trending flag; fall back to tier signal (no random)
             is_trending: shop.is_trending ?? ((shop.top_offer?.tier ?? 5) <= 1),
             // Busy = nearby + has real engagement

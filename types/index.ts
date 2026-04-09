@@ -177,6 +177,7 @@ export interface WalkShop extends Shop {
   distance_m: number;
   is_open: boolean;
   top_offer: Offer | null;
+  active_offers: Offer[];  // all active, non-expired offers for this shop
 }
 
 export interface LocalityStreak {

@@ -419,8 +419,11 @@ export default function ShopCard({ shop, index, side }: Props) {
               </div>
             )}
 
-            {/* Row 3: offer chip */}
+            {/* Row 3: top offer chip + extra offers */}
             {offer && <OfferChip offer={offer} />}
+            {shop.active_offers && shop.active_offers.length > 1 && (
+              <ExtraOffersRow offers={shop.active_offers.slice(1)} />
+            )}
 
             {/* Row 4: trust signals + viewers */}
             {(hasTags || hasViewers) && (
@@ -503,6 +506,61 @@ export default function ShopCard({ shop, index, side }: Props) {
         )}
       </div>
     </motion.div>
+    </div>
+  );
+}
+
+/* ── Extra offers row — compact pills for offers 2..N ───────────
+   Shows up to 3 extra offers as small labeled pills with their
+   discount value. Tapping the card still navigates to shop page
+   where all offers are listed in full.                          */
+function ExtraOffersRow({ offers }: { offers: Offer[] }) {
+  const visible = offers.slice(0, 3);
+  const overflow = offers.length - 3;
+
+  function offerLabel(o: Offer): string {
+    if (o.discount_value && o.discount_type === "percent") return `${o.discount_value}% off`;
+    if (o.discount_value && o.discount_type === "flat")    return `₹${o.discount_value} off`;
+    if (o.discount_type === "bogo")                        return "BOGO";
+    if (o.discount_type === "free")                        return "Free";
+    // Truncate title to 18 chars
+    return o.title.length > 18 ? o.title.slice(0, 17) + "…" : o.title;
+  }
+
+  function offerColor(o: Offer): { color: string; bg: string; border: string } {
+    if (o.is_flash || o.tier === 2)     return { color: "#E8A800", bg: "rgba(232,168,0,0.07)",  border: "rgba(232,168,0,0.20)"  };
+    if (o.is_big_deal || o.tier === 1)  return { color: "#FF6A30", bg: "rgba(255,80,0,0.07)",   border: "rgba(255,80,0,0.20)"   };
+    return                                     { color: "rgba(255,255,255,0.40)", bg: "rgba(255,255,255,0.04)", border: "rgba(255,255,255,0.09)" };
+  }
+
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 5 }}>
+      {visible.map(o => {
+        const c = offerColor(o);
+        return (
+          <span key={o.id} style={{
+            fontSize: "8.5px", fontWeight: 700,
+            padding: "2px 7px", borderRadius: 100,
+            color: c.color,
+            background: c.bg,
+            border: `1px solid ${c.border}`,
+            whiteSpace: "nowrap",
+          }}>
+            {offerLabel(o)}
+          </span>
+        );
+      })}
+      {overflow > 0 && (
+        <span style={{
+          fontSize: "8.5px", fontWeight: 600,
+          padding: "2px 7px", borderRadius: 100,
+          color: "rgba(255,255,255,0.30)",
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid rgba(255,255,255,0.07)",
+        }}>
+          +{overflow} more
+        </span>
+      )}
     </div>
   );
 }
