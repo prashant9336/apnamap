@@ -21,7 +21,7 @@ export default function ShopPage() {
       category:categories(name, icon, color),
       offers(*)
     `).eq("slug", slug).eq("is_approved", true).single()
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         if (!data) { router.push("/explore"); return; }
         setShop(data as any);
         setOffers((data as any).offers?.filter((o: Offer) => o.is_active) ?? []);
@@ -33,6 +33,11 @@ export default function ShopPage() {
           fetch("/api/analytics", { method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ shop_id: data.id, event_type: "view" }) });
         }
+        // Load initial save state (silent — if 401 just stays false)
+        fetch(`/api/favorites?shop_id=${data.id}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (d?.saved !== undefined) setSaved(d.saved); })
+          .catch(() => {});
       });
   }, [slug, router]);
 

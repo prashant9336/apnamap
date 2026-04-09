@@ -19,6 +19,8 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/vendor/set-password") ||
     pathname.startsWith("/api/vendor/request") ||
     pathname.startsWith("/api/vendor/activate") ||
+    pathname.startsWith("/api/otp/send") ||
+    pathname.startsWith("/api/otp/verify") ||
     PUBLIC_FILE.test(pathname)
   ) {
     return await updateSession(request);

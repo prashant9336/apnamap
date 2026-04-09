@@ -74,10 +74,13 @@ export async function POST(req: NextRequest) {
     const phone       = `+91${digits}`;
     const tempPass    = generateTempPassword();
 
-    // ── Check duplicate account ───────────────────────────────────
-    const { data: existing } = await admin.auth.admin.listUsers();
-    const dup = existing?.users?.find(u => u.email === email);
-    if (dup) {
+    // ── Check duplicate account (vendors table has unique mobile) ────
+    const { data: existingVendor } = await admin
+      .from("vendors")
+      .select("id")
+      .eq("mobile", phone)
+      .maybeSingle();
+    if (existingVendor) {
       return NextResponse.json({
         error: `A vendor account already exists for +91 ${digits}. They can log in at /vendor/login.`,
         alreadyExists: true,

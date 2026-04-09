@@ -73,11 +73,20 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { shop_id, action } = await req.json();
+  const body = await req.json() as {
+    shop_id: string;
+    action: string;
+    fields?: Record<string, unknown>;
+  };
+  const { shop_id, action, fields } = body;
 
   if (!shop_id || !action) {
     return NextResponse.json({ error: "Missing shop_id or action" }, { status: 400 });
   }
+
+  // Use admin client for editing so RLS doesn't block cross-vendor edits
+  const { createAdminClient } = await import("@/lib/supabase/server");
+  const adminClient = createAdminClient();
 
   let updates: Record<string, unknown> = {};
 
@@ -93,27 +102,33 @@ export async function PATCH(req: NextRequest) {
       .single();
 
     updates = { is_active: !current?.is_active };
+  } else if (action === "edit" && fields) {
+    // Full shop field edit by admin
+    const allowed = [
+      "name","description","phone","whatsapp","address",
+      "category_id","locality_id","lat","lng",
+      "open_time","close_time","open_days",
+      "is_active","is_featured","logo_url","cover_url",
+    ] as const;
+    for (const key of allowed) {
+      if (key in fields) updates[key] = fields[key];
+    }
+    if ((updates.name as string)?.trim() === "") {
+      return NextResponse.json({ error: "Shop name cannot be empty" }, { status: 400 });
+    }
   } else {
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await adminClient
     .from("shops")
-    .update({
-      ...updates,
-      updated_at: new Date().toISOString(),
-    })
+    .update({ ...updates, updated_at: new Date().toISOString() })
     .eq("id", shop_id)
     .select(`
-      id,
-      name,
-      slug,
-      vendor_id,
-      is_approved,
-      is_active,
-      created_at,
-      phone,
-      address,
+      id, name, slug, vendor_id, description, phone, whatsapp, address,
+      lat, lng, open_time, close_time, open_days,
+      is_approved, is_active, is_featured, is_claimed, created_at,
+      category_id, locality_id,
       category:categories(name, icon),
       locality:localities(name)
     `)

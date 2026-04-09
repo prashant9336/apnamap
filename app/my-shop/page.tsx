@@ -10,14 +10,17 @@ export default function MyShopPage() {
   const router  = useRouter();
 
   useEffect(() => {
-    createClient().auth.getUser().then(({ data: { user } }) => {
+    const sb = createClient();
+    sb.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) {
         router.replace("/auth/login?redirect=/my-shop");
         return;
       }
-      const role = user.user_metadata?.role ?? "customer";
+      // Always read role from profiles table (authoritative); user_metadata can be stale
+      const { data: profile } = await sb
+        .from("profiles").select("role").eq("id", user.id).maybeSingle();
+      const role = profile?.role ?? "customer";
       if (role !== "vendor" && role !== "admin") {
-        // Send them to onboarding to become a vendor
         router.replace("/vendor/onboarding");
         return;
       }

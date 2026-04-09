@@ -47,8 +47,8 @@ BEGIN
 
   IF city_uuid IS NULL THEN
     -- Insert city if not present
-    INSERT INTO cities (name, slug, lat, lng, country, state)
-    VALUES ('Prayagraj', 'prayagraj', 25.4358, 81.8463, 'India', 'Uttar Pradesh')
+    INSERT INTO cities (name, slug, lat, lng, state)
+    VALUES ('Prayagraj', 'prayagraj', 25.4358, 81.8463, 'Uttar Pradesh')
     RETURNING id INTO city_uuid;
   END IF;
 

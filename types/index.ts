@@ -151,6 +151,8 @@ export interface WalkLocality extends Locality {
   crowd_count: number;
   crowd_label: string;
   crowd_badge: "hot" | "busy" | "quiet";
+  nearest_distance: number;   // distance (m) from user to nearest shop in this locality
+  locality_distance: number;  // distance (m) from user to locality centre
 }
 
 export interface WalkShop extends Shop {

@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 /* ═══════════════════════════════════════════════════════════
    TYPES
 ═══════════════════════════════════════════════════════════ */
-type Tab = "onboard" | "requests" | "pending" | "claims" | "shops" | "vendors";
+type Tab = "onboard" | "requests" | "pending" | "claims" | "shops" | "offers" | "vendors";
 
 type Meta = { id: string; name: string; icon?: string };
 
@@ -474,13 +474,14 @@ function RequestsTab() {
 /* ═══════════════════════════════════════════════════════════
    SHOPS / PENDING / VENDORS TABS (from existing dashboard)
 ═══════════════════════════════════════════════════════════ */
-function ShopsTab({ which }: { which: "pending" | "all" }) {
+function ShopsTab({ which, localities, categories }: { which: "pending" | "all"; localities: Meta[]; categories: Meta[] }) {
   const sb = createClient();
-  const [shops,   setShops]   = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [acting,  setActing]  = useState<string | null>(null);
-  const [search,  setSearch]  = useState("");
-  const [preview, setPreview] = useState<any | null>(null);
+  const [shops,     setShops]     = useState<any[]>([]);
+  const [loading,   setLoading]   = useState(true);
+  const [acting,    setActing]    = useState<string | null>(null);
+  const [search,    setSearch]    = useState("");
+  const [preview,   setPreview]   = useState<any | null>(null);
+  const [editShop,  setEditShop]  = useState<any | null>(null);
 
   useEffect(() => {
     const q = sb.from("shops").select("*, category:categories(name,icon), locality:localities(name)").order("created_at", { ascending: false });
@@ -537,10 +538,11 @@ function ShopsTab({ which }: { which: "pending" | "all" }) {
               <button onClick={() => approve(shop.id)} disabled={acting === shop.id} style={{ flex: 1, padding: "9px", borderRadius: 10, background: "#1FBB5A", color: "#fff", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700, fontFamily: "'DM Sans',sans-serif" }}>{acting === shop.id ? "…" : "✓ Approve"}</button>
             </div>
           ) : (
-            <div style={{ display: "flex", gap: 6 }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const }}>
               <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 100, background: shop.is_claimed ? "rgba(31,187,90,0.13)" : "rgba(255,255,255,0.05)", color: shop.is_claimed ? "#1FBB5A" : "rgba(255,255,255,0.30)", border: `1px solid ${shop.is_claimed ? "rgba(31,187,90,0.30)" : "rgba(255,255,255,0.10)"}` }}>
                 {shop.is_claimed ? "✓ Claimed" : "Unclaimed"}
               </span>
+              <button onClick={() => setEditShop(shop)} style={{ padding: "4px 10px", borderRadius: 8, background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.20)", color: "#3B82F6", cursor: "pointer", fontSize: 11, fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}>✏️ Edit</button>
               <button onClick={() => reject(shop.id)} disabled={acting === shop.id} style={{ marginLeft: "auto", padding: "4px 10px", borderRadius: 8, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.18)", color: "#F87171", cursor: "pointer", fontSize: 11, fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}>Deactivate</button>
             </div>
           )}
@@ -567,6 +569,19 @@ function ShopsTab({ which }: { which: "pending" | "all" }) {
             </div>
           </div>
         </div>
+      )}
+
+      {editShop && (
+        <ShopEditModal
+          shop={editShop}
+          localities={localities}
+          categories={categories}
+          onClose={() => setEditShop(null)}
+          onSaved={(updated) => {
+            setShops(s => s.map(x => x.id === updated.id ? { ...x, ...updated } : x));
+            setEditShop(null);
+          }}
+        />
       )}
     </div>
   );
@@ -601,6 +616,375 @@ function VendorsTab() {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ADMIN OFFERS TAB
+═══════════════════════════════════════════════════════════ */
+function AdminOffersTab({ categories }: { categories: Meta[] }) {
+  const sb = createClient();
+  const [shopSearch, setShopSearch] = useState("");
+  const [shops,      setShops]      = useState<any[]>([]);
+  const [shopSrchLoading, setShopSrchLoading] = useState(false);
+  const [selectedShop, setSelectedShop] = useState<any | null>(null);
+  const [offers,     setOffers]     = useState<any[]>([]);
+  const [offersLoading, setOffersLoading] = useState(false);
+  const [editOffer,  setEditOffer]  = useState<any | null>(null);
+  const [showAdd,    setShowAdd]    = useState(false);
+  const [acting,     setActing]     = useState<string | null>(null);
+  const [error,      setError]      = useState("");
+
+  // Shop search
+  useEffect(() => {
+    if (!shopSearch.trim()) { setShops([]); return; }
+    const t = setTimeout(async () => {
+      setShopSrchLoading(true);
+      const { data } = await sb.from("shops")
+        .select("id, name, slug, category:categories(icon), locality:localities(name)")
+        .ilike("name", `%${shopSearch}%`).limit(10);
+      setShops(data ?? []);
+      setShopSrchLoading(false);
+    }, 300);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shopSearch]);
+
+  async function selectShop(shop: any) {
+    setSelectedShop(shop); setShops([]); setShopSearch(shop.name);
+    setOffersLoading(true);
+    const r = await fetch(`/api/admin/offers?shop_id=${shop.id}`);
+    const d = await r.json();
+    setOffers(d.offers ?? []);
+    setOffersLoading(false);
+  }
+
+  async function expireOffer(id: string) {
+    setActing(id);
+    const r = await fetch("/api/admin/offers", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offer_id: id, action: "expire" }) });
+    const d = await r.json();
+    if (r.ok) setOffers(o => o.map(x => x.id === id ? d.offer : x));
+    setActing(null);
+  }
+
+  async function toggleActive(id: string, current: boolean) {
+    setActing(id);
+    const action = current ? "deactivate" : "activate";
+    const r = await fetch("/api/admin/offers", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offer_id: id, action }) });
+    const d = await r.json();
+    if (r.ok) setOffers(o => o.map(x => x.id === id ? d.offer : x));
+    setActing(null);
+  }
+
+  async function deleteOffer(id: string) {
+    if (!confirm("Delete this offer permanently?")) return;
+    setActing(id);
+    const r = await fetch(`/api/admin/offers?offer_id=${id}`, { method: "DELETE" });
+    if (r.ok) setOffers(o => o.filter(x => x.id !== id));
+    setActing(null);
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {/* Shop search */}
+      <div style={{ position: "relative" }}>
+        <input value={shopSearch} onChange={e => { setShopSearch(e.target.value); setSelectedShop(null); }}
+          placeholder="Search shop to manage offers…"
+          style={{ ...INP, padding: "10px 13px", fontSize: 13 }} />
+        {shops.length > 0 && (
+          <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 20, background: "#0C0F18", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, marginTop: 4, overflow: "hidden" }}>
+            {shopSrchLoading && <p style={{ padding: "10px 14px", fontSize: 12, color: "rgba(255,255,255,0.40)" }}>Searching…</p>}
+            {shops.map(s => (
+              <button key={s.id} onClick={() => selectShop(s)}
+                style={{ width: "100%", padding: "10px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                <span>{s.category?.icon ?? "🏪"}</span>
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: "#F2F5FF" }}>{s.name}</p>
+                  <p style={{ fontSize: 10, color: "rgba(255,255,255,0.35)" }}>{s.locality?.name}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {selectedShop && (
+        <>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: "#F2F5FF" }}>Offers for <span style={{ color: "#FF5E1A" }}>{selectedShop.name}</span></p>
+            <button onClick={() => { setShowAdd(true); setEditOffer(null); setError(""); }}
+              style={{ padding: "8px 14px", borderRadius: 10, background: "#FF5E1A", color: "#fff", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700, fontFamily: "'DM Sans',sans-serif" }}>
+              + Add Offer
+            </button>
+          </div>
+
+          {offersLoading && <Skel rows={2} />}
+          {!offersLoading && offers.length === 0 && (
+            <div style={{ ...CARD, textAlign: "center", padding: "24px" }}>
+              <p style={{ fontSize: 13, color: "rgba(255,255,255,0.35)" }}>No offers yet</p>
+            </div>
+          )}
+          {!offersLoading && offers.map(offer => {
+            const expired = offer.ends_at && new Date(offer.ends_at) < new Date();
+            return (
+              <div key={offer.id} style={{ ...CARD, opacity: !offer.is_active ? 0.55 : 1 }}>
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                      <span style={{ fontSize: 9, fontWeight: 800, padding: "2px 7px", borderRadius: 100,
+                        background: offer.tier === 1 ? "rgba(255,94,26,0.18)" : offer.tier === 2 ? "rgba(59,130,246,0.13)" : "rgba(255,255,255,0.07)",
+                        color: offer.tier === 1 ? "#FF5E1A" : offer.tier === 2 ? "#3B82F6" : "rgba(255,255,255,0.40)",
+                        border: `1px solid ${offer.tier === 1 ? "rgba(255,94,26,0.30)" : offer.tier === 2 ? "rgba(59,130,246,0.25)" : "rgba(255,255,255,0.10)"}`,
+                        textTransform: "uppercase" as const, letterSpacing: "0.6px" }}>
+                        {offer.tier === 1 ? "Big Deal" : offer.tier === 2 ? "Normal" : "Basic"}
+                      </span>
+                      {!offer.is_active && <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 100, background: "rgba(239,68,68,0.12)", color: "#F87171", border: "1px solid rgba(239,68,68,0.25)" }}>Inactive</span>}
+                      {expired && <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 100, background: "rgba(232,168,0,0.12)", color: "#E8A800", border: "1px solid rgba(232,168,0,0.25)" }}>Expired</span>}
+                    </div>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#F2F5FF" }}>{offer.title}</p>
+                    {offer.ends_at && <p style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>⏰ {new Date(offer.ends_at).toLocaleDateString("en-IN")}</p>}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const }}>
+                  <button onClick={() => { setEditOffer(offer); setShowAdd(true); setError(""); }}
+                    style={{ padding: "6px 12px", borderRadius: 8, background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.60)", border: "1px solid rgba(255,255,255,0.10)", cursor: "pointer", fontSize: 11, fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}>
+                    ✏️ Edit
+                  </button>
+                  <button onClick={() => toggleActive(offer.id, offer.is_active)} disabled={acting === offer.id}
+                    style={{ padding: "6px 12px", borderRadius: 8, background: offer.is_active ? "rgba(239,68,68,0.08)" : "rgba(31,187,90,0.08)", color: offer.is_active ? "#F87171" : "#1FBB5A", border: `1px solid ${offer.is_active ? "rgba(239,68,68,0.20)" : "rgba(31,187,90,0.25)"}`, cursor: "pointer", fontSize: 11, fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}>
+                    {offer.is_active ? "Deactivate" : "Activate"}
+                  </button>
+                  {offer.is_active && !expired && (
+                    <button onClick={() => expireOffer(offer.id)} disabled={acting === offer.id}
+                      style={{ padding: "6px 12px", borderRadius: 8, background: "rgba(232,168,0,0.08)", color: "#E8A800", border: "1px solid rgba(232,168,0,0.22)", cursor: "pointer", fontSize: 11, fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}>
+                      ⏰ Expire Now
+                    </button>
+                  )}
+                  <button onClick={() => deleteOffer(offer.id)} disabled={acting === offer.id}
+                    style={{ marginLeft: "auto", padding: "6px 12px", borderRadius: 8, background: "rgba(239,68,68,0.06)", color: "#F87171", border: "1px solid rgba(239,68,68,0.15)", cursor: "pointer", fontSize: 11, fontWeight: 600, fontFamily: "'DM Sans',sans-serif" }}>
+                    🗑️
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </>
+      )}
+
+      {/* Add/Edit offer modal */}
+      {showAdd && selectedShop && (
+        <OfferFormModal
+          shopId={selectedShop.id}
+          existing={editOffer}
+          onClose={() => { setShowAdd(false); setEditOffer(null); }}
+          onSaved={(offer) => {
+            if (editOffer) setOffers(o => o.map(x => x.id === offer.id ? offer : x));
+            else setOffers(o => [offer, ...o]);
+            setShowAdd(false); setEditOffer(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ─── Offer form modal (used by AdminOffersTab) ──────────────────── */
+function OfferFormModal({ shopId, existing, onClose, onSaved }:
+  { shopId: string; existing: any | null; onClose: () => void; onSaved: (o: any) => void }) {
+  const isEdit = !!existing;
+  const [form, setForm] = useState({
+    title:          existing?.title          ?? "",
+    description:    existing?.description    ?? "",
+    discount_type:  existing?.discount_type  ?? "other",
+    discount_value: existing?.discount_value != null ? String(existing.discount_value) : "",
+    tier:           existing?.tier           ?? 2,
+    coupon_code:    existing?.coupon_code    ?? "",
+    expiry_hours:   0,
+    is_active:      existing?.is_active      ?? true,
+    is_featured:    existing?.is_featured    ?? false,
+  });
+  const up = (k: string, v: unknown) => setForm(f => ({ ...f, [k]: v }));
+  const [saving, setSaving] = useState(false);
+  const [error,  setError]  = useState("");
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.title.trim()) { setError("Title is required"); return; }
+    setSaving(true); setError("");
+
+    const endsAt = !isEdit && form.expiry_hours > 0
+      ? new Date(Date.now() + form.expiry_hours * 3_600_000).toISOString() : undefined;
+
+    const payload = isEdit
+      ? { offer_id: existing.id, action: "edit", fields: {
+          title: form.title, description: form.description,
+          discount_type: form.discount_type,
+          discount_value: form.discount_value ? parseFloat(form.discount_value) : null,
+          tier: form.tier, coupon_code: form.coupon_code,
+          is_featured: form.is_featured, is_active: form.is_active,
+        }}
+      : { shop_id: shopId, title: form.title, description: form.description,
+          discount_type: form.discount_type,
+          discount_value: form.discount_value ? parseFloat(form.discount_value) : null,
+          tier: form.tier, coupon_code: form.coupon_code,
+          is_featured: form.is_featured, ends_at: endsAt, source_type: "admin_manual" };
+
+    const r = await fetch("/api/admin/offers", {
+      method: isEdit ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const d = await r.json();
+    if (!r.ok) { setError(d.error ?? "Failed"); setSaving(false); return; }
+    onSaved(d.offer);
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end" }} onClick={onClose}>
+      <div style={{ background: "#0C0F18", borderRadius: "20px 20px 0 0", padding: "20px 18px", width: "100%", maxHeight: "88vh", overflowY: "auto", boxSizing: "border-box" }} onClick={e => e.stopPropagation()}>
+        <div style={{ width: 40, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.15)", margin: "0 auto 18px" }} />
+        <p style={{ fontFamily: "'Syne',sans-serif", fontSize: 16, fontWeight: 800, color: "#F2F5FF", marginBottom: 18 }}>{isEdit ? "✏️ Edit Offer" : "➕ Add Offer"}</p>
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div><label style={LBL}>Title *</label><input value={form.title} onChange={e => up("title", e.target.value)} style={INP} placeholder="e.g. Flat 20% OFF" required /></div>
+          <div><label style={LBL}>Description</label><textarea rows={2} value={form.description} onChange={e => up("description", e.target.value)} style={{ ...INP, resize: "none" }} placeholder="Optional details" /></div>
+          <div>
+            <label style={LBL}>Type</label>
+            <div style={{ display: "flex", gap: 7, flexWrap: "wrap" as const }}>
+              {DEAL_TYPES.map(d => <button key={d.v} type="button" onClick={() => up("discount_type", d.v)} style={sChip(form.discount_type === d.v)}>{d.label}</button>)}
+            </div>
+          </div>
+          {(form.discount_type === "percent" || form.discount_type === "flat") && (
+            <div><label style={LBL}>{form.discount_type === "percent" ? "% Off" : "₹ Flat Off"}</label><input type="number" value={form.discount_value} onChange={e => up("discount_value", e.target.value)} style={{ ...INP, textAlign: "center", fontSize: 20, fontWeight: 800 }} placeholder="0" /></div>
+          )}
+          <div>
+            <label style={LBL}>Tier</label>
+            <div style={{ display: "flex", gap: 7 }}>
+              {([1,2,3] as const).map(t => <button key={t} type="button" onClick={() => up("tier", t)} style={sChip(form.tier === t)}>{t === 1 ? "⭐ Big Deal" : t === 2 ? "Normal" : "Basic"}</button>)}
+            </div>
+          </div>
+          {!isEdit && (
+            <div>
+              <label style={LBL}>Valid For</label>
+              <div style={{ display: "flex", gap: 7, flexWrap: "wrap" as const }}>
+                {EXPIRY_OPTS.map(o => <button key={o.v} type="button" onClick={() => up("expiry_hours", o.v)} style={sChip(form.expiry_hours === o.v)}>{o.label}</button>)}
+              </div>
+            </div>
+          )}
+          <div><label style={LBL}>Coupon Code (optional)</label><input value={form.coupon_code} onChange={e => up("coupon_code", e.target.value)} style={INP} placeholder="e.g. SAVE20" /></div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: "rgba(255,255,255,0.60)" }}>
+              <input type="checkbox" checked={form.is_featured} onChange={e => up("is_featured", e.target.checked)} /> Featured
+            </label>
+            {isEdit && (
+              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: "rgba(255,255,255,0.60)" }}>
+                <input type="checkbox" checked={form.is_active} onChange={e => up("is_active", e.target.checked)} /> Active
+              </label>
+            )}
+          </div>
+          {error && <div style={ERR}>{error}</div>}
+          <div style={{ display: "flex", gap: 10 }}>
+            <button type="button" onClick={onClose} style={{ flex: 1, padding: "13px", borderRadius: 12, background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.55)", border: "none", cursor: "pointer", fontSize: 13, fontFamily: "'DM Sans',sans-serif" }}>Cancel</button>
+            <button type="submit" disabled={saving} style={{ flex: 2, padding: "13px", borderRadius: 12, background: saving ? "rgba(255,94,26,0.40)" : "#FF5E1A", color: "#fff", border: "none", cursor: saving ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans',sans-serif" }}>{saving ? "Saving…" : isEdit ? "Save Changes" : "Create Offer"}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Shop Edit Modal ────────────────────────────────────────────── */
+function ShopEditModal({ shop, localities, categories, onClose, onSaved }:
+  { shop: any; localities: Meta[]; categories: Meta[]; onClose: () => void; onSaved: (s: any) => void }) {
+  const [form, setForm] = useState({
+    name:        shop.name        ?? "",
+    description: shop.description ?? "",
+    phone:       shop.phone       ?? "",
+    whatsapp:    shop.whatsapp    ?? "",
+    address:     shop.address     ?? "",
+    category_id: shop.category_id ?? "",
+    locality_id: shop.locality_id ?? "",
+    open_time:   shop.open_time   ?? "",
+    close_time:  shop.close_time  ?? "",
+    is_active:   shop.is_active   ?? true,
+    is_featured: shop.is_featured ?? false,
+    lat:         String(shop.lat  ?? ""),
+    lng:         String(shop.lng  ?? ""),
+  });
+  const up = (k: string, v: unknown) => setForm(f => ({ ...f, [k]: v }));
+  const [saving, setSaving] = useState(false);
+  const [error,  setError]  = useState("");
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.name.trim()) { setError("Name is required"); return; }
+    setSaving(true); setError("");
+    const r = await fetch("/api/admin/shops", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        shop_id: shop.id,
+        action: "edit",
+        fields: {
+          ...form,
+          lat: form.lat ? parseFloat(form.lat) : undefined,
+          lng: form.lng ? parseFloat(form.lng) : undefined,
+        },
+      }),
+    });
+    const d = await r.json();
+    if (!r.ok) { setError(d.error ?? "Failed to save"); setSaving(false); return; }
+    onSaved(d.shop);
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end" }} onClick={onClose}>
+      <div style={{ background: "#0C0F18", borderRadius: "20px 20px 0 0", padding: "20px 18px", width: "100%", maxHeight: "92vh", overflowY: "auto", boxSizing: "border-box" }} onClick={e => e.stopPropagation()}>
+        <div style={{ width: 40, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.15)", margin: "0 auto 18px" }} />
+        <p style={{ fontFamily: "'Syne',sans-serif", fontSize: 16, fontWeight: 800, color: "#F2F5FF", marginBottom: 18 }}>✏️ Edit Shop: {shop.name}</p>
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div><label style={LBL}>Shop Name *</label><input value={form.name} onChange={e => up("name", e.target.value)} style={INP} required /></div>
+          <div><label style={LBL}>Description</label><textarea rows={2} value={form.description} onChange={e => up("description", e.target.value)} style={{ ...INP, resize: "none" }} /></div>
+          <div>
+            <label style={LBL}>Category</label>
+            <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 7, maxHeight: 110, overflowY: "auto" }}>
+              {categories.map(c => <button key={c.id} type="button" onClick={() => up("category_id", c.id)} style={sChip(form.category_id === c.id)}>{c.icon} {c.name}</button>)}
+            </div>
+          </div>
+          <div>
+            <label style={LBL}>Locality</label>
+            <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 7, maxHeight: 110, overflowY: "auto" }}>
+              {localities.map(l => <button key={l.id} type="button" onClick={() => up("locality_id", l.id)} style={sChip(form.locality_id === l.id)}>{l.name}</button>)}
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div><label style={LBL}>Phone</label><input value={form.phone} onChange={e => up("phone", e.target.value)} style={INP} placeholder="+91…" /></div>
+            <div><label style={LBL}>WhatsApp</label><input value={form.whatsapp} onChange={e => up("whatsapp", e.target.value)} style={INP} placeholder="+91…" /></div>
+          </div>
+          <div><label style={LBL}>Address</label><input value={form.address} onChange={e => up("address", e.target.value)} style={INP} /></div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div><label style={LBL}>Open Time</label><input type="time" value={form.open_time} onChange={e => up("open_time", e.target.value)} style={INP} /></div>
+            <div><label style={LBL}>Close Time</label><input type="time" value={form.close_time} onChange={e => up("close_time", e.target.value)} style={INP} /></div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div><label style={LBL}>Lat</label><input value={form.lat} onChange={e => up("lat", e.target.value)} style={INP} placeholder="25.4484" /></div>
+            <div><label style={LBL}>Lng</label><input value={form.lng} onChange={e => up("lng", e.target.value)} style={INP} placeholder="81.8428" /></div>
+          </div>
+          <div style={{ display: "flex", gap: 16 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: "rgba(255,255,255,0.60)" }}>
+              <input type="checkbox" checked={form.is_active} onChange={e => up("is_active", e.target.checked)} /> Active
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: "rgba(255,255,255,0.60)" }}>
+              <input type="checkbox" checked={form.is_featured} onChange={e => up("is_featured", e.target.checked)} /> Featured
+            </label>
+          </div>
+          {error && <div style={ERR}>{error}</div>}
+          <div style={{ display: "flex", gap: 10 }}>
+            <button type="button" onClick={onClose} style={{ flex: 1, padding: "13px", borderRadius: 12, background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.55)", border: "none", cursor: "pointer", fontSize: 13, fontFamily: "'DM Sans',sans-serif" }}>Cancel</button>
+            <button type="submit" disabled={saving} style={{ flex: 2, ...sBtn(saving), width: "auto" }}>{saving ? "Saving…" : "Save Changes"}</button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
@@ -663,6 +1047,7 @@ export default function AdminDashboard() {
     { id: "requests", label: `📋 Requests${stats.requests > 0 ? ` (${stats.requests})` : ""}` },
     { id: "pending",  label: `⏳ Pending${stats.pending > 0 ? ` (${stats.pending})` : ""}` },
     { id: "shops",    label: "✅ Shops" },
+    { id: "offers",   label: "🎯 Offers" },
     { id: "vendors",  label: `👔 Vendors${stats.vendors > 0 ? ` (${stats.vendors})` : ""}` },
   ];
 
@@ -711,8 +1096,9 @@ export default function AdminDashboard() {
         {/* Tab content */}
         {tab === "onboard"  && <OnboardTab localities={localities} categories={categories} />}
         {tab === "requests" && <RequestsTab />}
-        {tab === "pending"  && <ShopsTab which="pending" />}
-        {tab === "shops"    && <ShopsTab which="all" />}
+        {tab === "pending"  && <ShopsTab which="pending" localities={localities} categories={categories} />}
+        {tab === "shops"    && <ShopsTab which="all"     localities={localities} categories={categories} />}
+        {tab === "offers"   && <AdminOffersTab categories={categories} />}
         {tab === "vendors"  && <VendorsTab />}
       </div>
     </div>
