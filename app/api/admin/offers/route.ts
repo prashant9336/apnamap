@@ -52,36 +52,55 @@ export async function POST(req: NextRequest) {
   if (!caller) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json() as {
-    shop_id:       string;
-    title:         string;
-    description?:  string;
-    discount_type: string;
-    discount_value?: number;
-    tier?:         1 | 2 | 3;
-    ends_at?:      string | null;
-    coupon_code?:  string;
-    is_featured?:  boolean;
-    source_type?:  string;
+    shop_id:          string;
+    title:            string;
+    description?:     string;
+    discount_type:    string;
+    discount_value?:  number;
+    tier?:            1 | 2 | 3;
+    ends_at?:         string | null;
+    coupon_code?:     string;
+    is_featured?:     boolean;
+    source_type?:     string;
+    // badge overrides (migration 012)
+    is_flash?:        boolean;
+    is_big_deal?:     boolean;
+    is_recommended?:  boolean;
+    badge_override?:  string | null;
+    manual_priority?: number;
   };
 
   if (!body.shop_id) return NextResponse.json({ error: "shop_id required" }, { status: 400 });
   if (!body.title?.trim()) return NextResponse.json({ error: "title required" }, { status: 400 });
 
+  // Build insert payload — only include badge columns if they have values,
+  // so the insert doesn't fail if migration 012 hasn't been applied yet.
+  const insertPayload: Record<string, unknown> = {
+    shop_id:       body.shop_id,
+    title:         body.title.trim(),
+    description:   body.description?.trim() || null,
+    discount_type: body.discount_type || "other",
+    discount_value: body.discount_value ?? null,
+    tier:           body.tier ?? 2,
+    ends_at:        body.ends_at ?? null,
+    coupon_code:    body.coupon_code?.trim() || null,
+    is_active:      true,
+    is_featured:    body.is_featured ?? false,
+  };
+
+  // Fields from migration 011 (source tracking) — skip if not in DB yet
+  if (body.source_type !== undefined)    insertPayload.source_type      = body.source_type ?? "admin_manual";
+  if (caller.id)                         insertPayload.created_by_admin = caller.id;
+
+  // Fields from migration 012 (badge overrides) — only set if provided
+  if (body.is_flash         != null) insertPayload.is_flash         = body.is_flash;
+  if (body.is_big_deal      != null) insertPayload.is_big_deal      = body.is_big_deal;
+  if (body.is_recommended   != null) insertPayload.is_recommended   = body.is_recommended;
+  if (body.badge_override   != null) insertPayload.badge_override   = body.badge_override;
+  if (body.manual_priority  != null) insertPayload.manual_priority  = body.manual_priority;
+
   const admin = createAdminClient();
-  const { data, error } = await admin.from("offers").insert({
-    shop_id:          body.shop_id,
-    title:            body.title.trim(),
-    description:      body.description?.trim() || null,
-    discount_type:    body.discount_type || "other",
-    discount_value:   body.discount_value ?? null,
-    tier:             body.tier ?? 2,
-    ends_at:          body.ends_at ?? null,
-    coupon_code:      body.coupon_code?.trim() || null,
-    is_active:        true,
-    is_featured:      body.is_featured ?? false,
-    source_type:      body.source_type ?? "admin_manual",
-    created_by_admin: caller.id,
-  }).select().single();
+  const { data, error } = await admin.from("offers").insert(insertPayload).select().single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ offer: data }, { status: 201 });

@@ -1,9 +1,15 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { createClient } from "@/lib/supabase/client";
 import DealFormModal             from "./DealFormModal";
 import DealCard, { type VendorDeal } from "./DealCard";
 import VoicePostModal            from "./VoicePostModal";
+
+async function getToken(): Promise<string> {
+  const { data: { session } } = await createClient().auth.getSession();
+  return session?.access_token ?? "";
+}
 
 interface Props {
   shopId:   string;
@@ -25,9 +31,10 @@ function QuickPostBar({
     if (!text.trim()) return;
     setSending(true);
     try {
+      const tok = await getToken();
       await fetch("/api/vendor/deals", {
         method:  "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${tok}` },
         body: JSON.stringify({ shop_id: shopId, title: text.trim(), deal_type: "new_deal" }),
       });
       setText("");
@@ -167,7 +174,10 @@ export default function VendorPostPanel({ shopId, shopName }: Props) {
 
   const fetchDeals = useCallback(async () => {
     setLoading(true);
-    const res = await fetch(`/api/vendor/deals?shop_id=${shopId}`);
+    const tok = await getToken();
+    const res = await fetch(`/api/vendor/deals?shop_id=${shopId}`, {
+      headers: { "Authorization": `Bearer ${tok}` },
+    });
     if (res.ok) {
       const { deals: d } = await res.json() as { deals: VendorDeal[] };
       setDeals(d ?? []);
@@ -180,18 +190,20 @@ export default function VendorPostPanel({ shopId, shopName }: Props) {
   function refresh() { setRefreshKey(k => k + 1); }
 
   async function handleExpire(id: string) {
+    const tok = await getToken();
     await fetch("/api/vendor/deals", {
       method:  "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${tok}` },
       body: JSON.stringify({ id, is_active: false }),
     });
     setDeals(prev => prev.map(d => d.id === id ? { ...d, is_active: false } : d));
   }
 
   async function handleEditSave(deal: VendorDeal, title: string) {
+    const tok = await getToken();
     const res = await fetch("/api/vendor/deals", {
       method:  "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${tok}` },
       body: JSON.stringify({ id: deal.id, title }),
     });
     if (res.ok) {

@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { createClient } from "@/lib/supabase/client";
 
 type FormDealType  = "big_deal" | "flash_deal";
 type DiscountType  = "percent" | "flat" | "bogo" | "free";
@@ -60,9 +61,11 @@ export default function DealFormModal({ shopId, dealType, onClose, onCreated }: 
     try {
       setSaving(true);
       setError("");
+      const { data: { session } } = await createClient().auth.getSession();
+      const tok = session?.access_token ?? "";
       const res  = await fetch("/api/vendor/deals", {
         method:  "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${tok}` },
         body:    JSON.stringify(body),
       });
       const json = await res.json();
