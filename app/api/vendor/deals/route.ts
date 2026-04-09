@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { createClient as createCookieClient, createAdminClient } from "@/lib/supabase/server";
 
 async function getUser(req: NextRequest) {
   const authHeader = req.headers.get("Authorization") ?? "";
@@ -9,7 +9,7 @@ async function getUser(req: NextRequest) {
     const { data } = await adminSb.auth.getUser(token);
     return data.user;
   }
-  const { data } = await createClient().auth.getUser();
+  const { data } = await createCookieClient().auth.getUser();
   return data.user;
 }
 
@@ -29,8 +29,7 @@ export async function GET(req: NextRequest) {
     .from("shops").select("id").eq("id", shopId).eq("vendor_id", user.id).maybeSingle();
   if (!shop) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const supabase = createClient();
-  const { data, error } = await supabase
+  const { data, error } = await adminDb
     .from("offers")
     .select(
       "id, title, description, discount_type, discount_value, tier, " +
@@ -82,8 +81,8 @@ export async function POST(req: NextRequest) {
     ends_at = d.toISOString();
   }
 
-  const supabase = createClient();
-  const { data: offer, error: offerErr } = await supabase
+  // User verified via token; use adminDb to bypass RLS for the insert
+  const { data: offer, error: offerErr } = await adminDb
     .from("offers")
     .insert({
       shop_id,
@@ -111,7 +110,7 @@ export async function POST(req: NextRequest) {
       ? `${title.trim()} — ₹${discount_value} off`
       : title.trim();
 
-  supabase.from("quick_posts").insert({
+  adminDb.from("quick_posts").insert({
     shop_id,
     user_id:    user.id,
     post_type:  qpType,
@@ -156,8 +155,7 @@ export async function PATCH(req: NextRequest) {
   if (description !== undefined) updates.description = description?.trim() ?? null;
   if (is_active   !== undefined) updates.is_active   = is_active;
 
-  const supabase = createClient();
-  const { data, error } = await supabase
+  const { data, error } = await adminDb
     .from("offers").update(updates).eq("id", id).select().single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

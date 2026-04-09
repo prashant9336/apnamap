@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { createClient as createCookieClient, createAdminClient } from "@/lib/supabase/server";
 import { generatePostDraft } from "@/lib/post-generation";
 
 async function getUser(req: NextRequest) {
@@ -10,7 +10,7 @@ async function getUser(req: NextRequest) {
     const { data } = await adminSb.auth.getUser(token);
     return data.user;
   }
-  const { data } = await createClient().auth.getUser();
+  const { data } = await createCookieClient().auth.getUser();
   return data.user;
 }
 
@@ -52,9 +52,8 @@ export async function POST(req: NextRequest) {
   // Generate structured draft
   const draftPayload = generatePostDraft(transcript, shop_id);
 
-  // Persist as draft — use supabase client so RLS vendor_id check applies
-  const supabase = createClient();
-  const { data: saved, error: insertErr } = await supabase
+  // Persist as draft — user already verified via token; use adminDb to bypass RLS
+  const { data: saved, error: insertErr } = await adminDb
     .from("voice_post_drafts")
     .insert({ ...draftPayload, vendor_id: user.id })
     .select()
@@ -106,8 +105,7 @@ export async function PATCH(req: NextRequest) {
     if (key in fields) update[key] = fields[key];
   }
 
-  const supabase = createClient();
-  const { data: updated, error: updateErr } = await supabase
+  const { data: updated, error: updateErr } = await adminDb
     .from("voice_post_drafts")
     .update(update)
     .eq("id", id)
