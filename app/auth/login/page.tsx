@@ -140,16 +140,13 @@ function LoginForm() {
         </form>
 
         {/* Secondary options */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 18 }}>
-          <Link href="/auth/phone" style={{ display: "block", textAlign: "center", padding: "12px", borderRadius: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.55)", textDecoration: "none" }}>
-            📲 Sign in with OTP instead
-          </Link>
-          {mode === "mobile" && (
+        {mode === "mobile" && (
+          <div style={{ marginTop: 18 }}>
             <Link href="/vendor/set-password" style={{ display: "block", textAlign: "center", padding: "11px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", fontSize: 12, color: "rgba(255,255,255,0.40)", textDecoration: "none" }}>
               🔐 First login? Set your password →
             </Link>
-          )}
-        </div>
+          </div>
+        )}
 
         <p style={{ textAlign: "center", fontSize: 13, marginTop: 16, color: "rgba(255,255,255,0.40)" }}>
           No account?{" "}

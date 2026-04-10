@@ -30,10 +30,10 @@ const redis = makeRedis();
  */
 const limiters = redis
   ? {
-      /** OTP send: 3 requests per 5 minutes per IP */
+      /** Vendor OTP send (set-password flow): 5 requests per 10 minutes per IP */
       otp: new Ratelimit({
         redis,
-        limiter:   Ratelimit.slidingWindow(3, "5 m"),
+        limiter:   Ratelimit.slidingWindow(5, "10 m"),
         prefix:    "rl:otp",
         analytics: false,
       }),
