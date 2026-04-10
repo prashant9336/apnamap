@@ -1,6 +1,6 @@
 // app/api/shops/route.ts
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/server";
 
 export async function GET(req: Request) {
   try {
@@ -17,7 +17,12 @@ export async function GET(req: Request) {
       );
     }
 
-    const supabase = createClient();
+    // Bounding box pre-filter: avoids full-table scan
+    // 1° lat ≈ 111,000 m; 1° lng ≈ 111,000 * cos(lat) m
+    const latDelta = radius / 111_000;
+    const lngDelta = radius / (111_000 * Math.cos((lat * Math.PI) / 180));
+
+    const supabase = createAdminClient();
 
     const { data, error } = await supabase
       .from("shops")
@@ -28,7 +33,11 @@ export async function GET(req: Request) {
         offers(*)
       `)
       .eq("is_active", true)
-      .eq("is_approved", true);
+      .eq("is_approved", true)
+      .gte("lat", lat - latDelta)
+      .lte("lat", lat + latDelta)
+      .gte("lng", lng - lngDelta)
+      .lte("lng", lng + lngDelta);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

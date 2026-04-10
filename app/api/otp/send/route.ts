@@ -2,11 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { createHmac, randomInt } from "crypto";
 
-const OTP_SECRET  = process.env.OTP_SECRET ?? "apnamap-otp-secret-change-me";
+const OTP_SECRET = process.env.OTP_SECRET;
+if (!OTP_SECRET || OTP_SECRET === "apnamap-otp-secret-change-me") {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("OTP_SECRET env var is missing or uses the insecure default. Set a strong secret in your environment.");
+  }
+}
+const _OTP_SECRET = OTP_SECRET ?? "apnamap-otp-secret-change-me";
 const OTP_TTL_MIN = 10; // minutes
 
 function hashOtp(otp: string): string {
-  return createHmac("sha256", OTP_SECRET).update(otp).digest("hex");
+  return createHmac("sha256", _OTP_SECRET).update(otp).digest("hex");
 }
 
 export async function POST(req: NextRequest) {
