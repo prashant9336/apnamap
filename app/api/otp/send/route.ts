@@ -3,17 +3,18 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { createHmac, randomInt } from "crypto";
 import { checkRate } from "@/lib/ratelimit";
 
-const OTP_SECRET = process.env.OTP_SECRET;
-if (!OTP_SECRET || OTP_SECRET === "apnamap-otp-secret-change-me") {
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("OTP_SECRET env var is missing or uses the insecure default. Set a strong secret in your environment.");
-  }
-}
-const _OTP_SECRET = OTP_SECRET ?? "apnamap-otp-secret-change-me";
 const OTP_TTL_MIN = 10; // minutes
 
-function hashOtp(otp: string): string {
-  return createHmac("sha256", _OTP_SECRET).update(otp).digest("hex");
+function getOtpSecret(): string {
+  const secret = process.env.OTP_SECRET;
+  if ((!secret || secret === "apnamap-otp-secret-change-me") && process.env.NODE_ENV === "production") {
+    throw new Error("OTP_SECRET env var is missing or uses the insecure default. Set a strong secret in your environment.");
+  }
+  return secret ?? "apnamap-otp-secret-change-me";
+}
+
+function hashOtp(otp: string, secret: string): string {
+  return createHmac("sha256", secret).update(otp).digest("hex");
 }
 
 export async function POST(req: NextRequest) {
@@ -21,6 +22,7 @@ export async function POST(req: NextRequest) {
     const blocked = await checkRate(req, "otp");
     if (blocked) return blocked;
 
+    const otpSecret = getOtpSecret();
     const { mobile } = await req.json() as { mobile?: string };
     const digits = (mobile ?? "").replace(/\D/g, "");
 
@@ -45,7 +47,7 @@ export async function POST(req: NextRequest) {
 
     // Generate a 6-digit OTP
     const otp      = String(randomInt(100000, 999999));
-    const otp_hash = hashOtp(otp);
+    const otp_hash = hashOtp(otp, otpSecret);
     const expires_at = new Date(Date.now() + OTP_TTL_MIN * 60_000).toISOString();
 
     await admin.from("otp_sessions").insert({
