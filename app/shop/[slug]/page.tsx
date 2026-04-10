@@ -34,10 +34,15 @@ export default function ShopPage() {
             body: JSON.stringify({ shop_id: data.id, event_type: "view" }) });
         }
         // Load initial save state (silent — if 401 just stays false)
-        fetch(`/api/favorites?shop_id=${data.id}`)
-          .then(r => r.ok ? r.json() : null)
-          .then(d => { if (d?.saved !== undefined) setSaved(d.saved); })
-          .catch(() => {});
+        sb.auth.getSession().then(({ data: { session } }) => {
+          const tok = session?.access_token ?? "";
+          fetch(`/api/favorites?shop_id=${data.id}`, {
+            headers: tok ? { "Authorization": `Bearer ${tok}` } : {},
+          })
+            .then(r => r.ok ? r.json() : null)
+            .then(d => { if (d?.saved !== undefined) setSaved(d.saved); })
+            .catch(() => {});
+        });
       });
   }, [slug, router]);
 
@@ -51,9 +56,15 @@ export default function ShopPage() {
   }
 
   async function toggleSave() {
-    const r = await fetch("/api/favorites", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ shop_id: shop?.id }) });
-    if (r.status === 401) { router.push("/auth/login"); return; }
+    const sb = createClient();
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { router.push(`/auth/login?redirect=/shop/${slug}`); return; }
+    const r = await fetch("/api/favorites", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session.access_token}` },
+      body: JSON.stringify({ shop_id: shop?.id }),
+    });
+    if (!r.ok && r.status === 401) { router.push(`/auth/login?redirect=/shop/${slug}`); return; }
     const d = await r.json();
     setSaved(d.saved);
   }
