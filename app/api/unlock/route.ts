@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkRate } from "@/lib/ratelimit";
 
 export async function POST(req: NextRequest) {
   try {
+    const blocked = await checkRate(req, "unlock");
+    if (blocked) return blocked;
+
     const { password } = await req.json();
 
     if (!process.env.SITE_PASSWORD) {

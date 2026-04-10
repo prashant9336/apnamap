@@ -6,9 +6,11 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
 
-    const lat = Number(searchParams.get("lat"));
-    const lng = Number(searchParams.get("lng"));
+    const lat    = Number(searchParams.get("lat"));
+    const lng    = Number(searchParams.get("lng"));
     const radius = Number(searchParams.get("radius") ?? 10000);
+    const limit  = Math.min(Number(searchParams.get("limit")  ?? 200), 500);
+    const offset = Math.max(Number(searchParams.get("offset") ?? 0),   0);
 
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
       return NextResponse.json(
@@ -24,20 +26,21 @@ export async function GET(req: Request) {
 
     const supabase = createAdminClient();
 
-    const { data, error } = await supabase
+    const { data, error, count } = await supabase
       .from("shops")
       .select(`
         *,
         category:categories(id,name,slug,icon,color),
         locality:localities(id,name,slug,lat,lng),
         offers(*)
-      `)
+      `, { count: "exact" })
       .eq("is_active", true)
       .eq("is_approved", true)
       .gte("lat", lat - latDelta)
       .lte("lat", lat + latDelta)
       .gte("lng", lng - lngDelta)
-      .lte("lng", lng + lngDelta);
+      .lte("lng", lng + lngDelta)
+      .range(offset, offset + limit - 1);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -81,7 +84,11 @@ export async function GET(req: Request) {
         return (b.top_offer?.tier ?? 5) - (a.top_offer?.tier ?? 5);
       });
 
-    return NextResponse.json({ shops: finalShops });
+    return NextResponse.json({
+      shops:   finalShops,
+      total:   count ?? finalShops.length,
+      hasMore: offset + limit < (count ?? 0),
+    });
   } catch (err: any) {
     return NextResponse.json(
       { error: err?.message || "Server error" },

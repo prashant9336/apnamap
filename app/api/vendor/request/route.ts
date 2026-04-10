@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { checkRate } from "@/lib/ratelimit";
 
 export async function POST(req: NextRequest) {
   try {
+    const blocked = await checkRate(req, "vendorRequest");
+    if (blocked) return blocked;
+
     const body = await req.json();
     const {
       mobile,

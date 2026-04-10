@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 
-const withPWA = require("@ducanh2912/next-pwa").default;
+const withPWA    = require("@ducanh2912/next-pwa").default;
+const { withSentryConfig } = require("@sentry/nextjs");
 
 /* ── PWA / Workbox configuration ────────────────────────────────── */
 const pwaConfig = {
@@ -109,7 +110,28 @@ const nextConfig = {
     serverActions: {
       allowedOrigins: ["localhost:3000", "apnamap.com", "*.apnamap.com"],
     },
+    instrumentationHook: true,
   },
 };
 
-module.exports = withPWA(pwaConfig)(nextConfig);
+const baseConfig = withPWA(pwaConfig)(nextConfig);
+
+module.exports = withSentryConfig(baseConfig, {
+  // Suppress Sentry CLI output during builds
+  silent: true,
+
+  // Upload source maps only if SENTRY_AUTH_TOKEN is set (optional but recommended)
+  // Get token from: https://sentry.io/settings/account/api/auth-tokens/
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+
+  org:     process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT ?? "apnamap",
+
+  // Disable source map upload if token is missing (won't break the build)
+  disableServerWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
+  disableClientWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
+
+  // Tree-shake Sentry debug code from client bundle
+  hideSourceMaps: true,
+  widenClientFileUpload: true,
+});

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { createHmac, randomInt } from "crypto";
+import { checkRate } from "@/lib/ratelimit";
 
 const OTP_SECRET = process.env.OTP_SECRET;
 if (!OTP_SECRET || OTP_SECRET === "apnamap-otp-secret-change-me") {
@@ -17,6 +18,9 @@ function hashOtp(otp: string): string {
 
 export async function POST(req: NextRequest) {
   try {
+    const blocked = await checkRate(req, "otp");
+    if (blocked) return blocked;
+
     const { mobile } = await req.json() as { mobile?: string };
     const digits = (mobile ?? "").replace(/\D/g, "");
 
