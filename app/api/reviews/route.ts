@@ -1,13 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
+
+async function getUser(req: NextRequest) {
+  const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "").trim();
+  const adminSb = createAdminClient();
+  if (token) {
+    const { data } = await adminSb.auth.getUser(token);
+    if (data.user) return data.user;
+  }
+  const { data } = await createClient().auth.getUser();
+  return data.user ?? null;
+}
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const shopId = searchParams.get("shop_id");
   if (!shopId) return NextResponse.json({ error: "shop_id required" }, { status: 400 });
 
-  const supabase = createClient();
-  const { data, error } = await supabase
+  const { data, error } = await createAdminClient()
     .from("reviews")
     .select("*, profile:profiles(name, avatar_url)")
     .eq("shop_id", shopId)
@@ -20,8 +30,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getUser(req);
   if (!user) return NextResponse.json({ error: "Login required to review" }, { status: 401 });
 
   const { shop_id, rating, comment } = await req.json();
@@ -29,9 +38,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "shop_id and rating (1-5) required" }, { status: 400 });
   }
 
-  const { data, error } = await supabase.from("reviews").upsert({
-    user_id: user.id, shop_id, rating, comment: comment ?? null,
-  }, { onConflict: "user_id,shop_id" }).select().single();
+  const { data, error } = await createAdminClient()
+    .from("reviews")
+    .upsert(
+      { user_id: user.id, shop_id, rating, comment: comment ?? null },
+      { onConflict: "user_id,shop_id" }
+    )
+    .select()
+    .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ review: data }, { status: 201 });
