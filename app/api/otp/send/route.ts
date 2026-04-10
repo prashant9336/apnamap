@@ -3,15 +3,10 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { createHmac, randomInt } from "crypto";
 import { checkRate } from "@/lib/ratelimit";
 
-const OTP_TTL_MIN = 10; // minutes
+// Prevent Next.js from executing this route at build time
+export const dynamic = "force-dynamic";
 
-function getOtpSecret(): string {
-  const secret = process.env.OTP_SECRET;
-  if ((!secret || secret === "apnamap-otp-secret-change-me") && process.env.NODE_ENV === "production") {
-    throw new Error("OTP_SECRET env var is missing or uses the insecure default. Set a strong secret in your environment.");
-  }
-  return secret ?? "apnamap-otp-secret-change-me";
-}
+const OTP_TTL_MIN = 10; // minutes
 
 function hashOtp(otp: string, secret: string): string {
   return createHmac("sha256", secret).update(otp).digest("hex");
@@ -19,10 +14,15 @@ function hashOtp(otp: string, secret: string): string {
 
 export async function POST(req: NextRequest) {
   try {
+    // Validate OTP_SECRET at request time, not module load time
+    const otpSecret = process.env.OTP_SECRET;
+    if (!otpSecret || otpSecret === "apnamap-otp-secret-change-me") {
+      console.error("[otp/send] OTP_SECRET env var is missing or insecure — set it in Vercel env vars");
+      return NextResponse.json({ error: "OTP service is not configured" }, { status: 503 });
+    }
+
     const blocked = await checkRate(req, "otp");
     if (blocked) return blocked;
-
-    const otpSecret = getOtpSecret();
     const { mobile } = await req.json() as { mobile?: string };
     const digits = (mobile ?? "").replace(/\D/g, "");
 
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
 
     // Generate a 6-digit OTP
     const otp      = String(randomInt(100000, 999999));
-    const otp_hash = hashOtp(otp, otpSecret);
+    const otp_hash = hashOtp(otp, otpSecret as string);
     const expires_at = new Date(Date.now() + OTP_TTL_MIN * 60_000).toISOString();
 
     await admin.from("otp_sessions").insert({
