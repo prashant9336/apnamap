@@ -8,6 +8,27 @@ function err(msg: string, status = 400) {
   return NextResponse.json({ error: msg }, { status });
 }
 
+// ── Geo-fence: only accept shops within SERVICE_RADIUS_KM of the city centre ──
+const SERVICE_CENTER_LAT = parseFloat(process.env.NEXT_PUBLIC_DEFAULT_LAT ?? "25.4358");
+const SERVICE_CENTER_LNG = parseFloat(process.env.NEXT_PUBLIC_DEFAULT_LNG ?? "81.8463");
+const SERVICE_RADIUS_KM  = parseFloat(process.env.VENDOR_GEOFENCE_KM     ?? "80");    // ~80 km covers all Prayagraj
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R  = 6371;
+  const dL = (lat2 - lat1) * (Math.PI / 180);
+  const dN = (lng2 - lng1) * (Math.PI / 180);
+  const a  =
+    Math.sin(dL / 2) ** 2 +
+    Math.cos(lat1 * (Math.PI / 180)) *
+    Math.cos(lat2 * (Math.PI / 180)) *
+    Math.sin(dN / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function isWithinServiceArea(lat: number, lng: number): boolean {
+  return haversineKm(lat, lng, SERVICE_CENTER_LAT, SERVICE_CENTER_LNG) <= SERVICE_RADIUS_KM;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -88,6 +109,23 @@ export async function POST(req: NextRequest) {
       }, { onConflict: "id" });
 
       // ── 4. Shop ──────────────────────────────────────────────────────
+
+      // Geo-fence: if vendor pinned a GPS location, it must be within the service area.
+      // Reject up front so we don't create orphaned auth accounts for out-of-city vendors.
+      const shopLat = body.lat  ?? SERVICE_CENTER_LAT;
+      const shopLng = body.lng  ?? SERVICE_CENTER_LNG;
+
+      if (body.lat !== undefined && body.lng !== undefined) {
+        if (!isWithinServiceArea(body.lat, body.lng)) {
+          throw Object.assign(
+            new Error(
+              `ApnaMap currently serves Prayagraj only. Your pinned location appears to be outside our service area (>${SERVICE_RADIUS_KM} km from the city). Remove the GPS pin to register with the default city location, or contact us if your shop is in Prayagraj.`
+            ),
+            { statusCode: 422 }
+          );
+        }
+      }
+
       const slugBase = shop_name
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
@@ -105,8 +143,8 @@ export async function POST(req: NextRequest) {
         phone:                body.shop_phone?.trim()   || phone,
         whatsapp:             body.whatsapp?.trim()     || phone,
         address:              body.address?.trim()      ?? null,
-        lat:  body.lat  ?? parseFloat(process.env.NEXT_PUBLIC_DEFAULT_LAT ?? "25.4358"),
-        lng:  body.lng  ?? parseFloat(process.env.NEXT_PUBLIC_DEFAULT_LNG ?? "81.8463"),
+        lat:  shopLat,
+        lng:  shopLng,
         open_time:  "09:00",
         close_time: "21:00",
         open_days:  ["mon","tue","wed","thu","fri","sat"],
@@ -163,7 +201,8 @@ export async function POST(req: NextRequest) {
     }
 
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Server error";
-    return NextResponse.json({ error: msg }, { status: 500 });
+    const msg    = e instanceof Error ? e.message : "Server error";
+    const status = (e as { statusCode?: number }).statusCode ?? 500;
+    return NextResponse.json({ error: msg }, { status });
   }
 }

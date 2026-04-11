@@ -427,6 +427,11 @@ function VendorJoinWizard() {
         {/* ── STEP 2: Shop ─────────────────────────────────────────────── */}
         {step === "shop" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {/* Service area notice */}
+            <div style={S.info}>
+              📍 ApnaMap currently serves <strong>Prayagraj</strong> only. Shops outside the city will not be approved.
+            </div>
+
             {/* Shop name */}
             <div>
               <label style={S.label}>Shop / Business Name *</label>
@@ -514,13 +519,16 @@ function VendorJoinWizard() {
 
             {/* GPS pin */}
             <div>
-              <label style={S.label}>Shop Location</label>
+              <label style={S.label}>Shop Location (Prayagraj only)</label>
               <GpsButton onCapture={(lat, lng) => { upS("lat", lat); upS("lng", lng); }} />
               {shop.lat !== null && (
                 <p style={{ fontSize: 11, color: "#1FBB5A", marginTop: 5 }}>
                   📍 {shop.lat.toFixed(5)}, {shop.lng?.toFixed(5)}
                 </p>
               )}
+              <p style={{ fontSize: 11, color: "rgba(255,255,255,0.25)", marginTop: 5 }}>
+                Only pin location if your shop is in Prayagraj. Out-of-area pins will be rejected.
+              </p>
             </div>
 
             {error && <div style={S.err}>{error}</div>}
