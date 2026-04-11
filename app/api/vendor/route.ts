@@ -60,6 +60,16 @@ export async function GET(req: NextRequest) {
   });
 }
 
+// Strict allowlist of fields a vendor may edit on their own shop.
+// Admin-only fields (is_approved, is_active, is_featured, is_boosted,
+// is_recommended, vendor_id, manual_priority, etc.) are intentionally
+// absent — a vendor must never be able to approve or promote their own listing.
+const VENDOR_EDITABLE_SHOP_FIELDS = new Set([
+  "name", "description", "phone", "whatsapp", "address",
+  "lat", "lng", "logo_url", "cover_url",
+  "open_time", "close_time", "open_days",
+]);
+
 export async function PATCH(req: NextRequest) {
   const supabase = createClient();
   const user = await requireUser(supabase);
@@ -68,7 +78,22 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { shop_id, ...updates } = await req.json();
+  const body = await req.json() as Record<string, unknown>;
+  const { shop_id } = body;
+
+  if (!shop_id || typeof shop_id !== "string") {
+    return NextResponse.json({ error: "shop_id required" }, { status: 400 });
+  }
+
+  // Build update payload from allowlist only — any field not in the set is silently ignored.
+  const updates: Record<string, unknown> = {};
+  for (const field of VENDOR_EDITABLE_SHOP_FIELDS) {
+    if (field in body) updates[field] = body[field];
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json({ error: "No editable fields provided" }, { status: 400 });
+  }
 
   const { data: shop } = await supabase
     .from("shops")

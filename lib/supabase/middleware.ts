@@ -38,11 +38,9 @@ export async function updateSession(request: NextRequest) {
       .eq("id", user.id)
       .maybeSingle();
 
-    role =
-      profile?.role ||
-      user.user_metadata?.role ||
-      user.app_metadata?.role ||
-      "customer";
+    // ONLY trust profiles.role — the server-managed source of truth.
+    // user_metadata is user-settable and must never gate access control.
+    role = profile?.role ?? "customer";
   }
 
   if (path.startsWith("/vendor")) {

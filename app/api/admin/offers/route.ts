@@ -22,7 +22,9 @@ async function requireAdmin(req: NextRequest) {
   if (!user) return null;
 
   const { data: profile } = await adminSb.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  const role = profile?.role || user.user_metadata?.role || user.app_metadata?.role || "customer";
+  // ONLY trust the server-managed profiles.role column.
+  // user_metadata is user-settable via supabase.auth.updateUser() — never use it for privilege checks.
+  const role = profile?.role ?? "customer";
   return role === "admin" ? user : null;
 }
 

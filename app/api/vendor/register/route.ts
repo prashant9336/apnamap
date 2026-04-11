@@ -61,10 +61,13 @@ export async function POST(req: NextRequest) {
     const admin = createAdminClient();
 
     // ── Duplicate check: mobile already registered ───────────────────
+    // Check both "+91XXXXXXXXXX" and raw-digit formats — migration 010 stored
+    // raw digits; migration 016 normalises to +91 prefix, but match both until
+    // all deployments have run the migration.
     const { data: existing } = await admin
       .from("vendors")
       .select("id")
-      .eq("mobile", phone)
+      .or(`mobile.eq.${phone},mobile.eq.${digits}`)
       .maybeSingle();
 
     if (existing) {
