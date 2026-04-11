@@ -30,10 +30,14 @@ export async function GET(req: Request) {
     let query = supabase
       .from("shops")
       .select(`
-        *,
+        id, name, slug, description, phone, whatsapp, address,
+        lat, lng, logo_url, is_active, is_featured, is_boosted,
+        manual_priority, avg_rating, review_count, view_count,
+        open_time, close_time, open_days, vendor_id,
+        locality_id, category_id,
         category:categories(id,name,slug,icon,color),
         locality:localities(id,name,slug,lat,lng),
-        offers(*)
+        offers(id,title,tier,is_active,ends_at,discount_type,discount_value,coupon_code)
       `, { count: "exact" })
       .eq("is_active", true)
       .eq("is_approved", true)

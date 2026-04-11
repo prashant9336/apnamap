@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { vendorAuthEmail } from "@/lib/config";
+import { vendorAuthEmail, normalizePhone, phoneDigits } from "@/lib/config";
+import { checkRate } from "@/lib/ratelimit";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,9 @@ function isWithinServiceArea(lat: number, lng: number): boolean {
 }
 
 export async function POST(req: NextRequest) {
+  const block = await checkRate(req, "vendorRegister");
+  if (block) return block;
+
   try {
     const body = await req.json();
 
@@ -43,16 +47,16 @@ export async function POST(req: NextRequest) {
       locality_id:  string;
     };
 
-    const digits = (mobile ?? "").replace(/\D/g, "");
+    const phone = normalizePhone(mobile ?? "");
+    if (!phone)                           return err("Enter a valid 10-digit mobile number");
+    const digits = phoneDigits(phone);
 
     if (!owner_name?.trim())              return err("Owner name is required");
-    if (digits.length !== 10)             return err("Enter a valid 10-digit mobile number");
     if (!password || password.length < 6) return err("Password must be at least 6 characters");
     if (!shop_name?.trim())               return err("Shop name is required");
     if (!category_id)                     return err("Category is required");
     if (!locality_id)                     return err("Locality is required");
 
-    const phone = `+91${digits}`;
     const email = vendorAuthEmail(digits);
     const admin = createAdminClient();
 

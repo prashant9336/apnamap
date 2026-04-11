@@ -45,3 +45,32 @@ export const VENDOR_EMAIL_DOMAIN = "vendor.apnamap.in";
 export function vendorAuthEmail(digits: string): string {
   return `${digits}@${VENDOR_EMAIL_DOMAIN}`;
 }
+
+// ─── Phone normalization ──────────────────────────────────────────────────────
+// Canonical format throughout the app: "+91XXXXXXXXXX"
+// Use these helpers everywhere — never inline phone formatting.
+
+/**
+ * Normalize any Indian phone input to "+91XXXXXXXXXX".
+ * Accepts: "9876543210", "+919876543210", "919876543210", "09876543210"
+ * Returns null if the input cannot be resolved to exactly 10 digits.
+ */
+export function normalizePhone(raw: string): string | null {
+  if (!raw) return null;
+  // Strip all non-digits
+  let digits = raw.replace(/\D/g, "");
+  // Handle "91XXXXXXXXXX" (12 digits starting with 91)
+  if (digits.length === 12 && digits.startsWith("91")) digits = digits.slice(2);
+  // Handle "0XXXXXXXXXX" (11 digits with leading 0)
+  if (digits.length === 11 && digits.startsWith("0")) digits = digits.slice(1);
+  if (digits.length !== 10) return null;
+  return `+91${digits}`;
+}
+
+/**
+ * Extract the raw 10-digit number from a canonical phone string.
+ * e.g. "+919876543210" → "9876543210"
+ */
+export function phoneDigits(phone: string): string {
+  return phone.replace(/\D/g, "").slice(-10);
+}

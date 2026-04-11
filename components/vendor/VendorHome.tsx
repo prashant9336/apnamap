@@ -379,6 +379,23 @@ export default function VendorHome() {
         className="scroll-none"
         style={{ flex: 1, overflowY: "scroll", padding: "14px 16px 20px", display: "flex", flexDirection: "column", gap: 14 }}
       >
+        {/* ── Pending approval banner ──────────────────────────── */}
+        {activeShop && !activeShop.is_approved && (
+          <div style={{
+            padding: "14px 16px", borderRadius: 14,
+            background: "rgba(232,168,0,0.08)",
+            border: "1px solid rgba(232,168,0,0.28)",
+          }}>
+            <div style={{ fontSize: "13px", fontWeight: 800, color: "#E8A800", marginBottom: 4 }}>
+              ⏳ Your shop is under review
+            </div>
+            <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.50)", lineHeight: 1.6 }}>
+              The ApnaMap team is verifying your listing. It usually takes less than 24 hours.
+              Once approved, your shop and offers will appear to users in the explore feed.
+            </div>
+          </div>
+        )}
+
         {/* ── Today's stats ─────────────────────────────────────── */}
         <div>
           <div style={{ fontSize: "10px", fontWeight: 700, color: "rgba(255,255,255,0.28)", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 8 }}>

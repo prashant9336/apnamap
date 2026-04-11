@@ -53,6 +53,30 @@ const limiters = redis
         prefix:    "rl:vendor_req",
         analytics: false,
       }),
+
+      /** Vendor account activation (set-password): 5 per 15 min per IP — brute-force guard */
+      vendorActivate: new Ratelimit({
+        redis,
+        limiter:   Ratelimit.slidingWindow(5, "15 m"),
+        prefix:    "rl:vendor_activate",
+        analytics: false,
+      }),
+
+      /** Vendor self-registration: 3 per hour per IP — prevents fake shop spam */
+      vendorRegister: new Ratelimit({
+        redis,
+        limiter:   Ratelimit.slidingWindow(3, "1 h"),
+        prefix:    "rl:vendor_register",
+        analytics: false,
+      }),
+
+      /** Admin onboarding: 20 per hour per IP — admin panel, higher limit */
+      adminOnboard: new Ratelimit({
+        redis,
+        limiter:   Ratelimit.slidingWindow(20, "1 h"),
+        prefix:    "rl:admin_onboard",
+        analytics: false,
+      }),
     }
   : null;
 

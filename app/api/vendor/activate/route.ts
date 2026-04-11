@@ -1,26 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { vendorAuthEmail } from "@/lib/config";
-
-// Synthetic email so Supabase email auth works without phone provider
-function vendorEmail(digits: string) {
-  return vendorAuthEmail(digits);
-}
+import { vendorAuthEmail, normalizePhone, phoneDigits } from "@/lib/config";
+import { checkRate } from "@/lib/ratelimit";
 
 export async function POST(req: NextRequest) {
+  const block = await checkRate(req, "vendorActivate");
+  if (block) return block;
   try {
     const { mobile, password } = await req.json() as { mobile: string; password: string };
 
-    const digits = (mobile ?? "").replace(/\D/g, "");
-    if (digits.length !== 10) {
+    const phone = normalizePhone(mobile ?? "");
+    if (!phone) {
       return NextResponse.json({ error: "Enter a valid 10-digit mobile number" }, { status: 400 });
     }
     if (!password || password.length < 6) {
       return NextResponse.json({ error: "Password must be at least 6 characters" }, { status: 400 });
     }
 
-    const phone = `+91${digits}`;
-    const email = vendorEmail(digits);
+    const digits = phoneDigits(phone);
+    const email  = vendorAuthEmail(digits);
     const admin = createAdminClient();
 
     // Find an approved request for this mobile — this is the identity check.

@@ -1,17 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { vendorAuthEmail, VENDOR_LOGIN_URL } from "@/lib/config";
+import { vendorAuthEmail, VENDOR_LOGIN_URL, normalizePhone, phoneDigits } from "@/lib/config";
+import { checkRate } from "@/lib/ratelimit";
+import { randomBytes } from "crypto";
 
-function vendorEmail(digits: string) {
-  return vendorAuthEmail(digits);
-}
-
-// Memorable temp password: Word@NNNN
-const WORDS = ["Shop","Deal","Offer","Store","Dukaan","Bazaar","Market","Local","Near","Fresh"];
+// Cryptographically secure temp password: 12 base64url chars + fixed suffix
+// ~72 bits of entropy — not brute-forceable even knowing the format
 function generateTempPassword(): string {
-  const word = WORDS[Math.floor(Math.random() * WORDS.length)];
-  const num  = String(Math.floor(1000 + Math.random() * 9000));
-  return `${word}@${num}`;
+  return randomBytes(9).toString("base64url") + "@1"; // always valid: ≥8 chars, has symbol+digit
 }
 
 function whatsappText(shopName: string, mobile: string, password: string): string {
@@ -28,6 +24,9 @@ function whatsappText(shopName: string, mobile: string, password: string): strin
 }
 
 export async function POST(req: NextRequest) {
+  const block = await checkRate(req, "adminOnboard");
+  if (block) return block;
+
   try {
     const admin = createAdminClient();
 
@@ -64,16 +63,16 @@ export async function POST(req: NextRequest) {
       };
     };
 
-    const digits = (body.mobile ?? "").replace(/\D/g, "");
-    if (digits.length !== 10)   return NextResponse.json({ error: "Invalid mobile number" }, { status: 400 });
-    if (!body.shop_name?.trim()) return NextResponse.json({ error: "Shop name is required" }, { status: 400 });
-    if (!body.category_id)       return NextResponse.json({ error: "Category is required" }, { status: 400 });
-    if (!body.locality_id)       return NextResponse.json({ error: "Locality is required" }, { status: 400 });
+    const phone = normalizePhone(body.mobile ?? "");
+    if (!phone)                   return NextResponse.json({ error: "Invalid mobile number" }, { status: 400 });
+    if (!body.shop_name?.trim())  return NextResponse.json({ error: "Shop name is required" }, { status: 400 });
+    if (!body.category_id)        return NextResponse.json({ error: "Category is required" }, { status: 400 });
+    if (!body.locality_id)        return NextResponse.json({ error: "Locality is required" }, { status: 400 });
     if (!body.offer?.title?.trim()) return NextResponse.json({ error: "Offer title is required" }, { status: 400 });
+    const digits = phoneDigits(phone);
 
-    const email       = vendorEmail(digits);
-    const phone       = `+91${digits}`;
-    const tempPass    = generateTempPassword();
+    const email    = vendorAuthEmail(digits);
+    const tempPass = generateTempPassword();
 
     // ── Check duplicate account (vendors table has unique mobile) ────
     const { data: existingVendor } = await admin

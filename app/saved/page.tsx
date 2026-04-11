@@ -58,7 +58,7 @@ export default function SavedPage() {
               <div className="text-4xl mb-3">🔒</div>
               <p className="font-semibold mb-1">Login to save shops & offers</p>
               <p className="text-sm mb-6" style={{ color: "var(--t2)" }}>Your saved items sync across devices</p>
-              <Link href="/auth/login" className="px-6 py-2.5 rounded-full font-bold text-white text-sm"
+              <Link href="/auth/login?redirect=/saved" className="px-6 py-2.5 rounded-full font-bold text-white text-sm"
                 style={{ background: "var(--accent)" }}>Login / Sign up</Link>
             </div>
           )}

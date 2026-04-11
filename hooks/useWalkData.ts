@@ -29,6 +29,10 @@ export function useWalkData(
   const [loading,             setLoading]             = useState(true);
   const [error,               setError]               = useState<string | null>(null);
 
+  // Round to 3 decimal places ≈ 111 m grid — prevents re-fetch on sub-100m GPS jitter
+  const stableLat = Math.round(lat * 1000) / 1000;
+  const stableLng = Math.round(lng * 1000) / 1000;
+
   useEffect(() => {
     async function load() {
       try {
@@ -43,7 +47,7 @@ export function useWalkData(
             .from("localities")
             .select("*, city:cities(id, name, slug)")
             .order("priority"),
-          fetch(`/api/shops?lat=${lat}&lng=${lng}&radius=${radiusM}`, { cache: "no-store" }),
+          fetch(`/api/shops?lat=${stableLat}&lng=${stableLng}&radius=${radiusM}`, { cache: "no-store" }),
         ]);
 
         if (locResult.error) {
@@ -167,7 +171,9 @@ export function useWalkData(
     }
 
     load();
-  }, [lat, lng, radiusM]);
+  // stableLat/stableLng are rounded to 3dp — only re-fetch when user moves >~111m
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stableLat, stableLng, radiusM]);
 
   return { localities, nearestLocalityIdx, loading, error };
 }
