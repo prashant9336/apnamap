@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { vendorAuthEmail } from "@/lib/config";
 
 const S = {
   page:  { minHeight: "100vh", background: "#05070C", display: "flex", flexDirection: "column" as const, alignItems: "center", justifyContent: "center", padding: "24px 20px" },
@@ -48,7 +49,7 @@ function VendorLoginForm() {
     try {
       // Vendor accounts use synthetic email (no phone provider needed)
       const { data, error: signInErr } = await supabase.auth.signInWithPassword({
-        email:    `${digits}@vendor.apnamap.in`,
+        email:    vendorAuthEmail(digits),
         password,
       });
 

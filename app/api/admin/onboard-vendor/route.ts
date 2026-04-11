@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { vendorAuthEmail, VENDOR_LOGIN_URL } from "@/lib/config";
 
 function vendorEmail(digits: string) {
-  return `${digits}@vendor.apnamap.in`;
+  return vendorAuthEmail(digits);
 }
 
 // Memorable temp password: Word@NNNN
@@ -20,7 +21,7 @@ function whatsappText(shopName: string, mobile: string, password: string): strin
     `*Login Details:*\n` +
     `📱 Mobile: ${mobile}\n` +
     `🔑 Password: \`${password}\`\n\n` +
-    `*Login here:*\nhttps://apnamap.in/vendor/login\n\n` +
+    `*Login here:*\n${VENDOR_LOGIN_URL}\n\n` +
     `⚠️ Please change your password after first login.\n\n` +
     `_ApnaMap Team_`
   );

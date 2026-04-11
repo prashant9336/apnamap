@@ -108,7 +108,7 @@ const nextConfig = {
   },
   experimental: {
     serverActions: {
-      allowedOrigins: ["localhost:3000", "apnamap.com", "*.apnamap.com"],
+      allowedOrigins: ["localhost:3000", "apnamap.vercel.app", "apnamap.com", "*.apnamap.com"],
     },
     instrumentationHook: true,
   },

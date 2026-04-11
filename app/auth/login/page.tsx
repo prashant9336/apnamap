@@ -3,6 +3,7 @@ import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { vendorAuthEmail } from "@/lib/config";
 
 function LoginForm() {
   const [mode,     setMode]     = useState<"email" | "mobile">("mobile");
@@ -28,7 +29,7 @@ function LoginForm() {
     setLoading(true); setError("");
 
     const loginEmail = mode === "mobile"
-      ? `${mobile.replace(/\D/g, "")}@vendor.apnamap.in`
+      ? vendorAuthEmail(mobile.replace(/\D/g, ""))
       : email;
 
     if (mode === "mobile" && mobile.replace(/\D/g, "").length !== 10) {

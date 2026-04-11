@@ -18,7 +18,7 @@ const nextConfig: NextConfig = {
   experimental: {
     // Allows server actions
     serverActions: {
-      allowedOrigins: ["localhost:3000", "apnamap.com", "*.apnamap.com"],
+      allowedOrigins: ["localhost:3000", "apnamap.vercel.app", "apnamap.com", "*.apnamap.com"],
     },
   },
 };

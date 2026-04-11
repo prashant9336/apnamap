@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { vendorAuthEmail } from "@/lib/config";
 
 // Synthetic email so Supabase email auth works without phone provider
 function vendorEmail(digits: string) {
-  return `${digits}@vendor.apnamap.in`;
+  return vendorAuthEmail(digits);
 }
 
 export async function POST(req: NextRequest) {
