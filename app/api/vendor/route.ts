@@ -64,11 +64,11 @@ export async function GET(req: NextRequest) {
 // Admin-only fields (is_approved, is_active, is_featured, is_boosted,
 // is_recommended, vendor_id, manual_priority, etc.) are intentionally
 // absent — a vendor must never be able to approve or promote their own listing.
-const VENDOR_EDITABLE_SHOP_FIELDS = new Set([
+const VENDOR_EDITABLE_SHOP_FIELDS = [
   "name", "description", "phone", "whatsapp", "address",
   "lat", "lng", "logo_url", "cover_url",
   "open_time", "close_time", "open_days",
-]);
+] as const;
 
 export async function PATCH(req: NextRequest) {
   const supabase = createClient();
