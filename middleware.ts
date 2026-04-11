@@ -1,13 +1,20 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
-import { createHmac } from "crypto";
 
 const PUBLIC_FILE = /\.(.*)$/;
 
-function isValidAccessCookie(cookieValue: string | undefined): boolean {
+/** HMAC-SHA256 using Web Crypto API (Edge Runtime compatible). */
+async function isValidAccessCookie(cookieValue: string | undefined): Promise<boolean> {
   if (!cookieValue) return false;
   const secret  = process.env.SITE_PASSWORD ?? "fallback-dev-secret";
-  const expected = createHmac("sha256", secret).update("apnamap_access_v1").digest("hex");
+  const enc     = new TextEncoder();
+  const key     = await crypto.subtle.importKey(
+    "raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const sig     = await crypto.subtle.sign("HMAC", key, enc.encode("apnamap_access_v1"));
+  const expected = Array.from(new Uint8Array(sig))
+    .map(b => b.toString(16).padStart(2, "0"))
+    .join("");
   return cookieValue === expected;
 }
 
@@ -36,7 +43,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Check private access cookie (HMAC-signed value)
-  const isUnlocked = isValidAccessCookie(
+  const isUnlocked = await isValidAccessCookie(
     request.cookies.get("apnamap_access")?.value
   );
 
