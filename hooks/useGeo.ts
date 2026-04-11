@@ -57,11 +57,12 @@ export function useGeo() {
     // Step 1: seed with cache immediately (fast, optimistic)
     const cached = loadCache();
     if (cached) {
+      // Cache hit → show content immediately; GPS will update silently in background
       setGeo({
         lat:      cached.lat,
         lng:      cached.lng,
         accuracy: null,
-        loading:  true,        // still loading = true; fresh GPS request is in flight
+        loading:  false,       // show content right away with cached coords
         error:    null,
         locality: cached.locality,
       });
@@ -77,6 +78,7 @@ export function useGeo() {
       return;
     }
 
+    // If no cache, stay in loading state; otherwise GPS updates silently
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const { latitude: lat, longitude: lng, accuracy } = pos.coords;
@@ -86,7 +88,6 @@ export function useGeo() {
       },
       (err) => {
         // GPS denied or failed — keep cached/default coords but stop spinner
-        // and show a gentle message only if we have NO cache to fall back on
         const errMsg = err.code === 1
           ? "Location access denied."
           : "Could not get location.";
@@ -97,8 +98,32 @@ export function useGeo() {
           error: g.lat === DEFAULT_LAT ? errMsg : null,
         }));
       },
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }, // maximumAge: 0 = always fresh
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 },
     );
+
+    // Step 3: re-request GPS when tab becomes visible again (fixes bfcache / idle tab restore)
+    function onVisible() {
+      if (document.visibilityState !== "visible") return;
+      const fresh = loadCache();
+      if (fresh) {
+        setGeo(g => ({ ...g, lat: fresh.lat, lng: fresh.lng, locality: fresh.locality, loading: false }));
+      }
+      navigator.geolocation?.getCurrentPosition(
+        async (pos) => {
+          const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+          const locality = await reverseGeocode(lat, lng);
+          saveCache(lat, lng, locality);
+          setGeo({ lat, lng, accuracy, loading: false, error: null, locality });
+        },
+        () => {
+          setGeo(g => ({ ...g, loading: false }));
+        },
+        { enableHighAccuracy: false, timeout: 6000, maximumAge: 60_000 },
+      );
+    }
+
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, []); // runs once on mount
 
   /** Manual re-detect (e.g. user taps a "Detect my location" button) */
