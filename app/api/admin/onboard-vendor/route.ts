@@ -74,11 +74,12 @@ export async function POST(req: NextRequest) {
     const email    = vendorAuthEmail(digits);
     const tempPass = generateTempPassword();
 
-    // ── Check duplicate account (vendors table has unique mobile) ────
+    // ── Check duplicate account — match both "+91XXXXXXXXXX" and raw-digit formats ──
+    // Old records (pre-normalisation) may be stored without the +91 prefix.
     const { data: existingVendor } = await admin
       .from("vendors")
       .select("id")
-      .eq("mobile", phone)
+      .or(`mobile.eq.${phone},mobile.eq.${digits}`)
       .maybeSingle();
     if (existingVendor) {
       return NextResponse.json({

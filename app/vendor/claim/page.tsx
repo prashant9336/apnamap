@@ -32,33 +32,30 @@ function ClaimShopForm() {
     }
     setLoading(true); setError("");
 
-    const { data: existing } = await sb
-      .from("shop_claim_requests")
-      .select("id")
-      .eq("shop_id", shopId)
-      .eq("status", "pending")
-      .maybeSingle();
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { router.push(`/auth/login?redirect=/vendor/claim?shop_id=${shopId}`); return; }
 
-    if (existing) {
-      setError("A claim is already pending for this shop. Our team will review it.");
-      setLoading(false); return;
-    }
-
-    const { data: { user } } = await sb.auth.getUser();
-    if (!user) { router.push(`/auth/login?redirect=/vendor/claim?shop_id=${shopId}`); return; }
-
-    const { error: claimErr } = await sb.from("shop_claim_requests").insert({
-      shop_id:        shopId,
-      user_id:        user.id,
-      claimant_name:  name.trim(),
-      claimant_phone: phone.replace(/\D/g, ""),
-      status:         "pending",
+    const res = await fetch("/api/vendor/claim", {
+      method:  "POST",
+      headers: {
+        "Content-Type":  "application/json",
+        Authorization:   `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        shop_id:        shopId,
+        claimant_name:  name.trim(),
+        claimant_phone: phone.replace(/\D/g, ""),
+      }),
     });
 
-    if (claimErr) { setError("Could not submit claim. Please try again."); setLoading(false); return; }
-
-    await sb.from("shops").update({ claim_status: "pending" }).eq("id", shopId);
+    const data = await res.json();
     setLoading(false);
+
+    if (!res.ok) {
+      setError(data.error ?? "Could not submit claim. Please try again.");
+      return;
+    }
+
     setStep("done");
   }
 
