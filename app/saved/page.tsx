@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import AppShell from "@/components/layout/AppShell";
+import { createClient } from "@/lib/supabase/client";
 
 export default function SavedPage() {
   const [favorites, setFavorites] = useState<any[]>([]);
@@ -9,23 +10,36 @@ export default function SavedPage() {
   const [authed,    setAuthed]    = useState(true);
 
   useEffect(() => {
-    fetch("/api/favorites")
-      .then(async (r) => {
+    const supabase = createClient();
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session) { setAuthed(false); setLoading(false); return; }
+      try {
+        const r = await fetch("/api/favorites", {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
         if (r.status === 401) { setAuthed(false); setLoading(false); return; }
         const d = await r.json();
         setFavorites(d.favorites ?? []);
+      } catch {
+        // network error — stay authed, just show empty
+      } finally {
         setLoading(false);
-      })
-      .catch(() => setLoading(false));
+      }
+    });
   }, []);
 
   async function unsave(fav: any) {
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
     const body: Record<string, string> = {};
     if (fav.shop?.id)     body.shop_id     = fav.shop.id;
     if (fav.offer?.id)    body.offer_id    = fav.offer.id;
     if (fav.locality?.id) body.locality_id = fav.locality.id;
     const r = await fetch("/api/favorites", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      method:  "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+      body:    JSON.stringify(body),
     });
     if (r.ok) setFavorites(f => f.filter(x => x.id !== fav.id));
   }
