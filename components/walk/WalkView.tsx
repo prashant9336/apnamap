@@ -199,8 +199,6 @@ export default function WalkView({ localities, nearestLocalityIdx, loading, user
     }
   }, [activeIdx]);
 
-  if (loading) return <Skel />;
-
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#05070C" }}>
 
@@ -269,50 +267,54 @@ export default function WalkView({ localities, nearestLocalityIdx, loading, user
       {/* Scroll canvas */}
       <div
         ref={scrollRef}
-        onScroll={onScroll}
+        onScroll={loading ? undefined : onScroll}
         className="scroll-none"
         style={{ flex: 1, overflowY: "scroll", overflowX: "hidden", position: "relative" }}
       >
-        {gpsError && (
-          <div style={{ margin: "10px 12px 0", padding: "8px 12px", borderRadius: 10, fontSize: "11px", background: "rgba(232,168,0,0.09)", border: "1px solid rgba(232,168,0,0.22)", color: "#E8A800" }}>
-            ⚠️ {gpsError}
-          </div>
-        )}
-
-        {/* You are here */}
-        <YouAreHere locality={currentLoc || userLocality} />
-
-        {/* Live feed strip — uses ranked data for relevance */}
-        <LiveFeedStrip localities={rankedLocalities} />
-
-        {/* Crowd banner */}
-        <CrowdBanner crowd={crowd} localities={rankedLocalities} />
-
-        {/* Localities — ranked by deal score */}
-        {rankedLocalities.map((loc, i) => (
-          <div key={loc.id} data-loc={loc.name} data-loc-idx={i}>
-            {/* Top-3 deal leaderboard — collapsed by default, expands on tap */}
-            <LocalityLeaderboard locality={loc} />
-            {/* Streak badge — fires /api/streak on mount, idempotent per day */}
-            <StreakBadge localityId={loc.id} localityName={loc.name} />
-            <LocalitySection locality={loc} index={i} />
-            {i < rankedLocalities.length - 1 && (
-              <>
-                <LocalityTransition fromName={loc.name} toName={rankedLocalities[i + 1].name} />
-                {/* Mystery deal teaser — appears after first locality transition only */}
-                {i === 0 && (
-                  <MysteryDeal
-                    revealOffer={rankedLocalities[1]?.shops?.find(s => s.top_offer)?.top_offer ?? null}
-                  />
-                )}
-              </>
+        {loading ? <SkelContent /> : (
+          <>
+            {gpsError && (
+              <div style={{ margin: "10px 12px 0", padding: "8px 12px", borderRadius: 10, fontSize: "11px", background: "rgba(232,168,0,0.09)", border: "1px solid rgba(232,168,0,0.22)", color: "#E8A800" }}>
+                ⚠️ {gpsError}
+              </div>
             )}
-          </div>
-        ))}
 
-        {rankedLocalities.length === 0 && <EmptyState />}
-        {rankedLocalities.length > 0  && <EndCTA localities={rankedLocalities} />}
-        <div style={{ height: 18 }} />
+            {/* You are here */}
+            <YouAreHere locality={currentLoc || userLocality} />
+
+            {/* Live feed strip — uses ranked data for relevance */}
+            <LiveFeedStrip localities={rankedLocalities} />
+
+            {/* Crowd banner */}
+            <CrowdBanner crowd={crowd} localities={rankedLocalities} />
+
+            {/* Localities — ranked by deal score */}
+            {rankedLocalities.map((loc, i) => (
+              <div key={loc.id} data-loc={loc.name} data-loc-idx={i}>
+                {/* Top-3 deal leaderboard — collapsed by default, expands on tap */}
+                <LocalityLeaderboard locality={loc} />
+                {/* Streak badge — fires /api/streak on mount, idempotent per day */}
+                <StreakBadge localityId={loc.id} localityName={loc.name} />
+                <LocalitySection locality={loc} index={i} />
+                {i < rankedLocalities.length - 1 && (
+                  <>
+                    <LocalityTransition fromName={loc.name} toName={rankedLocalities[i + 1].name} />
+                    {/* Mystery deal teaser — appears after first locality transition only */}
+                    {i === 0 && (
+                      <MysteryDeal
+                        revealOffer={rankedLocalities[1]?.shops?.find(s => s.top_offer)?.top_offer ?? null}
+                      />
+                    )}
+                  </>
+                )}
+              </div>
+            ))}
+
+            {rankedLocalities.length === 0 && <EmptyState />}
+            {rankedLocalities.length > 0  && <EndCTA localities={rankedLocalities} />}
+            <div style={{ height: 18 }} />
+          </>
+        )}
       </div>
 
       {/* Floating deal bar — shows top-scored deal for current locality */}
@@ -783,13 +785,11 @@ function EmptyState() {
   );
 }
 
-/* ─── Skeleton ───────────────────────────────────────────────── */
-function Skel() {
+/* ─── Skeleton (content area only — header stays stable) ────── */
+function SkelContent() {
   return (
     <div style={{ padding:12, display:"flex", flexDirection:"column", gap:12 }}>
-      <div style={{ height:44 }} className="shimmer" />
-      <div style={{ height:36, borderRadius:10 }} className="shimmer" />
-      <div style={{ height:28, borderRadius:8, width:"60%" }} className="shimmer" />
+      <div style={{ height:56, borderRadius:12 }} className="shimmer" />
       {[0,1,2,3].map(i => <div key={i} style={{ height:160, borderRadius:13 }} className="shimmer" />)}
     </div>
   );
