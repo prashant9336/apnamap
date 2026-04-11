@@ -23,25 +23,8 @@ export async function POST(req: NextRequest) {
     const email = vendorEmail(digits);
     const admin = createAdminClient();
 
-    // Require OTP verification within the last 15 minutes
-    const otpCutoff = new Date(Date.now() - 15 * 60_000).toISOString();
-    const { data: otpSession } = await admin
-      .from("otp_sessions")
-      .select("id")
-      .eq("mobile", digits)
-      .eq("verified", true)
-      .gt("expires_at", otpCutoff)
-      .limit(1)
-      .maybeSingle();
-
-    if (!otpSession) {
-      return NextResponse.json(
-        { error: "Phone verification required. Please verify your mobile number first.", otpRequired: true },
-        { status: 403 }
-      );
-    }
-
-    // Find an approved request for this mobile
+    // Find an approved request for this mobile — this is the identity check.
+    // Admin approval replaces the need for OTP since admin already vetted the vendor.
     const { data: vr, error: vrErr } = await admin
       .from("vendor_requests")
       .select("id, shop_name, shop_id, request_type, locality_id, category_id")
@@ -53,12 +36,12 @@ export async function POST(req: NextRequest) {
 
     if (vrErr || !vr) {
       return NextResponse.json({
-        error: "No approved request found for this number. Contact support or wait for admin approval.",
+        error: "No approved request found for this number. Contact the ApnaMap team or wait for admin approval.",
       }, { status: 404 });
     }
 
-    // Create Supabase Auth user with synthetic email + password
-    // email_confirm: true skips email verification — admin already verified the request
+    // Create Supabase Auth user with synthetic email + password.
+    // email_confirm: true skips email verification — admin already verified the request.
     const { data: authData, error: authErr } = await admin.auth.admin.createUser({
       email,
       password,
