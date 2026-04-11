@@ -364,7 +364,7 @@ export default function WalkView({ localities, nearestLocalityIdx, loading, user
       </div>
 
       {/* Floating deal bar — shows top-scored deal for current locality */}
-      <FloatingDealBar topDeals={topDeals} currentLoc={currentLoc || userLocality} />
+      <FloatingDealBar topDeals={topDeals} currentLoc={currentLoc || userLocality} localities={filteredLocalities} />
     </div>
   );
 }
@@ -671,9 +671,11 @@ function MysteryDeal({ revealOffer }: { revealOffer?: Offer | null }) {
 function FloatingDealBar({
   topDeals,
   currentLoc,
+  localities,
 }: {
   topDeals:   ScoredOffer[];
   currentLoc: string;
+  localities: WalkLocality[];
 }) {
   // Rotate through top deals every 4 s
   const [idx, setIdx] = useState(0);
@@ -682,6 +684,13 @@ function FloatingDealBar({
     const iv = setInterval(() => setIdx(n => (n + 1) % topDeals.length), 4000);
     return () => clearInterval(iv);
   }, [topDeals.length]);
+
+  // Count active offers in the current locality only
+  const localDealCount = useMemo(() => {
+    const loc = localities.find(l => l.name === currentLoc);
+    if (!loc) return topDeals.length;
+    return loc.shops.reduce((sum, s) => sum + ((s as WalkShop).offers?.filter((o: Offer) => o.is_active).length ?? 0), 0);
+  }, [localities, currentLoc, topDeals.length]);
 
   const show = topDeals.length > 0;
   const top  = topDeals[idx];
@@ -736,7 +745,7 @@ function FloatingDealBar({
                 transition={{ duration: 0.25 }}
                 style={{ fontSize: "12px", fontWeight: 700, color: "#EDEEF5", display: "block" }}
               >
-                {icon} {topDeals.length} deal{topDeals.length !== 1 ? "s" : ""} nearby · {currentLoc}
+                {icon} {localDealCount} deal{localDealCount !== 1 ? "s" : ""} nearby · {currentLoc}
               </motion.span>
             </AnimatePresence>
             <span style={{ fontSize: "10.5px", color: "rgba(255,255,255,0.30)" }}>
