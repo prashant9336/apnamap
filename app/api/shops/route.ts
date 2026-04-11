@@ -6,11 +6,12 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
 
-    const lat    = Number(searchParams.get("lat"));
-    const lng    = Number(searchParams.get("lng"));
-    const radius = Number(searchParams.get("radius") ?? 10000);
-    const limit  = Math.min(Number(searchParams.get("limit")  ?? 200), 500);
-    const offset = Math.max(Number(searchParams.get("offset") ?? 0),   0);
+    const lat           = Number(searchParams.get("lat"));
+    const lng           = Number(searchParams.get("lng"));
+    const radius        = Number(searchParams.get("radius")   ?? 10000);
+    const limit         = Math.min(Number(searchParams.get("limit")  ?? 200), 500);
+    const offset        = Math.max(Number(searchParams.get("offset") ?? 0),   0);
+    const categoryId = searchParams.get("category_id") ?? null;  // optional server-side category filter
 
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
       return NextResponse.json(
@@ -26,7 +27,7 @@ export async function GET(req: Request) {
 
     const supabase = createAdminClient();
 
-    const { data, error, count } = await supabase
+    let query = supabase
       .from("shops")
       .select(`
         *,
@@ -39,8 +40,14 @@ export async function GET(req: Request) {
       .gte("lat", lat - latDelta)
       .lte("lat", lat + latDelta)
       .gte("lng", lng - lngDelta)
-      .lte("lng", lng + lngDelta)
-      .range(offset, offset + limit - 1);
+      .lte("lng", lng + lngDelta);
+
+    // Optional server-side category filter
+    if (categoryId) {
+      query = query.eq("category_id", categoryId);
+    }
+
+    const { data, error, count } = await query.range(offset, offset + limit - 1);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

@@ -12,7 +12,7 @@ import LangToggle             from "@/components/ui/LangToggle";
 import { useI18n }            from "@/lib/i18n/context";
 import { rankLocalities, topOffersAcrossLocalities } from "@/lib/deal-engine";
 import type { ScoredOffer } from "@/lib/deal-engine";
-import type { WalkLocality, Offer } from "@/types";
+import type { WalkLocality, WalkShop, Offer } from "@/types";
 
 interface Props {
   localities:         WalkLocality[];
@@ -42,11 +42,41 @@ export default function WalkView({ localities, nearestLocalityIdx, loading, user
     [localities, userLat, userLng]
   );
 
-  /* Top offers for FloatingDealBar rotation */
+  /* Top offers for FloatingDealBar rotation — always from full unfiltered data */
   const topDeals = useMemo(
     () => topOffersAcrossLocalities(localities, userLat ?? 0, userLng ?? 0, 5),
     [localities, userLat, userLng]
   );
+
+  /* Category filter ─────────────────────────────────────────────── */
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+
+  /** Unique categories derived from loaded shops — no extra API call */
+  const allCategories = useMemo(() => {
+    const seen = new Set<string>();
+    const cats: Array<{ id: string; name: string; icon: string }> = [];
+    for (const loc of localities) {
+      for (const shop of loc.shops) {
+        if (shop.category?.id && !seen.has(shop.category.id)) {
+          seen.add(shop.category.id);
+          cats.push({ id: shop.category.id, name: shop.category.name, icon: shop.category.icon ?? "🏪" });
+        }
+      }
+    }
+    return cats.sort((a, b) => a.name.localeCompare(b.name));
+  }, [localities]);
+
+  /** Ranked localities filtered by selected category */
+  const filteredLocalities = useMemo(() => {
+    if (!selectedCategoryId) return rankedLocalities;
+    return rankedLocalities
+      .map(loc => ({
+        ...loc,
+        shops: loc.shops.filter(s => (s as WalkShop).category?.id === selectedCategoryId),
+      }) as typeof rankedLocalities[number])
+      .filter(loc => loc.shops.length > 0);
+  }, [rankedLocalities, selectedCategoryId]);
+
   const footTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const leftFoot  = useRef(true);
 
@@ -257,12 +287,21 @@ export default function WalkView({ localities, nearestLocalityIdx, loading, user
 
       {/* Locality indicator — progress line + dot track scroll continuously */}
       <LocalityIndicator
-        localities={rankedLocalities.map(l => l.name)}
+        localities={filteredLocalities.map(l => l.name)}
         activeIdx={activeIdx}
         nearestIdx={nearestLocalityIdx}
         scrollProgress={scrollProgress}
         onLocality={scrollToLocality}
       />
+
+      {/* Category filter chips */}
+      {allCategories.length > 1 && (
+        <CategoryFilter
+          categories={allCategories}
+          selected={selectedCategoryId}
+          onChange={id => { setSelectedCategoryId(id); setAI(0); }}
+        />
+      )}
 
       {/* Scroll canvas */}
       <div
@@ -283,26 +322,26 @@ export default function WalkView({ localities, nearestLocalityIdx, loading, user
             <YouAreHere locality={currentLoc || userLocality} />
 
             {/* Live feed strip — uses ranked data for relevance */}
-            <LiveFeedStrip localities={rankedLocalities} />
+            <LiveFeedStrip localities={filteredLocalities} />
 
             {/* Crowd banner */}
-            <CrowdBanner crowd={crowd} localities={rankedLocalities} />
+            <CrowdBanner crowd={crowd} localities={filteredLocalities} />
 
-            {/* Localities — ranked by deal score */}
-            {rankedLocalities.map((loc, i) => (
+            {/* Localities — ranked by deal score, filtered by category */}
+            {filteredLocalities.map((loc, i) => (
               <div key={loc.id} data-loc={loc.name} data-loc-idx={i}>
                 {/* Top-3 deal leaderboard — collapsed by default, expands on tap */}
                 <LocalityLeaderboard locality={loc} />
                 {/* Streak badge — fires /api/streak on mount, idempotent per day */}
                 <StreakBadge localityId={loc.id} localityName={loc.name} />
                 <LocalitySection locality={loc} index={i} />
-                {i < rankedLocalities.length - 1 && (
+                {i < filteredLocalities.length - 1 && (
                   <>
-                    <LocalityTransition fromName={loc.name} toName={rankedLocalities[i + 1].name} />
+                    <LocalityTransition fromName={loc.name} toName={filteredLocalities[i + 1].name} />
                     {/* Mystery deal teaser — appears after first locality transition only */}
                     {i === 0 && (
                       <MysteryDeal
-                        revealOffer={rankedLocalities[1]?.shops?.find(s => s.top_offer)?.top_offer ?? null}
+                        revealOffer={filteredLocalities[1]?.shops?.find(s => s.top_offer)?.top_offer ?? null}
                       />
                     )}
                   </>
@@ -310,8 +349,15 @@ export default function WalkView({ localities, nearestLocalityIdx, loading, user
               </div>
             ))}
 
-            {rankedLocalities.length === 0 && <EmptyState />}
-            {rankedLocalities.length > 0  && <EndCTA localities={rankedLocalities} />}
+            {filteredLocalities.length === 0 && (
+              selectedCategoryId
+                ? <CategoryEmptyState
+                    categoryName={allCategories.find(c => c.id === selectedCategoryId)?.name ?? ""}
+                    onReset={() => setSelectedCategoryId(null)}
+                  />
+                : <EmptyState />
+            )}
+            {filteredLocalities.length > 0 && <EndCTA localities={filteredLocalities} />}
             <div style={{ height: 18 }} />
           </>
         )}
@@ -781,6 +827,107 @@ function EmptyState() {
       <a href="/vendor/onboarding" style={{ marginTop:8, padding:"11px 24px", borderRadius:100, fontSize:"13px", fontWeight:700, color:"#fff", background:"#FF5E1A", textDecoration:"none" }}>
         Add Your Shop →
       </a>
+    </div>
+  );
+}
+
+/* ─── Category filter chip strip ───────────────────────────────── */
+function CategoryFilter({
+  categories,
+  selected,
+  onChange,
+}: {
+  categories: Array<{ id: string; name: string; icon: string }>;
+  selected:   string | null;
+  onChange:   (id: string | null) => void;
+}) {
+  return (
+    <div style={{
+      flexShrink: 0,
+      padding: "7px 0 7px 12px",
+      background: "rgba(5,7,12,0.92)",
+      borderBottom: "1px solid rgba(255,255,255,0.05)",
+    }}>
+      <div
+        className="scroll-none"
+        style={{ display: "flex", alignItems: "center", gap: 7, overflowX: "auto", paddingRight: 12 }}
+      >
+        {/* "All" chip */}
+        <button
+          onClick={() => onChange(null)}
+          style={{
+            flexShrink: 0,
+            padding: "6px 14px",
+            borderRadius: 100,
+            fontSize: "12px",
+            fontWeight: 700,
+            cursor: "pointer",
+            border: "none",
+            fontFamily: "'DM Sans',sans-serif",
+            transition: "all .18s",
+            ...(selected === null
+              ? { background: "#FF5E1A", color: "#fff", boxShadow: "0 0 14px rgba(255,94,26,0.4)" }
+              : { background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.50)", outline: "1px solid rgba(255,255,255,0.10)" }),
+          }}
+        >
+          All
+        </button>
+
+        {/* Category chips */}
+        {categories.map(cat => (
+          <button
+            key={cat.id}
+            onClick={() => onChange(selected === cat.id ? null : cat.id)}
+            style={{
+              flexShrink: 0,
+              padding: "6px 14px",
+              borderRadius: 100,
+              fontSize: "12px",
+              fontWeight: 600,
+              cursor: "pointer",
+              border: "none",
+              fontFamily: "'DM Sans',sans-serif",
+              transition: "all .18s",
+              display: "flex",
+              alignItems: "center",
+              gap: 5,
+              ...(selected === cat.id
+                ? { background: "#FF5E1A", color: "#fff", boxShadow: "0 0 14px rgba(255,94,26,0.4)" }
+                : { background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.50)", outline: "1px solid rgba(255,255,255,0.10)" }),
+            }}
+          >
+            <span style={{ fontSize: "13px" }}>{cat.icon}</span>
+            {cat.name}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Category empty state ──────────────────────────────────────── */
+function CategoryEmptyState({ categoryName, onReset }: { categoryName: string; onReset: () => void }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 24px", textAlign: "center", gap: 12 }}>
+      <div style={{ fontSize: "38px" }}>🔍</div>
+      <div className="font-syne" style={{ fontSize: "17px", fontWeight: 800, color: "#F2F5FF" }}>
+        No {categoryName} shops nearby
+      </div>
+      <p style={{ fontSize: "12.5px", color: "rgba(255,255,255,0.42)", lineHeight: 1.6, maxWidth: 240 }}>
+        No approved shops in this category are nearby right now.
+      </p>
+      <button
+        onClick={onReset}
+        style={{
+          marginTop: 8, padding: "11px 24px", borderRadius: 100,
+          fontSize: "13px", fontWeight: 700, color: "#fff",
+          background: "#FF5E1A", border: "none", cursor: "pointer",
+          boxShadow: "0 0 18px rgba(255,94,26,0.35)",
+          fontFamily: "'DM Sans',sans-serif",
+        }}
+      >
+        Show all shops
+      </button>
     </div>
   );
 }
