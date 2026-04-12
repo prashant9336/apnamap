@@ -1173,14 +1173,17 @@ export default function AdminDashboard() {
 
         {/* Tab bar */}
         <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 }}>
-          {TABS.map(t => <button key={t.id} onClick={() => setTab(t.id)} style={sTab(tab === t.id)}>{t.label}</button>)}
+          {TABS.map(t =>
+            t.id === "shops"
+              ? <button key={t.id} onClick={() => router.push("/admin/shops")} style={sTab(false)}>{t.label}</button>
+              : <button key={t.id} onClick={() => setTab(t.id)} style={sTab(tab === t.id)}>{t.label}</button>
+          )}
         </div>
 
         {/* Tab content */}
         {tab === "onboard"  && <OnboardTab localities={localities} categories={categories} />}
         {tab === "requests" && <RequestsTab />}
         {tab === "pending"  && <ShopsTab which="pending" localities={localities} categories={categories} />}
-        {tab === "shops"    && <ShopsTab which="all"     localities={localities} categories={categories} />}
         {tab === "offers"   && <AdminOffersTab categories={categories} />}
         {tab === "vendors"  && <VendorsTab />}
       </div>
