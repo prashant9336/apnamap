@@ -97,7 +97,7 @@ export default function HomePage() {
       </section>
 
       <footer className="text-center py-6 text-xs" style={{ color: "var(--t3)", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
-        © {new Date().getFullYear()} ApnaMap · Made with ❤️ in India
+        © {new Date().getFullYear()} ApnaMap. All rights reserved. · Made with ❤️ in India
       </footer>
     </div>
   );
