@@ -32,17 +32,13 @@ export async function GET(req: NextRequest) {
   const { data: shops, error } = await adminSb
     .from("shops")
     .select(`
-      id,
-      name,
-      slug,
-      vendor_id,
-      is_approved,
-      is_active,
-      created_at,
-      phone,
-      address,
-      category:categories(name, icon),
-      locality:localities(name)
+      id, name, slug, description, phone, whatsapp, address,
+      vendor_id, is_approved, is_active, is_featured, is_boosted,
+      view_count, avg_rating, review_count,
+      updated_at, created_at,
+      category:categories(id, name, icon),
+      locality:localities(id, name),
+      offers(id, is_active, ends_at)
     `)
     .order("created_at", { ascending: false });
 
