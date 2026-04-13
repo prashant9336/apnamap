@@ -4,16 +4,15 @@
  * NEXT_PUBLIC_APP_URL drives all public-facing URLs (vendor messages,
  * sitemaps, QR codes, share links).
  *
- * Current testing value: https://apnamap.vercel.app
- * Future production value: https://apnamap.com
+ * Production value: https://apnamap.com
  *
- * To switch domain: update NEXT_PUBLIC_APP_URL in Vercel dashboard
- * (or .env.local for local dev) — nothing else needs to change.
+ * Set NEXT_PUBLIC_APP_URL in Vercel dashboard (or .env.local for local dev).
+ * Nothing else needs to change when the domain changes — this is the only place.
  */
 
 /** Base URL for all public-facing links. No trailing slash. */
 export const APP_URL =
-  (process.env.NEXT_PUBLIC_APP_URL ?? "https://apnamap.vercel.app").replace(/\/$/, "");
+  (process.env.NEXT_PUBLIC_APP_URL ?? "https://apnamap.com").replace(/\/$/, "");
 
 /** Vendor login page URL — used in WhatsApp onboarding messages. */
 export const VENDOR_LOGIN_URL = `${APP_URL}/vendor/login`;
