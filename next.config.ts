@@ -1,6 +1,93 @@
 import type { NextConfig } from "next";
+import withPWAInit from "@ducanh2912/next-pwa";
 import { withSentryConfig } from "@sentry/nextjs";
 
+/* ── PWA / Workbox configuration ─────────────────────────────────────── */
+const withPWA = withPWAInit({
+  dest: "public",
+
+  cacheOnFrontEndNav:           true, // cache pages on client-side navigation
+  aggressiveFrontEndNavCaching: true, // cache prefetched pages too
+  reloadOnOnline:               true, // reload stale page when back online
+
+  // Service workers break HMR in development — disable there
+  disable: process.env.NODE_ENV === "development",
+
+  workboxOptions: {
+    disableDevLogs: true,
+
+    runtimeCaching: [
+      /* Supabase storage (shop logos, cover images) — Cache First, 30 days */
+      {
+        urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/.*/i,
+        handler: "CacheFirst",
+        options: {
+          cacheName:         "supabase-images",
+          expiration:        { maxEntries: 200, maxAgeSeconds: 30 * 24 * 60 * 60 },
+          cacheableResponse: { statuses: [0, 200] },
+        },
+      },
+
+      /* Unsplash images — Cache First, 7 days */
+      {
+        urlPattern: /^https:\/\/images\.unsplash\.com\/.*/i,
+        handler: "CacheFirst",
+        options: {
+          cacheName:         "unsplash-images",
+          expiration:        { maxEntries: 50, maxAgeSeconds: 7 * 24 * 60 * 60 },
+          cacheableResponse: { statuses: [0, 200] },
+        },
+      },
+
+      /* Google Fonts — Cache First forever (font files are immutable) */
+      {
+        urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,
+        handler: "CacheFirst",
+        options: {
+          cacheName:         "google-fonts",
+          expiration:        { maxEntries: 20, maxAgeSeconds: 365 * 24 * 60 * 60 },
+          cacheableResponse: { statuses: [0, 200] },
+        },
+      },
+
+      /* PWA icons — Cache First forever (generated PNG, content never changes) */
+      {
+        urlPattern: /^\/api\/icon(\?.*)?$/i,
+        handler: "CacheFirst",
+        options: {
+          cacheName:         "pwa-icons",
+          expiration:        { maxEntries: 10, maxAgeSeconds: 365 * 24 * 60 * 60 },
+          cacheableResponse: { statuses: [0, 200] },
+        },
+      },
+
+      /* App API routes — Network First, fall back to cache for 24 h offline */
+      {
+        urlPattern: /^\/api\/(?!icon).*/i,
+        handler: "NetworkFirst",
+        options: {
+          cacheName:            "api-responses",
+          networkTimeoutSeconds: 10,
+          expiration:           { maxEntries: 32, maxAgeSeconds: 24 * 60 * 60 },
+          cacheableResponse:    { statuses: [0, 200] },
+        },
+      },
+
+      /* Next.js static chunks — Cache First (immutable, hashed filenames) */
+      {
+        urlPattern: /\/_next\/static\/.*/i,
+        handler: "CacheFirst",
+        options: {
+          cacheName:         "next-static",
+          expiration:        { maxAgeSeconds: 365 * 24 * 60 * 60 },
+          cacheableResponse: { statuses: [0, 200] },
+        },
+      },
+    ],
+  },
+});
+
+/* ── Core Next.js config ──────────────────────────────────────────────── */
 const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
@@ -20,13 +107,19 @@ const nextConfig: NextConfig = {
     serverActions: {
       allowedOrigins: ["localhost:3000", "apnamap.vercel.app", "apnamap.com", "*.apnamap.com"],
     },
+    instrumentationHook: true,
   },
 };
 
-export default withSentryConfig(nextConfig, {
-  // Sentry org + project — set via SENTRY_ORG and SENTRY_PROJECT env vars
-  silent:             !process.env.CI,        // suppress upload noise in local builds
-  widenClientFileUpload: true,                // upload source maps for better stack traces
-  disableLogger:      true,                   // tree-shake Sentry logger in prod builds
-  automaticVercelMonitors: true,              // auto-create Vercel cron monitors
+export default withSentryConfig(withPWA(nextConfig), {
+  silent:                     !process.env.CI,
+  widenClientFileUpload:      true,
+  disableLogger:              true,
+  automaticVercelMonitors:    true,
+  authToken:                  process.env.SENTRY_AUTH_TOKEN,
+  org:                        process.env.SENTRY_ORG,
+  project:                    process.env.SENTRY_PROJECT ?? "apnamap",
+  disableServerWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
+  disableClientWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
+  hideSourceMaps:             true,
 });

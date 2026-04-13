@@ -7,11 +7,13 @@ build
 out
 *.log
 
-# next-pwa generated files (created at build time)
+# next-pwa / workbox generated files (created at build time — never commit these)
 public/sw.js
 public/sw.js.map
 public/workbox-*.js
 public/workbox-*.js.map
 public/worker-*.js
 public/worker-*.js.map
+public/swe-worker-*.js
+public/swe-worker-*.js.map
 tsconfig.tsbuildinfo
