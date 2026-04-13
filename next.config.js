@@ -1,9 +1,10 @@
-import type { NextConfig } from "next";
-import withPWAInit from "@ducanh2912/next-pwa";
-import { withSentryConfig } from "@sentry/nextjs";
+/** @type {import('next').NextConfig} */
+
+const withPWA    = require("@ducanh2912/next-pwa").default;
+const { withSentryConfig } = require("@sentry/nextjs");
 
 /* ── PWA / Workbox configuration ─────────────────────────────────────── */
-const withPWA = withPWAInit({
+const withPWAWrapped = withPWA({
   dest: "public",
 
   cacheOnFrontEndNav:           true, // cache pages on client-side navigation
@@ -66,10 +67,10 @@ const withPWA = withPWAInit({
         urlPattern: /^\/api\/(?!icon).*/i,
         handler: "NetworkFirst",
         options: {
-          cacheName:            "api-responses",
+          cacheName:             "api-responses",
           networkTimeoutSeconds: 10,
-          expiration:           { maxEntries: 32, maxAgeSeconds: 24 * 60 * 60 },
-          cacheableResponse:    { statuses: [0, 200] },
+          expiration:            { maxEntries: 32, maxAgeSeconds: 24 * 60 * 60 },
+          cacheableResponse:     { statuses: [0, 200] },
         },
       },
 
@@ -88,7 +89,7 @@ const withPWA = withPWAInit({
 });
 
 /* ── Core Next.js config ──────────────────────────────────────────────── */
-const nextConfig: NextConfig = {
+const nextConfig = {
   images: {
     remotePatterns: [
       {
@@ -111,7 +112,9 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withSentryConfig(withPWA(nextConfig), {
+const baseConfig = withPWAWrapped(nextConfig);
+
+module.exports = withSentryConfig(baseConfig, {
   silent:                     !process.env.CI,
   widenClientFileUpload:      true,
   disableLogger:              true,
