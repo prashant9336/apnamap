@@ -53,7 +53,8 @@ export default function AppShell({ children, activeTab }: Props) {
       <nav
         className="flex-shrink-0 flex items-stretch"
         style={{
-          height:              66,
+          height:              "calc(66px + env(safe-area-inset-bottom))",
+          paddingBottom:       "env(safe-area-inset-bottom)",
           background:          "rgba(5,7,12,0.97)",
           backdropFilter:      "blur(28px)",
           WebkitBackdropFilter:"blur(28px)",

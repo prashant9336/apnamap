@@ -14,19 +14,20 @@ export default function LangToggle() {
       display: "inline-flex", borderRadius: 100,
       background: "rgba(255,255,255,0.06)",
       border: "1px solid rgba(255,255,255,0.10)",
-      overflow: "hidden",
     }}>
       {(["en", "hi"] as const).map(l => (
         <button
           key={l}
           onClick={() => setLang(l)}
           style={{
-            padding: "5px 11px",
+            padding: l === "hi" ? "5px 12px 5px 10px" : "5px 11px",
             border: "none",
+            borderRadius: 100,
             cursor: "pointer",
-            fontSize: "11px",
+            fontSize: "12px",
+            lineHeight: 1.4,
             fontWeight: 700,
-            fontFamily: l === "hi" ? "system-ui, sans-serif" : "'DM Sans', sans-serif",
+            fontFamily: l === "hi" ? "'Noto Sans Devanagari', system-ui, sans-serif" : "'DM Sans', sans-serif",
             transition: "background 0.15s, color 0.15s",
             background: lang === l ? "#FF5E1A" : "transparent",
             color: lang === l ? "#fff" : "rgba(255,255,255,0.38)",
