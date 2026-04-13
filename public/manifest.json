@@ -62,7 +62,7 @@
       "name":        "My Shop",
       "short_name":  "My Shop",
       "description": "Manage your shop and deals",
-      "url":         "/vendor/dashboard",
+      "url":         "/my-shop",
       "icons": [
         { "src": "/api/icon?size=96", "sizes": "96x96", "type": "image/png" }
       ]

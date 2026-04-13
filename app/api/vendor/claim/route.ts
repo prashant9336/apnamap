@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { checkRate } from "@/lib/ratelimit";
 
 export async function POST(req: NextRequest) {
   try {
+    const block = await checkRate(req, "vendorRequest");
+    if (block) return block;
     // Resolve authenticated user from Bearer token or cookie session
     const admin = createAdminClient();
     const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "").trim();

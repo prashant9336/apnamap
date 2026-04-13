@@ -110,17 +110,23 @@ export default function MapPage() {
     const lat = geo.lat ?? 25.4358;
     const lng = geo.lng ?? 81.8463;
 
+    // Guard against post-unmount state updates that cause _leaflet_pos errors
+    let cancelled = false;
+
     async function loadShops() {
       setLoading(true);
       try {
         const res  = await fetch(`/api/shops?lat=${lat}&lng=${lng}&radius=10000`, { cache: "no-store" });
         const json = await res.json();
+        if (cancelled) return;
+
         const data = Array.isArray(json?.shops) ? json.shops : [];
         setShops(data);
 
         shopLayer.clearLayers();
 
         data.forEach((shop: any) => {
+          if (cancelled) return;
           if (typeof shop.lat !== "number" || typeof shop.lng !== "number") return;
 
           const shopIcon = L.divIcon({
@@ -143,26 +149,27 @@ export default function MapPage() {
             .on("click", () => setSelected(shop));
         });
 
-        if (data.length > 0) {
+        if (!cancelled && data.length > 0) {
           const bounds = L.latLngBounds(
             data
               .filter((s: any) => typeof s.lat === "number")
               .map((s: any) => [s.lat, s.lng])
           );
           if (bounds.isValid()) {
-            setTimeout(() => map.fitBounds(bounds, { padding: [60, 60], maxZoom: 15 }), 300);
+            setTimeout(() => { if (!cancelled) map.fitBounds(bounds, { padding: [60, 60], maxZoom: 15 }); }, 300);
           }
         }
 
-        setTimeout(() => map.invalidateSize(), 600);
+        if (!cancelled) setTimeout(() => map.invalidateSize(), 600);
       } catch {
-        setShops([]);
+        if (!cancelled) setShops([]);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
 
     loadShops();
+    return () => { cancelled = true; };
   }, [geo.lat, geo.lng]);
 
   return (

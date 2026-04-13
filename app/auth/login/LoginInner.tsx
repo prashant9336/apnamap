@@ -44,17 +44,17 @@ export default function LoginInner() {
 
     const user = sessionData.session.user;
 
-    const role =
-      user.user_metadata?.role ||
-      user.app_metadata?.role ||
-      "customer";
+    // Always read role from profiles table — user_metadata is user-settable
+    const { data: profileRow } = await supabase
+      .from("profiles").select("role").eq("id", user.id).maybeSingle();
+    const role = profileRow?.role ?? "customer";
 
     let destination = "/explore";
 
     if (redirect) {
       destination = redirect;
     } else if (role === "vendor") {
-      destination = "/vendor/dashboard";
+      destination = "/my-shop";
     } else if (role === "admin") {
       destination = "/admin";
     }

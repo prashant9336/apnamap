@@ -23,17 +23,10 @@ function VendorLoginForm() {
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState("");
 
-  // Redirect if already logged in as vendor
+  // Redirect if already logged in — let /my-shop handle vendor vs non-vendor check
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        const role = user.user_metadata?.role ?? "customer";
-        if (role === "vendor" || role === "admin") {
-          window.location.href = "/my-shop";
-        } else {
-          window.location.href = "/explore";
-        }
-      }
+      if (user) window.location.href = "/my-shop";
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

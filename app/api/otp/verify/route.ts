@@ -1,16 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { createHmac } from "crypto";
+import { checkRate } from "@/lib/ratelimit";
 
-const OTP_SECRET   = process.env.OTP_SECRET ?? "apnamap-otp-secret-change-me";
 const MAX_ATTEMPTS = 5;
 
-function hashOtp(otp: string): string {
-  return createHmac("sha256", OTP_SECRET).update(otp).digest("hex");
+function hashOtp(otp: string, secret: string): string {
+  return createHmac("sha256", secret).update(otp).digest("hex");
 }
 
 export async function POST(req: NextRequest) {
   try {
+    // Same guard as otp/send — if secret is default, service is misconfigured
+    const otpSecret = process.env.OTP_SECRET;
+    if (!otpSecret || otpSecret === "apnamap-otp-secret-change-me") {
+      return NextResponse.json({ error: "OTP service is not configured" }, { status: 503 });
+    }
+
+    const blocked = await checkRate(req, "otp");
+    if (blocked) return blocked;
+
     const { mobile, otp } = await req.json() as { mobile?: string; otp?: string };
     const digits = (mobile ?? "").replace(/\D/g, "");
 
@@ -42,7 +51,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Too many wrong attempts. Request a new OTP." }, { status: 429 });
     }
 
-    const incoming = hashOtp(otp.trim());
+    const incoming = hashOtp(otp.trim(), otpSecret);
     if (incoming !== session.otp_hash) {
       // Increment attempts
       await admin
