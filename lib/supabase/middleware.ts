@@ -84,5 +84,18 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
+  if (path.startsWith("/sales")) {
+    if (!user) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/auth/login";
+      url.searchParams.set("redirect", path);
+      return NextResponse.redirect(url);
+    }
+
+    if (role !== "sales" && role !== "admin") {
+      return NextResponse.redirect(new URL("/explore", request.url));
+    }
+  }
+
   return response;
 }
