@@ -71,7 +71,6 @@ export default function ProfilePage() {
               <div className="space-y-2 mb-6">
                 {[
                   { icon: "❤️", label: "Saved shops & offers", href: "/saved" },
-                  { icon: "📍", label: "My city & location", href: "#" },
                   ...(profile.role === "vendor" ? [{ icon: "🏪", label: "Vendor Dashboard", href: "/vendor/dashboard" }] : []),
                   ...(profile.role === "admin"  ? [{ icon: "🛡️", label: "Admin Panel",        href: "/admin/dashboard" }] : []),
                 ].map((item) => (
@@ -83,6 +82,16 @@ export default function ProfilePage() {
                     <span className="text-xs" style={{ color: "var(--t3)" }}>›</span>
                   </Link>
                 ))}
+                {/* City & location — not yet built, shown as coming soon */}
+                <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl"
+                  style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", opacity: 0.5 }}>
+                  <span className="text-xl">📍</span>
+                  <span className="flex-1 text-sm font-semibold">My city &amp; location</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold"
+                    style={{ background: "rgba(255,255,255,0.07)", color: "var(--t3)" }}>
+                    Soon
+                  </span>
+                </div>
               </div>
 
               {profile.role === "customer" && (

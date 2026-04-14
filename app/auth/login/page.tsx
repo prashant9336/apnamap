@@ -54,7 +54,7 @@ function LoginForm() {
     }
 
     const { data: profile } = await sb.from("profiles").select("role").eq("id", data.user.id).maybeSingle();
-    const role = profile?.role ?? data.user.user_metadata?.role ?? "customer";
+    const role = profile?.role ?? "customer";
     if (role === "admin")  { window.location.href = "/admin/dashboard"; return; }
     if (role === "vendor") { window.location.href = "/my-shop"; return; }
     router.replace(redirect);
