@@ -240,7 +240,7 @@ function OnboardTab({ localities, categories }: { localities: Meta[]; categories
       {/* ── Category ── */}
       <Section label="Category *">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
-          {categories.slice(0, 18).map(c => (
+          {categories.map(c => (
             <button key={c.id} type="button" onClick={() => up("category_id", form.category_id === c.id ? "" : c.id)} style={sChip(form.category_id === c.id)}>
               {c.icon} {c.name}
             </button>

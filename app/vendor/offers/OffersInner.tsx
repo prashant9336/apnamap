@@ -19,6 +19,7 @@ export default function OffersInner() {
   const shopId = params.get("shop_id");
 
   const supabase = createClient();
+  const [token, setToken] = useState("");
 
   const [offers, setOffers] = useState<any[]>([]);
   const [form, setForm] = useState(EMPTY_OFFER);
@@ -26,6 +27,11 @@ export default function OffersInner() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    // Get session token on mount for Bearer auth (mobile-reliable)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setToken(session?.access_token ?? "");
+    });
+
     if (!shopId) return;
 
     supabase
@@ -45,13 +51,17 @@ export default function OffersInner() {
       discount_value: form.discount_value
         ? parseFloat(form.discount_value)
         : null,
-      tier: parseInt(form.tier),
+      // Tier clamped to 2–3: vendors cannot self-assign Big Deal (tier 1)
+      tier: Math.max(2, Math.min(3, parseInt(form.tier) || 2)),
       ends_at: form.ends_at || null,
     };
 
     const r = await fetch("/api/offers", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify(payload),
     });
 
@@ -231,7 +241,7 @@ export default function OffersInner() {
                   className="block text-[10px] font-semibold mb-1"
                   style={{ color: "var(--t3)" }}
                 >
-                  Tier (1=Big Deal, 2=Normal, 3=Basic)
+                  Offer Priority
                 </label>
                 <select
                   value={form.tier}
@@ -245,9 +255,8 @@ export default function OffersInner() {
                     color: "var(--t1)",
                   }}
                 >
-                  <option value="1">⭐ Tier 1 — Big Deal</option>
-                  <option value="2">⚡ Tier 2 — Normal Offer</option>
-                  <option value="3">🟢 Tier 3 — Basic</option>
+                  <option value="2">⚡ Normal Offer</option>
+                  <option value="3">🟢 Basic Listing</option>
                 </select>
               </div>
             </div>

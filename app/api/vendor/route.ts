@@ -38,10 +38,13 @@ export async function GET(req: NextRequest) {
   let analytics: any[] = [];
 
   if (shopIds.length > 0) {
+    // Limit to last 30 days to keep this query fast as analytics_events grows.
+    const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
     const { data } = await supabase
       .from("analytics_events")
       .select("event_type, shop_id")
-      .in("shop_id", shopIds);
+      .in("shop_id", shopIds)
+      .gte("created_at", since);
 
     analytics = data ?? [];
   }
