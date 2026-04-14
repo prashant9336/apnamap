@@ -18,7 +18,7 @@ type CredResult = {
 /* ── Styles ─────────────────────────────────────────────────────── */
 const S = {
   pg:    { minHeight: "100vh", background: "#05070C" } as React.CSSProperties,
-  hdr:   { position: "sticky" as const, top: 0, zIndex: 50, display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", background: "rgba(5,7,12,0.97)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(255,255,255,0.07)" },
+  hdr:   { position: "sticky" as const, top: 0, zIndex: 50, display: "flex", alignItems: "center", gap: 12, paddingTop: "calc(14px + env(safe-area-inset-top, 0px))", paddingBottom: "14px", paddingLeft: "16px", paddingRight: "16px", background: "rgba(5,7,12,0.97)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(255,255,255,0.07)" },
   sect:  { display: "flex", flexDirection: "column" as const, gap: 14, padding: "16px 16px 32px" },
   label: { display: "block" as const, fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.40)", textTransform: "uppercase" as const, letterSpacing: "0.8px", marginBottom: 7 } as React.CSSProperties,
   input: { width: "100%", padding: "13px 14px", borderRadius: 12, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#F2F5FF", fontSize: 15, outline: "none", fontFamily: "'DM Sans',sans-serif", boxSizing: "border-box" as const } as React.CSSProperties,
@@ -143,6 +143,7 @@ export default function AdminOnboardVendor() {
   const [loading,     setLoading]     = useState(false);
   const [error,       setError]       = useState("");
   const [result,      setResult]      = useState<CredResult | null>(null);
+  const [catSearch,   setCatSearch]   = useState("");
 
   const [form, setForm] = useState({
     mobile:         "",
@@ -325,12 +326,24 @@ export default function AdminOnboardVendor() {
             <p style={{ fontSize: 11, fontWeight: 800, color: "rgba(255,255,255,0.30)", letterSpacing: "0.8px", textTransform: "uppercase", marginBottom: 10 }}>
               Category *
             </p>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
-              {categories.slice(0, 16).map(c => (
-                <button key={c.id} type="button" onClick={() => up("category_id", form.category_id === c.id ? "" : c.id)} style={S.chip(form.category_id === c.id)}>
-                  {c.icon} {c.name}
-                </button>
-              ))}
+            {/* Search filter — shows all categories, no arbitrary slice */}
+            <input
+              type="text"
+              value={catSearch}
+              onChange={e => setCatSearch(e.target.value)}
+              placeholder="Search category…"
+              style={{ ...S.input, marginBottom: 10, fontSize: 13, padding: "10px 13px" }}
+            />
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 7, maxHeight: 220, overflowY: "auto" }}>
+              {categories
+                .filter(c => !catSearch || c.name.toLowerCase().includes(catSearch.toLowerCase()))
+                .map(c => (
+                  <button key={c.id} type="button"
+                    onClick={() => { up("category_id", form.category_id === c.id ? "" : c.id); setCatSearch(""); }}
+                    style={S.chip(form.category_id === c.id)}>
+                    {(c as any).icon} {c.name}
+                  </button>
+                ))}
             </div>
           </div>
 

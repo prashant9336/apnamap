@@ -94,6 +94,7 @@ export default function AdminShopsPage() {
   const [loading,    setLoading]    = useState(true);
   const [token,      setToken]      = useState("");
   const [acting,     setActing]     = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [autoApproval, setAutoApproval] = useState<boolean | null>(null);
   const [filters, setFilters] = useState<Filters>({
     search: "", health: "all", status: "all", claimed: "all",
@@ -186,6 +187,19 @@ export default function AdminShopsPage() {
       setShops(prev => prev.map(s => s.id === shopId ? { ...s, ...updated } : s));
     }
     setActing(null);
+  }
+
+  async function handleDelete(shopId: string) {
+    setActing(shopId);
+    const res = await fetch(`/api/admin/shops?shop_id=${shopId}`, {
+      method: "DELETE",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (res.ok) {
+      setShops(prev => prev.filter(s => s.id !== shopId));
+    }
+    setActing(null);
+    setDeletingId(null);
   }
 
   function setFilter<K extends keyof Filters>(key: K, val: Filters[K]) {
@@ -430,6 +444,28 @@ export default function AdminShopsPage() {
                   style={{ background: "rgba(255,255,255,0.04)", color: "var(--t3)", border: "1px solid rgba(255,255,255,0.08)", textDecoration: "none" }}>
                   ↗ View
                 </a>
+
+                {/* Delete — two-step confirm to prevent accidental deletion */}
+                {deletingId === shop.id ? (
+                  <>
+                    <ActionBtn
+                      label="Cancel" disabled={!!acting}
+                      style={{ background: "rgba(255,255,255,0.05)", color: "var(--t2)", border: "1px solid rgba(255,255,255,0.10)" }}
+                      onClick={() => setDeletingId(null)}
+                    />
+                    <ActionBtn
+                      label={acting === shop.id ? "Deleting…" : "Confirm Delete"} disabled={!!acting}
+                      style={{ background: "rgba(239,68,68,0.18)", color: "#f87171", border: "1px solid rgba(239,68,68,0.35)" }}
+                      onClick={() => handleDelete(shop.id)}
+                    />
+                  </>
+                ) : (
+                  <ActionBtn
+                    label="Delete" disabled={!!acting}
+                    style={{ background: "rgba(239,68,68,0.06)", color: "#f87171", border: "1px solid rgba(239,68,68,0.15)" }}
+                    onClick={() => setDeletingId(shop.id)}
+                  />
+                )}
               </div>
             </div>
           );

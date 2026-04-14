@@ -117,3 +117,23 @@ export async function PATCH(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ shop: data });
 }
+
+/* ── DELETE — permanent shop removal (admin only) ──────────────── */
+export async function DELETE(req: NextRequest) {
+  const admin = await requireAdmin(req);
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const shopId = new URL(req.url).searchParams.get("shop_id");
+  if (!shopId) return NextResponse.json({ error: "shop_id required" }, { status: 400 });
+
+  const adminClient = createAdminClient();
+
+  // Remove child records before deleting the shop to avoid FK constraint errors
+  // (cascade may not be configured on all deployments)
+  await adminClient.from("offers").delete().eq("shop_id", shopId);
+
+  const { error } = await adminClient.from("shops").delete().eq("id", shopId);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ deleted: true });
+}

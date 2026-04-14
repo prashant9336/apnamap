@@ -11,6 +11,9 @@ const withPWAWrapped = withPWA({
   aggressiveFrontEndNavCaching: true, // cache prefetched pages too
   reloadOnOnline:               true, // reload stale page when back online
 
+  // Offline fallback — served when user is offline and page isn't cached
+  fallbacks: { document: "/offline" },
+
   // Service workers break HMR in development — disable there
   disable: process.env.NODE_ENV === "development",
 
