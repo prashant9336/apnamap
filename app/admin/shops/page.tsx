@@ -204,7 +204,7 @@ export default function AdminShopsPage() {
     <div className="min-h-screen pb-16" style={{ background: "var(--bg)" }}>
       {/* Header */}
       <div className="sticky top-0 z-50 px-4 py-3 flex items-center gap-3"
-        style={{ background: "rgba(5,7,12,0.96)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+        style={{ background: "rgba(5,7,12,0.96)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(255,255,255,0.06)", paddingTop: "calc(12px + env(safe-area-inset-top, 0px))" }}>
         <Link href="/admin/dashboard" className="text-xl leading-none">←</Link>
         <span className="font-syne font-black text-base flex-1">Shop Intelligence</span>
         <span className="text-xs" style={{ color: "var(--t3)" }}>{shops.length} shops</span>

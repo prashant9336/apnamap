@@ -41,8 +41,11 @@ export default function AppShell({ children, activeTab }: Props) {
       className="relative flex flex-col w-full max-w-[480px] mx-auto"
       style={{ height: "100dvh", background: "var(--bg)", overflow: "hidden" }}
     >
-      {/* Page content */}
-      <main className="flex-1 overflow-hidden relative">
+      {/* Page content — top inset keeps all child headers below the status bar */}
+      <main
+        className="flex-1 overflow-hidden relative"
+        style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+      >
         {children}
       </main>
 

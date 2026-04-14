@@ -65,3 +65,27 @@ body {
 /* Hide scrollbar but keep scrollable */
 .scroll-none { scrollbar-width: none; }
 .scroll-none::-webkit-scrollbar { display: none; }
+
+/* ── Safe-area utilities ──────────────────────────────────────────────
+ * viewport-fit: cover is set in layout.tsx so content reaches the edges.
+ * These classes ensure UI never collides with the status bar, notch,
+ * Dynamic Island, or home indicator on iPhone/Android.
+ *
+ * Usage:
+ *   .pt-safe          — extra padding-top = status bar / notch height
+ *   .pb-safe          — extra padding-bottom = home indicator height
+ *   .min-h-dvh        — 100dvh instead of 100vh (stable on mobile browsers)
+ *   .safe-page-shell  — full-height page that respects both insets
+ * ────────────────────────────────────────────────────────────────── */
+.pt-safe   { padding-top:    env(safe-area-inset-top,    0px); }
+.pb-safe   { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.pl-safe   { padding-left:   env(safe-area-inset-left,   0px); }
+.pr-safe   { padding-right:  env(safe-area-inset-right,  0px); }
+
+.min-h-dvh { min-height: 100dvh; }
+
+/* Full-page shell for standalone pages (not using AppShell) */
+.safe-page-shell {
+  min-height: 100dvh;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}

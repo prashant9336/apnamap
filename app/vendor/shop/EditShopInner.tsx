@@ -126,7 +126,7 @@ export default function EditShopInner() {
 
   return (
     <div className="min-h-screen">
-      <div className="sticky top-0 flex items-center gap-3 p-4">
+      <div className="sticky top-0 flex items-center gap-3 p-4" style={{ paddingTop: "calc(16px + env(safe-area-inset-top, 0px))" }}>
         <button onClick={() => router.back()}>←</button>
         <p>Edit Shop</p>
         <button onClick={save} disabled={saving}>

@@ -174,7 +174,7 @@ export default function VendorOnboarding() {
 
       {/* ── Header ────────────────────────────────────────── */}
       <div className="sticky top-0 z-50 px-4 py-3 flex items-center gap-3"
-        style={{ background: "rgba(5,7,12,0.96)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+        style={{ background: "rgba(5,7,12,0.96)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(255,255,255,0.06)", paddingTop: "calc(12px + env(safe-area-inset-top, 0px))" }}>
         {step > 1 && (
           <button onClick={() => setStep(s => (s - 1) as Step)} className="text-xl">←</button>
         )}

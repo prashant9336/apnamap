@@ -53,7 +53,7 @@ export function ShopHeader({ shopId, slug, shopName }: HeaderProps) {
 
   return (
     <div className="sticky top-0 z-50 flex items-center gap-3 px-4 py-3"
-      style={{ background: "rgba(5,7,12,0.95)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+      style={{ background: "rgba(5,7,12,0.95)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(255,255,255,0.06)", paddingTop: "calc(12px + env(safe-area-inset-top, 0px))" }}>
       <button onClick={() => router.back()} className="text-xl leading-none">←</button>
       <span className="font-syne font-bold text-base flex-1 truncate">{shopName}</span>
       <button onClick={toggleSave} className="text-xl leading-none">{saved ? "❤️" : "🤍"}</button>

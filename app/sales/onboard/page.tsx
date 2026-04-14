@@ -167,6 +167,7 @@ export default function SalesOnboard() {
           background: "rgba(5,7,12,0.96)",
           backdropFilter: "blur(20px)",
           borderBottom: "1px solid rgba(255,255,255,0.06)",
+          paddingTop: "calc(12px + env(safe-area-inset-top, 0px))",
         }}
       >
         {step === 1 ? (

@@ -233,7 +233,7 @@ export default function WalkView({ localities, nearestLocalityIdx, loading, user
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#05070C" }}>
 
       {/* ── Top nav — real header (no fake status bar) ── */}
-      <div style={{ flexShrink: 0, padding: "10px 14px 10px", paddingTop: "calc(10px + env(safe-area-inset-top))", background: "rgba(5,7,12,0.96)", backdropFilter: "blur(20px)" }}>
+      <div style={{ flexShrink: 0, padding: "10px 14px 10px", paddingTop: "10px", background: "rgba(5,7,12,0.96)", backdropFilter: "blur(20px)" }}>
         {/* Row 1: logo · activity count · lang toggle */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
           {/* Logo */}
