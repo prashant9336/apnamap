@@ -51,7 +51,11 @@ export async function GET(req: NextRequest) {
     pending:  safeShops.filter((s: any) => !s.is_approved).length,
     active:   safeShops.filter((s: any) => s.is_active).length,
   };
-  return NextResponse.json({ shops: safeShops, stats });
+  return NextResponse.json({
+    shops: safeShops,
+    stats,
+    auto_approval_enabled: process.env.AUTO_APPROVAL_ENABLED !== "false",
+  });
 }
 
 export async function PATCH(req: NextRequest) {

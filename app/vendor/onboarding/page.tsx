@@ -8,15 +8,16 @@ import BusinessTypeDetector, {
 } from "@/components/vendor/BusinessTypeDetector";
 import type { Category } from "@/types";
 
-type Step = 1 | 2 | 3;
+type Step = 1 | 2 | 3 | 4;
 
 export default function VendorOnboarding() {
   const router   = useRouter();
   const supabase = createClient();
 
-  const [step, setStep]       = useState<Step>(1);
-  const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState("");
+  const [step, setStep]           = useState<Step>(1);
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState("");
+  const [shopResult, setResult]   = useState<{ approved: boolean; shopSlug: string } | null>(null);
 
   const [categories, setCategories]     = useState<Category[]>([]);
   const [localities, setLocalities]     = useState<any[]>([]);
@@ -92,82 +93,67 @@ export default function VendorOnboarding() {
     );
   }
 
-  // ── Final submit ──────────────────────────────────────────
-  // offerTier: "normal" | "flash" | "big" — maps to DB tier 3/2/1
+  // ── Final submit — calls server-side API (validation + auto-approval happen there) ──
   async function submit(skipOffer = false, offerTier: "normal"|"flash"|"big" = "normal") {
     setLoading(true); setError("");
     try {
       const { data: { user }, error: userErr } = await supabase.auth.getUser();
       if (userErr || !user) { router.push("/auth/login"); return; }
 
-      await supabase.auth.updateUser({ data: { role: "vendor" } });
-
-      if (!catSelection?.category_id || !form.locality_id) {
-        setError("Please select a category and locality.");
+      if (!catSelection?.category_id) {
+        setError("Please select a category first.");
         setLoading(false); return;
       }
 
-      await Promise.all([
-        supabase.from("vendors").upsert({ id: user.id }),
-        supabase.from("profiles").upsert({ id: user.id, role: "vendor" }),
-      ]);
+      const payload = {
+        shop_name:              form.shop_name,
+        description:            form.description || null,
+        phone:                  form.phone,
+        whatsapp:               form.whatsapp || form.phone,
+        address:                form.address,
+        locality_id:            form.locality_id,
+        category_id:            catSelection.category_id,
+        subcategory_id:         catSelection.subcategory_id ?? null,
+        custom_business_type:   catSelection.custom_business_type || null,
+        tags:                   catSelection.tags,
+        ai_category_confidence: catSelection.ai_category_confidence,
+        business_input_text:    catSelection.business_input_text || null,
+        lat:                    shopLat ?? DEFAULT_LAT,
+        lng:                    shopLng ?? DEFAULT_LNG,
+        open_time:              form.open_time,
+        close_time:             form.close_time,
+        open_days:              ["mon","tue","wed","thu","fri","sat"],
+        // Offer fields (optional)
+        offer_title: skipOffer ? null : form.offer_title.trim() || null,
+        offer_type:  form.offer_type,
+        offer_value: form.offer_value,
+        offer_tier:  offerTier,
+      };
 
-      const slugBase = form.shop_name
-        .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-      const slug = `${slugBase}-${Date.now()}`;
+      const { data: { session } } = await supabase.auth.getSession();
+      const tok = session?.access_token ?? "";
 
-      const { data: shop, error: shopErr } = await supabase
-        .from("shops")
-        .insert({
-          vendor_id:              user.id,
-          category_id:            catSelection.category_id,
-          subcategory_id:         catSelection.subcategory_id ?? null,
-          custom_business_type:   catSelection.custom_business_type || null,
-          tags:                   catSelection.tags,
-          ai_category_confidence: catSelection.ai_category_confidence,
-          business_input_text:    catSelection.business_input_text || null,
-          locality_id:            form.locality_id,
-          name:                   form.shop_name,
-          slug,
-          description:            form.description || null,
-          phone:                  form.phone,
-          whatsapp:               form.whatsapp || form.phone,
-          address:                form.address,
-          lat:                    shopLat ?? DEFAULT_LAT,
-          lng:                    shopLng ?? DEFAULT_LNG,
-          open_time:              form.open_time,
-          close_time:             form.close_time,
-          is_approved: false,
-          is_active:   true,
-          is_featured: false,
-          open_days:   ["mon","tue","wed","thu","fri","sat"],
-        })
-        .select()
-        .single();
+      const res = await fetch("/api/vendor/shop", {
+        method:  "POST",
+        headers: {
+          "Content-Type":  "application/json",
+          ...(tok ? { Authorization: `Bearer ${tok}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
 
-      if (shopErr || !shop) {
-        setError(shopErr?.message || "Failed to create shop.");
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error ?? "Something went wrong. Please try again.");
         setLoading(false); return;
       }
 
-      if (!skipOffer && form.offer_title.trim()) {
-        // Map visual tier to DB tier column: big=1 (highest), flash=2, normal=3
-        const tierMap: Record<string, number> = { big: 1, flash: 2, normal: 3 };
-        await supabase.from("offers").insert({
-          shop_id:        shop.id,
-          title:          form.offer_title.trim(),
-          discount_type:  form.offer_type,
-          discount_value: form.offer_value && !isNaN(Number(form.offer_value))
-                            ? parseFloat(form.offer_value) : null,
-          tier:        tierMap[offerTier] ?? 3,
-          is_active:   true,
-          is_featured: offerTier === "big",
-        });
-      }
-
-      router.push("/vendor/dashboard");
-    } catch (err: any) {
-      setError(err?.message || "Something went wrong.");
+      // Show result screen (Step 4) instead of immediate redirect
+      setResult({ approved: data.approved, shopSlug: data.shop?.slug ?? "" });
+      setStep(4);
+    } catch (err: unknown) {
+      setError((err as Error)?.message ?? "Something went wrong.");
       setLoading(false);
     }
   }
@@ -181,7 +167,7 @@ export default function VendorOnboarding() {
     color: "var(--t1)",
   };
 
-  const stepTitles = ["Business Type & Details", "Location & Hours", "First Offer"];
+  const stepTitles = ["Business Type & Details", "Location & Hours", "First Offer", "Done!"];
 
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)" }}>
@@ -200,13 +186,15 @@ export default function VendorOnboarding() {
         </div>
       </div>
 
-      {/* ── Progress bar ─────────────────────────────────── */}
-      <div className="flex gap-1.5 px-4 py-3">
-        {[1, 2, 3].map(s => (
-          <div key={s} className="flex-1 h-1 rounded-full transition-all"
-            style={{ background: s <= step ? "var(--accent)" : "rgba(255,255,255,0.1)" }} />
-        ))}
-      </div>
+      {/* ── Progress bar (shows for steps 1–3 only) ──────── */}
+      {step <= 3 && (
+        <div className="flex gap-1.5 px-4 py-3">
+          {[1, 2, 3].map(s => (
+            <div key={s} className="flex-1 h-1 rounded-full transition-all"
+              style={{ background: s <= step ? "var(--accent)" : "rgba(255,255,255,0.1)" }} />
+          ))}
+        </div>
+      )}
 
       <div className="px-4 pb-10">
 
@@ -354,6 +342,76 @@ export default function VendorOnboarding() {
             loading={loading}
             onSubmit={submit}
           />
+        )}
+
+        {/* ════════════════ STEP 4 — Result ═══════════════ */}
+        {step === 4 && shopResult && (
+          <div className="flex flex-col items-center text-center py-8 space-y-5">
+            {shopResult.approved ? (
+              <>
+                <div className="text-7xl">🎉</div>
+                <div>
+                  <h2 className="font-syne font-black text-2xl mb-2" style={{ color: "#1FBB5A" }}>
+                    Your shop is LIVE!
+                  </h2>
+                  <p className="text-sm leading-relaxed" style={{ color: "var(--t2)" }}>
+                    Customers can discover and contact you on ApnaMap right now.
+                    Add more offers from your dashboard to get more visits.
+                  </p>
+                </div>
+                <div className="w-full space-y-2.5">
+                  {shopResult.shopSlug && (
+                    <a href={`/shop/${shopResult.shopSlug}`} target="_blank" rel="noreferrer"
+                      className="block w-full py-3.5 rounded-xl font-bold text-center"
+                      style={{ background: "rgba(31,187,90,0.12)", color: "#1FBB5A", border: "1px solid rgba(31,187,90,0.28)", textDecoration: "none" }}>
+                      👀 View Your Live Shop
+                    </a>
+                  )}
+                  <button onClick={() => router.push("/vendor/dashboard")}
+                    className="w-full py-3.5 rounded-xl font-bold text-white"
+                    style={{ background: "var(--accent)", boxShadow: "0 0 24px rgba(255,94,26,0.30)" }}>
+                    Go to Dashboard →
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-7xl">⏳</div>
+                <div>
+                  <h2 className="font-syne font-black text-2xl mb-2" style={{ color: "var(--gold)" }}>
+                    Shop Submitted!
+                  </h2>
+                  <p className="text-sm leading-relaxed" style={{ color: "var(--t2)" }}>
+                    Your shop is under review. We typically approve listings within a few hours.
+                    You'll be notified once it goes live.
+                  </p>
+                </div>
+                <div className="w-full p-3.5 rounded-2xl text-left"
+                  style={{ background: "rgba(232,168,0,0.07)", border: "1px solid rgba(232,168,0,0.20)" }}>
+                  <p className="text-xs font-bold mb-1.5" style={{ color: "var(--gold)" }}>
+                    To speed up approval, make sure your listing has:
+                  </p>
+                  <ul className="space-y-1">
+                    {[
+                      "A real, specific shop name",
+                      "Your correct phone number",
+                      "An active offer or description",
+                      "Accurate locality / address",
+                    ].map(tip => (
+                      <li key={tip} className="text-xs flex items-center gap-2" style={{ color: "var(--t2)" }}>
+                        <span style={{ color: "var(--gold)" }}>→</span> {tip}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <button onClick={() => router.push("/vendor/dashboard")}
+                  className="w-full py-3.5 rounded-xl font-bold text-white"
+                  style={{ background: "var(--accent)" }}>
+                  Go to Dashboard →
+                </button>
+              </>
+            )}
+          </div>
         )}
 
       </div>

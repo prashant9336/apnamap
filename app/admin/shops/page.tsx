@@ -90,10 +90,11 @@ function daysAgo(iso: string): string {
 
 /* ── Component ──────────────────────────────────────────────────────── */
 export default function AdminShopsPage() {
-  const [shops,   setShops]   = useState<ShopRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [token,   setToken]   = useState("");
-  const [acting,  setActing]  = useState<string | null>(null);
+  const [shops,      setShops]      = useState<ShopRow[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [token,      setToken]      = useState("");
+  const [acting,     setActing]     = useState<string | null>(null);
+  const [autoApproval, setAutoApproval] = useState<boolean | null>(null);
   const [filters, setFilters] = useState<Filters>({
     search: "", health: "all", status: "all", claimed: "all",
     offer: "all", locality: "", category: "",
@@ -106,7 +107,7 @@ export default function AdminShopsPage() {
       setToken(tok);
       fetch("/api/admin/shops", { headers: tok ? { Authorization: `Bearer ${tok}` } : {} })
         .then(r => r.json())
-        .then(d => { setShops(d.shops ?? []); setLoading(false); })
+        .then(d => { setShops(d.shops ?? []); setAutoApproval(d.auto_approval_enabled ?? true); setLoading(false); })
         .catch(() => setLoading(false));
     });
   }, []);
@@ -210,6 +211,25 @@ export default function AdminShopsPage() {
       </div>
 
       <div className="px-4 pt-4 space-y-4">
+        {/* ── Auto-approval status banner ── */}
+        {autoApproval !== null && (
+          <div className="px-3 py-2.5 rounded-xl flex items-center justify-between"
+            style={autoApproval
+              ? { background: "rgba(31,187,90,0.07)", border: "1px solid rgba(31,187,90,0.22)" }
+              : { background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.22)" }}>
+            <div>
+              <span className="text-xs font-bold" style={{ color: autoApproval ? "#1FBB5A" : "#f87171" }}>
+                {autoApproval ? "✓ Auto-Approval: ON" : "⚠ Auto-Approval: OFF"}
+              </span>
+              <p className="text-[10px] mt-0.5" style={{ color: "var(--t3)" }}>
+                {autoApproval
+                  ? "Qualifying shops go live instantly. Set AUTO_APPROVAL_ENABLED=false in Vercel env to pause."
+                  : "All new shops go to pending review. Set AUTO_APPROVAL_ENABLED=true in Vercel env to re-enable."}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* ── Stats bar ── */}
         <div className="grid grid-cols-3 gap-2">
           {[
