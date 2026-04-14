@@ -20,6 +20,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { generateStarterOffer } from "@/lib/offer-engine/auto-offer";
 
 /* ── Safety toggle ──────────────────────────────────────────────────── */
 // Set AUTO_APPROVAL_ENABLED=false in env to disable auto-approval globally.
@@ -206,24 +207,60 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ── Create first offer (non-critical, failure doesn't block) ─────
-  const offerTitle = String(body.offer_title ?? "").trim();
-  if (offerTitle) {
-    const tierMap: Record<string, number> = { big: 1, flash: 2, normal: 3 };
-    const offerTier = String(body.offer_tier ?? "normal");
-    // Non-critical — shop is already created; ignore offer insertion failure
-    await adminSb.from("offers").insert({
+  // ── Fetch category slug + name for offer generation ─────────────
+  const { data: catRow } = await adminSb
+    .from("categories")
+    .select("slug, name")
+    .eq("id", categoryId)
+    .maybeSingle();
+  const catSlug = catRow?.slug ?? "";
+  const catName = catRow?.name ?? "";
+
+  // ── Determine offer to insert ────────────────────────────────────
+  // Always create an offer so no shop card ever looks empty.
+  // Priority: explicit vendor input → Hinglish cleanup → category template.
+  const rawOfferTitle = String(body.offer_title ?? "").trim();
+  const offerTier     = String(body.offer_tier ?? "normal");
+  const tierMap: Record<string, number> = { big: 1, flash: 2, normal: 3 };
+
+  let offerPayload: Record<string, unknown>;
+
+  if (rawOfferTitle && !["vendor", "auto_generated"].includes("")) {
+    // Vendor typed something — run it through the generator to detect Hinglish
+    const starter = generateStarterOffer(catSlug, catName, name, rawOfferTitle);
+    offerPayload = {
       shop_id:        shop.id,
-      title:          offerTitle,
+      title:          starter.title,
+      description:    starter.description,
       discount_type:  body.offer_type ?? "other",
       discount_value: body.offer_value && !isNaN(Number(body.offer_value))
                         ? parseFloat(String(body.offer_value)) : null,
-      tier:        tierMap[offerTier] ?? 3,
-      is_active:   true,
-      is_featured: offerTier === "big",
-      source_type: "vendor",
-    });
+      tier:           starter.source_type === "vendor" ? (tierMap[offerTier] ?? 3) : 3,
+      is_active:      true,
+      is_featured:    starter.source_type === "vendor" && offerTier === "big",
+      source_type:    starter.source_type,
+      raw_input_text: starter.raw_input_text,
+    };
+  } else {
+    // No input — generate from category
+    const starter = generateStarterOffer(catSlug, catName, name);
+    offerPayload = {
+      shop_id:        shop.id,
+      title:          starter.title,
+      description:    starter.description,
+      discount_type:  "other",
+      discount_value: null,
+      tier:           3,
+      is_active:      true,
+      is_featured:    false,
+      source_type:    "auto_generated",
+      raw_input_text: null,
+    };
   }
+
+  // Non-critical — shop is already live; log but don't fail the response
+  const { error: offerErr } = await adminSb.from("offers").insert(offerPayload);
+  if (offerErr) console.error("[auto-offer] insert failed:", offerErr.message);
 
   return NextResponse.json(
     {

@@ -289,24 +289,27 @@ export default function OffersInner() {
         )}
 
         <div className="space-y-3">
-          {offers.map((offer) => (
+          {offers.map((offer) => {
+            const isAuto = offer.source_type === "auto_generated";
+            return (
             <div
               key={offer.id}
               className="p-4 rounded-2xl"
               style={{
-                background: offer.is_active
-                  ? "rgba(255,255,255,0.034)"
-                  : "rgba(255,255,255,0.02)",
-                border: `1px solid ${
-                  offer.is_active
-                    ? "rgba(255,255,255,0.07)"
-                    : "rgba(255,255,255,0.04)"
-                }`,
+                background: isAuto
+                  ? "rgba(167,139,250,0.05)"
+                  : offer.is_active ? "rgba(255,255,255,0.034)" : "rgba(255,255,255,0.02)",
+                border: `1px solid ${isAuto ? "rgba(167,139,250,0.22)" : offer.is_active ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.04)"}`,
                 opacity: offer.is_active ? 1 : 0.55,
               }}
             >
               <div className="flex items-start justify-between gap-2 mb-2">
                 <div className="flex-1">
+                  {isAuto && (
+                    <p className="text-[9px] font-black uppercase tracking-wide mb-1" style={{ color: "#a78bfa" }}>
+                      ✦ Starter offer — tap edit to personalise
+                    </p>
+                  )}
                   <p className="font-bold text-sm">{offer.title}</p>
                   {offer.description && (
                     <p className="text-xs mt-0.5" style={{ color: "var(--t3)" }}>
@@ -384,7 +387,8 @@ export default function OffersInner() {
                 </button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
