@@ -17,7 +17,13 @@
   --t3:         rgba(255,255,255,0.20);
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  /* Kill the blue tap-flash on every interactive element on Android/iOS */
+  -webkit-tap-highlight-color: transparent;
+}
 html {
   background: #05070C;   /* hard-coded fallback — prevents white flash before CSS vars resolve */
   scroll-behavior: smooth;
@@ -30,6 +36,36 @@ body {
   font-family: 'DM Sans', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Prevent text-size-adjust: iOS sometimes scales text unexpectedly */
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* ── Interactive elements — universal mobile feel ───────────────── */
+button, a, [role="button"], summary, label[for] {
+  /* Removes 300 ms ghost delay on mobile browsers that haven't yet       */
+  /* switched to immediate touch — safe on all modern iOS/Android.        */
+  touch-action: manipulation;
+  cursor: pointer;
+}
+
+button {
+  /* Text selection on buttons looks broken on long-press */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Instant press feedback for every non-framer button/link.
+   Framer-motion elements override this via their own transform — no conflict. */
+button:active:not([disabled]),
+a:active {
+  opacity: 0.72;
+  transition: opacity 0ms;
+}
+
+/* iOS / Android: prevent zoom on input focus (font-size < 16px triggers it) */
+input, select, textarea {
+  font-size: max(16px, 1em);
 }
 ::-webkit-scrollbar { width: 3px; height: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }

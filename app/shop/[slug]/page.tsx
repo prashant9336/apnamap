@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import type { Offer } from "@/types";
-import { ShopHeader, ShopActionButtons } from "./ShopInteractions";
+import { ShopHeader, ShopActionButtons, CouponCopyButton } from "./ShopInteractions";
 import ReviewSection from "./ReviewSection";
 
 /* ── Deduplicated fetch — React cache dedupes across generateMetadata + page ── */
@@ -153,10 +153,7 @@ export default async function ShopPage({ params }: { params: { slug: string } })
                         : "Ongoing"}
                     </span>
                     {offer.coupon_code && (
-                      <span className="font-mono text-xs px-2.5 py-1 rounded-lg select-all"
-                        style={{ background: "rgba(255,94,26,0.12)", color: "var(--accent)", border: "1px dashed rgba(255,94,26,0.3)" }}>
-                        {offer.coupon_code}
-                      </span>
+                      <CouponCopyButton code={offer.coupon_code} />
                     )}
                   </div>
                 </div>
@@ -186,19 +183,24 @@ export default async function ShopPage({ params }: { params: { slug: string } })
         )}
 
         {/* Info — in static HTML for Google */}
-        <div className="space-y-3 mb-6">
-          <h2 className="font-syne font-bold text-base">ℹ️ Info</h2>
-          {[
-            { icon: "📍", label: shop.address },
-            { icon: "🕐", label: shop.open_time ? `${shop.open_time} – ${shop.close_time}` : null },
-            { icon: "📞", label: shop.phone },
-            { icon: "💬", label: shop.whatsapp ? `+91 ${shop.whatsapp}` : null },
-          ].filter(r => r.label).map(r => (
-            <div key={r.icon} className="flex items-start gap-3 text-sm">
-              <span className="text-base flex-shrink-0">{r.icon}</span>
-              <span style={{ color: "var(--t2)" }}>{r.label}</span>
-            </div>
-          ))}
+        <div className="mb-6">
+          <h2 className="font-syne font-bold text-base mb-3">ℹ️ Info</h2>
+          <div className="rounded-2xl overflow-hidden"
+            style={{ background: "rgba(255,255,255,0.034)", border: "1px solid rgba(255,255,255,0.07)" }}>
+            {[
+              { icon: "📍", label: shop.address },
+              { icon: "🕐", label: shop.open_time ? `${shop.open_time} – ${shop.close_time}` : null },
+              { icon: "📞", label: shop.phone },
+              { icon: "💬", label: shop.whatsapp ? `+91 ${shop.whatsapp}` : null },
+            ].filter(r => r.label).map((r, i, arr) => (
+              <div key={r.icon}
+                className="flex items-start gap-3 px-4 py-3.5 text-sm"
+                style={{ borderBottom: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
+                <span className="text-base flex-shrink-0 mt-0.5">{r.icon}</span>
+                <span style={{ color: "var(--t2)", lineHeight: 1.5 }}>{r.label}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Reviews — client island */}
