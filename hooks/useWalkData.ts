@@ -140,8 +140,20 @@ export function useWalkData(
             if (locShops.length === 0) return null;
 
             const distToUser = locDistMap.get(loc.id) ?? Infinity;
+
+            // Crowd count grows with real platform activity:
+            //   • locShops.length * 3  — each approved vendor/shop adds weight
+            //   • totalViews / 12      — each shop page visit (user activity) adds weight
+            // Both signals accumulate naturally over time; no manual seeding needed.
+            const totalViews = locShops.reduce(
+              (sum: number, s: WalkShop) => sum + (s.view_count ?? 0),
+              0
+            );
             const crowd = {
-              count: live.base + Math.floor(Math.random() * 15) + locShops.length * 2,
+              count: Math.min(
+                live.base + locShops.length * 3 + Math.floor(totalViews / 12),
+                500
+              ),
               label: live.label,
               badge: live.badge,
             };
