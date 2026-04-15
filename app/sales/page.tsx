@@ -25,7 +25,8 @@ export default function SalesDashboard() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter]   = useState<Filter>("all");
   const [search, setSearch]   = useState("");
-  const [token, setToken]     = useState<string | null>(null);
+  const [token,   setToken]   = useState<string | null>(null);
+  const [acting,  setActing]  = useState<string | null>(null);
 
   // Resolve token once on mount
   useEffect(() => {
@@ -43,6 +44,22 @@ export default function SalesDashboard() {
       .then(r => r.json())
       .then(d => { setShops(d.shops ?? []); setLoading(false); });
   }, [token]);
+
+  async function approveShop(shopId: string) {
+    if (!token) return;
+    setActing(shopId);
+    const res = await fetch("/api/sales/shops", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ shop_id: shopId, action: "approve" }),
+    });
+    if (res.ok) {
+      setShops(prev => prev.map(s =>
+        s.id === shopId ? { ...s, is_approved: true, is_active: true } : s
+      ));
+    }
+    setActing(null);
+  }
 
   const filtered = useMemo(() => {
     let list = shops;
@@ -164,15 +181,16 @@ export default function SalesDashboard() {
 
         {!loading && filtered.map(shop => {
           const hasRealOffer = shop.offers.some(o => o.is_active && o.source_type !== "auto_generated");
-          const isLive = shop.is_active && shop.is_approved;
+          const isLive    = shop.is_active && shop.is_approved;
+          const isPending = !shop.is_approved;
+          const isActing  = acting === shop.id;
           return (
             <div
               key={shop.id}
               className="p-3.5 rounded-2xl"
               style={{
-                background: "rgba(255,255,255,0.034)",
-                border: `1px solid ${isLive ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.03)"}`,
-                opacity: isLive ? 1 : 0.65,
+                background: isPending ? "rgba(232,168,0,0.05)" : "rgba(255,255,255,0.034)",
+                border: `1px solid ${isPending ? "rgba(232,168,0,0.20)" : isLive ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.03)"}`,
               }}
             >
               <div className="flex items-start gap-3">
@@ -185,9 +203,9 @@ export default function SalesDashboard() {
                       className="text-[9px] font-bold px-1.5 py-0.5 rounded"
                       style={isLive
                         ? { background: "rgba(31,187,90,0.12)", color: "var(--green)" }
-                        : { background: "rgba(255,255,255,0.06)", color: "var(--t3)" }}
+                        : { background: "rgba(232,168,0,0.12)", color: "#E8A800" }}
                     >
-                      {isLive ? "● Live" : "○ Pending"}
+                      {isLive ? "● Live" : "⏳ Pending"}
                     </span>
                     {!hasRealOffer && (
                       <span className="text-[9px] font-bold px-1.5 py-0.5 rounded"
@@ -222,6 +240,18 @@ export default function SalesDashboard() {
                   </Link>
                 </div>
               </div>
+
+              {/* Approve button — only shown for pending shops */}
+              {isPending && (
+                <button
+                  onClick={() => approveShop(shop.id)}
+                  disabled={isActing}
+                  className="mt-3 w-full py-2.5 rounded-xl text-sm font-bold text-white"
+                  style={{ background: isActing ? "rgba(31,187,90,0.4)" : "var(--green)", opacity: isActing ? 0.7 : 1 }}
+                >
+                  {isActing ? "Approving…" : "✓ Approve & Go Live"}
+                </button>
+              )}
             </div>
           );
         })}

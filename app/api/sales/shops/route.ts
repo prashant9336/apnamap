@@ -216,7 +216,7 @@ export async function POST(req: NextRequest) {
   );
 }
 
-/* ── PATCH — edit own onboarded shop ─────────────────────────────── */
+/* ── PATCH — approve or edit own onboarded shop ──────────────────── */
 export async function PATCH(req: NextRequest) {
   const caller = await getSalesUser(req);
   if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -226,6 +226,7 @@ export async function PATCH(req: NextRequest) {
   catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
   const shopId = String(body.shop_id ?? "").trim();
+  const action  = String(body.action  ?? "edit");
   if (!shopId) return NextResponse.json({ error: "shop_id required" }, { status: 400 });
 
   const adminSb = createAdminClient();
@@ -244,7 +245,20 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
-  // Allowlisted fields only
+  // ── Approve action ────────────────────────────────────────────
+  if (action === "approve") {
+    const { data: updated, error } = await adminSb
+      .from("shops")
+      .update({ is_approved: true, is_active: true, updated_at: new Date().toISOString() })
+      .eq("id", shopId)
+      .select("id, name, slug, is_approved, is_active")
+      .single();
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ shop: updated });
+  }
+
+  // ── Edit action (default) ─────────────────────────────────────
   const allowed: Record<string, unknown> = {};
   const EDITABLE = ["name", "phone", "whatsapp", "address", "description", "open_time", "close_time", "open_days", "tags"];
   for (const key of EDITABLE) {
