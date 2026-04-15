@@ -18,9 +18,14 @@
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html { scroll-behavior: smooth; }
+html {
+  background: #05070C;   /* hard-coded fallback — prevents white flash before CSS vars resolve */
+  scroll-behavior: smooth;
+}
 body {
+  background: #05070C;
   background: var(--bg);
+  color: #EDEEF5;
   color: var(--t1);
   font-family: 'DM Sans', sans-serif;
   -webkit-font-smoothing: antialiased;

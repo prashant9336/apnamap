@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
+import { Suspense } from "react";
 import "./globals.css";
 import { I18nProvider } from "@/lib/i18n/context";
+import NavigationProgress from "@/components/layout/NavigationProgress";
 
 /* ── PWA / SEO metadata ─────────────────────────────────────────── */
 export const metadata: Metadata = {
@@ -69,8 +71,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Splash screen background while app loads on iOS */}
         <meta name="theme-color" content="#05070C" media="(prefers-color-scheme: dark)"  />
         <meta name="theme-color" content="#FF5E1A" media="(prefers-color-scheme: light)" />
+        {/* Inline critical style — eliminates white flash before stylesheet parses */}
+        <style dangerouslySetInnerHTML={{ __html: "html,body{background:#05070C!important;color:#EDEEF5}" }} />
       </head>
-      <body className="antialiased">
+      <body className="antialiased" style={{ background: "#05070C" }}>
+        <Suspense fallback={null}>
+          <NavigationProgress />
+        </Suspense>
         <I18nProvider>{children}</I18nProvider>
       </body>
     </html>
