@@ -1093,7 +1093,7 @@ export default function AdminDashboard() {
   const [ready,      setReady]      = useState(false);
   const [localities, setLocalities] = useState<Meta[]>([]);
   const [categories, setCategories] = useState<Meta[]>([]);
-  const [stats,      setStats]      = useState({ shops: 0, pending: 0, requests: 0, vendors: 0 });
+  const [stats,      setStats]      = useState({ shops: 0, pending: 0, requests: 0, vendors: 0, users: 0, newUsers: 0 });
 
   useEffect(() => {
     async function init() {
@@ -1111,14 +1111,17 @@ export default function AdminDashboard() {
           sb.from("shops").select("*", { count: "exact", head: true }).eq("is_approved", false),
           sb.from("vendor_requests").select("*", { count: "exact", head: true }).eq("status", "pending"),
           sb.from("vendors").select("*", { count: "exact", head: true }),
+          sb.from("profiles").select("*", { count: "exact", head: true }).eq("role", "customer"),
+          sb.from("profiles").select("*", { count: "exact", head: true }).eq("role", "customer")
+            .gte("created_at", new Date(Date.now() - 7 * 86_400_000).toISOString()),
         ]),
       ]);
 
       setLocalities(locRes.data ?? []);
       const catJson = await catRes.json();
       setCategories(catJson.categories ?? []);
-      const [s, p2, r, v] = statsRes;
-      setStats({ shops: s.count ?? 0, pending: p2.count ?? 0, requests: r.count ?? 0, vendors: v.count ?? 0 });
+      const [s, p2, r, v, u, nu] = statsRes;
+      setStats({ shops: s.count ?? 0, pending: p2.count ?? 0, requests: r.count ?? 0, vendors: v.count ?? 0, users: u.count ?? 0, newUsers: nu.count ?? 0 });
       setReady(true);
     }
     init();
@@ -1138,8 +1141,11 @@ export default function AdminDashboard() {
     return (
       <div style={{ ...PG, padding: 16 }}>
         <div style={{ height: 54, borderRadius: 14, background: "rgba(255,255,255,0.05)", marginBottom: 16 }} className="shimmer" />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
-          {[1,2,3,4].map(i => <div key={i} style={{ height: 60, borderRadius: 12, background: "rgba(255,255,255,0.05)" }} className="shimmer" />)}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
+            {[1,2,3,4].map(i => <div key={i} style={{ height: 60, borderRadius: 12, background: "rgba(255,255,255,0.05)" }} className="shimmer" />)}
+          </div>
+          <div style={{ height: 60, borderRadius: 12, background: "rgba(255,255,255,0.05)" }} className="shimmer" />
         </div>
         <Skel rows={4} />
       </div>
@@ -1157,18 +1163,36 @@ export default function AdminDashboard() {
       <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 14 }}>
 
         {/* Stats */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
-          {[
-            { label: "Shops",    value: stats.shops,    color: "#FF5E1A" },
-            { label: "Pending",  value: stats.pending,  color: "#E8A800" },
-            { label: "Requests", value: stats.requests, color: "#3B82F6" },
-            { label: "Vendors",  value: stats.vendors,  color: "#1FBB5A" },
-          ].map(s => (
-            <div key={s.label} style={{ padding: "10px 12px", borderRadius: 12, background: "rgba(255,255,255,0.034)", border: `1px solid ${s.color}22` }}>
-              <div style={{ fontFamily: "'Syne',sans-serif", fontSize: 20, fontWeight: 900, color: s.color }}>{s.value}</div>
-              <div style={{ fontSize: 9, color: "rgba(255,255,255,0.30)", textTransform: "uppercase", letterSpacing: "0.8px", fontWeight: 700 }}>{s.label}</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
+            {[
+              { label: "Shops",    value: stats.shops,    color: "#FF5E1A" },
+              { label: "Pending",  value: stats.pending,  color: "#E8A800" },
+              { label: "Requests", value: stats.requests, color: "#3B82F6" },
+              { label: "Vendors",  value: stats.vendors,  color: "#1FBB5A" },
+            ].map(s => (
+              <div key={s.label} style={{ padding: "10px 12px", borderRadius: 12, background: "rgba(255,255,255,0.034)", border: `1px solid ${s.color}22` }}>
+                <div style={{ fontFamily: "'Syne',sans-serif", fontSize: 20, fontWeight: 900, color: s.color }}>{s.value}</div>
+                <div style={{ fontSize: 9, color: "rgba(255,255,255,0.30)", textTransform: "uppercase", letterSpacing: "0.8px", fontWeight: 700 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+          {/* Users row */}
+          <div style={{ padding: "12px 14px", borderRadius: 12, background: "rgba(255,255,255,0.034)", border: "1px solid rgba(139,92,246,0.20)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 20 }}>👥</span>
+              <div>
+                <div style={{ fontFamily: "'Syne',sans-serif", fontSize: 22, fontWeight: 900, color: "#a78bfa", lineHeight: 1 }}>{stats.users}</div>
+                <div style={{ fontSize: 9, color: "rgba(255,255,255,0.30)", textTransform: "uppercase", letterSpacing: "0.8px", fontWeight: 700, marginTop: 2 }}>Total Users</div>
+              </div>
             </div>
-          ))}
+            {stats.newUsers > 0 && (
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontFamily: "'Syne',sans-serif", fontSize: 16, fontWeight: 800, color: "#34d399" }}>+{stats.newUsers}</div>
+                <div style={{ fontSize: 9, color: "rgba(255,255,255,0.30)", textTransform: "uppercase", letterSpacing: "0.8px", fontWeight: 700 }}>This Week</div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Tab bar */}
