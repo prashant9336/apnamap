@@ -2,7 +2,7 @@
 // APNAMAP — GLOBAL TYPES (aligned with 001_schema.sql)
 // ═══════════════════════════════════════════════════════════════
 
-export type UserRole = "customer" | "vendor" | "admin" | "sales";
+export type UserRole = "customer" | "vendor" | "admin";
 export type DiscountType = "percent" | "flat" | "bogo" | "free" | "other";
 
 // ─── DATABASE TYPES ───────────────────────────────────────────

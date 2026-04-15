@@ -73,7 +73,6 @@ export default function ProfilePage() {
                   { icon: "❤️", label: "Saved shops & offers", href: "/saved" },
                   ...(profile.role === "vendor" ? [{ icon: "🏪", label: "Vendor Dashboard",   href: "/vendor/dashboard" }] : []),
                   ...(profile.role === "admin"  ? [{ icon: "🛡️", label: "Admin Panel",         href: "/admin/dashboard"  }] : []),
-                  ...(profile.role === "sales"  ? [{ icon: "📋", label: "Sales Dashboard",      href: "/sales"            }] : []),
                 ].map((item) => (
                   <Link key={item.label} href={item.href}
                     className="flex items-center gap-3 px-4 py-3.5 rounded-xl"

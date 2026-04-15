@@ -1,5 +1,5 @@
 // ─── Core DB types ────────────────────────────────────────────────
-export type UserRole = "customer" | "vendor" | "admin" | "sales";
+export type UserRole = "customer" | "vendor" | "admin";
 
 export interface Profile {
   id: string;
