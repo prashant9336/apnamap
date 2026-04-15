@@ -64,7 +64,7 @@ export default function AdminOffersPage() {
         ))}
       </div>
 
-      <div className="px-4 py-3 space-y-2.5">
+      <div className="px-4 py-3 pb-page space-y-2.5">
         {loading && [1,2,3,4].map((i) => <div key={i} className="h-20 rounded-xl shimmer" />)}
 
         {!loading && filtered.map((offer) => {

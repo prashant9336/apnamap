@@ -116,7 +116,7 @@ export default function OffersInner() {
         </button>
       </div>
 
-      <div className="px-4 py-4">
+      <div className="px-4 py-4 pb-page">
         {adding && (
           <div
             className="p-4 rounded-2xl mb-4"

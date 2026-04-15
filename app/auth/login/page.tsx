@@ -61,7 +61,7 @@ function LoginForm() {
   }
 
   const S = {
-    pg:    { minHeight: "100vh", display: "flex", flexDirection: "column" as const, alignItems: "center", justifyContent: "center", padding: 20, background: "#05070C" },
+    pg:    { minHeight: "100dvh", display: "flex", flexDirection: "column" as const, alignItems: "center", justifyContent: "center", padding: "max(20px, calc(env(safe-area-inset-top, 0px) + 20px)) 20px max(20px, calc(env(safe-area-inset-bottom, 0px) + 20px))", background: "#05070C" },
     card:  { width: "100%", maxWidth: 360 },
     input: { width: "100%", padding: "13px 14px", borderRadius: 12, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#F2F5FF", fontSize: 15, outline: "none", fontFamily: "'DM Sans',sans-serif", display: "block", boxSizing: "border-box" as const },
     btn:   { width: "100%", padding: "14px", borderRadius: 12, background: loading ? "rgba(255,94,26,0.5)" : "#FF5E1A", color: "#fff", border: "none", cursor: "pointer", fontSize: 15, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", boxShadow: loading ? "none" : "0 0 24px rgba(255,94,26,0.35)" } as React.CSSProperties,

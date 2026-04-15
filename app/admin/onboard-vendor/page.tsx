@@ -17,7 +17,7 @@ type CredResult = {
 
 /* ── Styles ─────────────────────────────────────────────────────── */
 const S = {
-  pg:    { minHeight: "100vh", background: "#05070C" } as React.CSSProperties,
+  pg:    { minHeight: "100dvh", background: "#05070C" } as React.CSSProperties,
   hdr:   { position: "sticky" as const, top: 0, zIndex: 50, display: "flex", alignItems: "center", gap: 12, paddingTop: "calc(14px + env(safe-area-inset-top, 0px))", paddingBottom: "14px", paddingLeft: "16px", paddingRight: "16px", background: "rgba(5,7,12,0.97)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(255,255,255,0.07)" },
   sect:  { display: "flex", flexDirection: "column" as const, gap: 14, padding: "16px 16px 32px" },
   label: { display: "block" as const, fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.40)", textTransform: "uppercase" as const, letterSpacing: "0.8px", marginBottom: 7 } as React.CSSProperties,

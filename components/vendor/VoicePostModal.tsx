@@ -213,8 +213,8 @@ export default function VoicePostModal({ shopId, onClose, onPublished }: Props) 
           </button>
         </div>
 
-        {/* Scrollable content area */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "4px 16px 32px" }}>
+        {/* Scrollable content area — bottom padding clears home indicator in PWA/TWA */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "4px 16px", paddingBottom: "max(env(safe-area-inset-bottom, 0px), 32px)" }}>
 
           {/* Error banner */}
           {error && (

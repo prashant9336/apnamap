@@ -224,7 +224,7 @@ export default function AdminShopsPage() {
         <span className="text-xs" style={{ color: "var(--t3)" }}>{shops.length} shops</span>
       </div>
 
-      <div className="px-4 pt-4 space-y-4">
+      <div className="px-4 pt-4 pb-page space-y-4">
         {/* ── Auto-approval status banner ── */}
         {autoApproval !== null && (
           <div className="px-3 py-2.5 rounded-xl flex items-center justify-between"

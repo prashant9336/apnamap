@@ -205,6 +205,9 @@ export default async function ShopPage({ params }: { params: { slug: string } })
 
         {/* Reviews — client island */}
         <ReviewSection shopId={shop.id} shopSlug={params.slug} />
+
+        {/* Safe-area spacer — clears home indicator on iPhone/Android PWA */}
+        <div style={{ height: "max(env(safe-area-inset-bottom, 0px), 24px)" }} />
       </div>
     </div>
   );

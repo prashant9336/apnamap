@@ -29,7 +29,7 @@ type CredResult = {
 /* ═══════════════════════════════════════════════════════════
    SHARED STYLES
 ═══════════════════════════════════════════════════════════ */
-const PG:  React.CSSProperties = { minHeight: "100vh", background: "#05070C" };
+const PG:  React.CSSProperties = { minHeight: "100dvh", background: "#05070C" };
 const HDR: React.CSSProperties = { position: "sticky", top: 0, zIndex: 50, display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", background: "rgba(5,7,12,0.97)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(255,255,255,0.07)" };
 const CARD: React.CSSProperties = { padding: "14px", borderRadius: 14, background: "rgba(255,255,255,0.034)", border: "1px solid rgba(255,255,255,0.07)" };
 const INP:  React.CSSProperties = { width: "100%", padding: "12px 14px", borderRadius: 12, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#F2F5FF", fontSize: 14, outline: "none", fontFamily: "'DM Sans',sans-serif", boxSizing: "border-box" };

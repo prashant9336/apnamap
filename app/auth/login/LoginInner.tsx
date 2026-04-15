@@ -72,7 +72,7 @@ export default function LoginInner() {
 
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-center px-5"
+      className="min-h-screen flex flex-col items-center justify-center px-5 pt-safe pb-safe"
       style={{ background: "var(--bg)" }}
     >
       <div className="w-full max-w-sm">

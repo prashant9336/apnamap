@@ -4,7 +4,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
 const S = {
-  pg:    { minHeight:"100vh", display:"flex", flexDirection:"column" as const, alignItems:"center", justifyContent:"center", padding:"24px 20px", background:"#05070C" },
+  pg:    { minHeight:"100dvh", display:"flex", flexDirection:"column" as const, alignItems:"center", justifyContent:"center", padding:"max(24px, calc(env(safe-area-inset-top, 0px) + 20px)) 20px max(24px, calc(env(safe-area-inset-bottom, 0px) + 20px))", background:"#05070C" },
   card:  { width:"100%", maxWidth:360 },
   input: { width:"100%", padding:"13px 14px", borderRadius:12, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", color:"#F2F5FF", fontSize:15, outline:"none", fontFamily:"'DM Sans',sans-serif", display:"block", marginBottom:12, boxSizing:"border-box" as const },
   btn:   (dis:boolean): React.CSSProperties => ({ width:"100%", padding:"14px", borderRadius:12, background:dis?"rgba(255,94,26,0.5)":"#FF5E1A", color:"#fff", border:"none", cursor:dis?"not-allowed":"pointer", fontSize:15, fontWeight:700, fontFamily:"'DM Sans',sans-serif", boxShadow:dis?"none":"0 0 24px rgba(255,94,26,0.35)" }),

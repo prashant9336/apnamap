@@ -170,7 +170,7 @@ export default function VendorOnboarding() {
   const stepTitles = ["Business Type & Details", "Location & Hours", "First Offer", "Done!"];
 
   return (
-    <div className="min-h-screen" style={{ background: "var(--bg)" }}>
+    <div className="min-h-screen" style={{ background: "var(--bg)", paddingBottom: "max(env(safe-area-inset-bottom, 0px), 24px)" }}>
 
       {/* ── Header ────────────────────────────────────────── */}
       <div className="sticky top-0 z-50 px-4 py-3 flex items-center gap-3"

@@ -60,9 +60,9 @@ function ClaimShopForm() {
   }
 
   const S = {
-    pg:    { minHeight:"100vh", background:"#05070C", fontFamily:"'DM Sans',sans-serif" },
+    pg:    { minHeight:"100dvh", background:"#05070C", fontFamily:"'DM Sans',sans-serif" },
     hdr:   { padding:"16px", display:"flex", alignItems:"center", gap:12, borderBottom:"1px solid rgba(255,255,255,0.07)" },
-    body:  { padding:"20px 16px", maxWidth:480, margin:"0 auto" },
+    body:  { padding:"20px 16px", paddingBottom:"max(env(safe-area-inset-bottom, 0px), 24px)", maxWidth:480, margin:"0 auto" },
     card:  { padding:"20px", borderRadius:18, background:"rgba(255,255,255,0.034)", border:"1px solid rgba(255,255,255,0.07)", marginBottom:16 },
     label: { fontSize:11, fontWeight:700, color:"rgba(255,255,255,0.40)", textTransform:"uppercase" as const, letterSpacing:"0.8px", marginBottom:6, display:"block" },
     input: { width:"100%", padding:"13px 14px", borderRadius:12, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)", color:"#F2F5FF", fontSize:15, outline:"none", fontFamily:"'DM Sans',sans-serif", boxSizing:"border-box" as const },

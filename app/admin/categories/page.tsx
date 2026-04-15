@@ -54,7 +54,7 @@ export default function AdminCategoriesPage() {
         </div>
       )}
 
-      <div className="px-4 py-3">
+      <div className="px-4 py-3 pb-page">
         {loading && [1,2,3,4].map((i) => <div key={i} className="h-12 rounded-xl shimmer mb-2" />)}
         <div className="grid grid-cols-3 gap-2.5">
           {!loading && cats.map((cat) => (

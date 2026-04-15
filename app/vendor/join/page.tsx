@@ -7,9 +7,13 @@ import { createClient } from "@/lib/supabase/client";
 // ── Shared style tokens ───────────────────────────────────────────
 const S = {
   page:  {
-    minHeight: "100vh", background: "#05070C",
+    minHeight: "100dvh", background: "#05070C",
     display: "flex", flexDirection: "column" as const,
-    alignItems: "center", padding: "24px 20px 48px",
+    alignItems: "center",
+    paddingTop: "max(24px, calc(env(safe-area-inset-top, 0px) + 20px))",
+    paddingRight: "20px",
+    paddingLeft: "20px",
+    paddingBottom: "max(48px, calc(env(safe-area-inset-bottom, 0px) + 24px))",
   },
   card:  { width: "100%", maxWidth: 420 },
   label: {

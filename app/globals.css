@@ -107,26 +107,54 @@ input, select, textarea {
 .scroll-none { scrollbar-width: none; }
 .scroll-none::-webkit-scrollbar { display: none; }
 
+/* ── Viewport height fix ─────────────────────────────────────────────
+ * Tailwind's min-h-screen = min-height: 100vh.
+ * On mobile Safari, 100vh includes the browser chrome — content overflows.
+ * Override globally with 100dvh (dynamic viewport height), which correctly
+ * excludes browser chrome. Supported iOS 15.4+ and Chrome 108+.
+ * Desktop is unaffected — 100dvh = 100vh when no chrome is present.
+ * ──────────────────────────────────────────────────────────────────── */
+.min-h-screen { min-height: 100dvh; }
+
 /* ── Safe-area utilities ──────────────────────────────────────────────
  * viewport-fit: cover is set in layout.tsx so content reaches the edges.
  * These classes ensure UI never collides with the status bar, notch,
  * Dynamic Island, or home indicator on iPhone/Android.
  *
  * Usage:
- *   .pt-safe          — extra padding-top = status bar / notch height
- *   .pb-safe          — extra padding-bottom = home indicator height
- *   .min-h-dvh        — 100dvh instead of 100vh (stable on mobile browsers)
- *   .safe-page-shell  — full-height page that respects both insets
+ *   .pt-safe          — padding-top = status bar / notch height
+ *   .pb-safe          — padding-bottom = home indicator height (exact)
+ *   .pb-page          — bottom padding for standalone page content:
+ *                        max(home indicator, 24px) — always scrollable past last item
+ *   .min-h-dvh        — 100dvh (same as min-h-screen override above, explicit alias)
+ *   .safe-page-shell  — full standalone page: dvh + top + bottom safe-area
  * ────────────────────────────────────────────────────────────────── */
-.pt-safe   { padding-top:    env(safe-area-inset-top,    0px); }
-.pb-safe   { padding-bottom: env(safe-area-inset-bottom, 0px); }
-.pl-safe   { padding-left:   env(safe-area-inset-left,   0px); }
-.pr-safe   { padding-right:  env(safe-area-inset-right,  0px); }
+.pt-safe { padding-top:    env(safe-area-inset-top,    0px); }
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.pl-safe { padding-left:   env(safe-area-inset-left,   0px); }
+.pr-safe { padding-right:  env(safe-area-inset-right,  0px); }
+
+/* Comfortable bottom padding for standalone pages — clears home indicator
+ * and leaves a minimum 24px gap so content never feels flush to the edge. */
+.pb-page {
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 24px);
+}
 
 .min-h-dvh { min-height: 100dvh; }
 
-/* Full-page shell for standalone pages (not using AppShell) */
+/* Full-page shell for standalone pages (not using AppShell).
+ * Applies to pages that have their own sticky header + scrollable body.
+ * Top safe-area is handled by the sticky header — shell only adds bottom. */
 .safe-page-shell {
   min-height: 100dvh;
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Centered standalone page — auth, password, etc.
+ * Both top and bottom safe-area needed because content is vertically centred
+ * and can reach either edge on compact phones in PWA / TWA mode. */
+.centered-page-shell {
+  min-height: 100dvh;
+  padding-top:    max(env(safe-area-inset-top,    0px), 0px);
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 0px);
 }

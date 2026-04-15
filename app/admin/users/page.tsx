@@ -32,7 +32,7 @@ export default function AdminUsersPage() {
         <p className="font-syne font-black text-base flex-1">Users ({users.length})</p>
       </div>
 
-      <div className="px-4 py-3">
+      <div className="px-4 py-3 pb-page">
         <input value={search} onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by name…"
           className="w-full px-4 py-2.5 rounded-xl text-sm outline-none mb-3"

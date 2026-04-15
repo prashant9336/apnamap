@@ -26,7 +26,7 @@ export default function AdminCitiesPage() {
         <p className="font-syne font-black text-base flex-1">Cities & Localities</p>
       </div>
 
-      <div className="px-4 py-4 space-y-4">
+      <div className="px-4 py-4 pb-page space-y-4">
         {loading && [1,2].map((i) => <div key={i} className="h-40 rounded-2xl shimmer" />)}
 
         {!loading && cities.map((city) => (
