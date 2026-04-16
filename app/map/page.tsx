@@ -45,12 +45,12 @@ export default function MapPage() {
         attributionControl: false,
       });
 
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-        maxZoom: 19,
-        subdomains: "abcd",
-      }).addTo(map);
+      L.tileLayer(
+        `https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png?api_key=${process.env.NEXT_PUBLIC_STADIA_KEY ?? ""}`,
+        { maxZoom: 20 }
+      ).addTo(map);
 
-      L.control.attribution({ prefix: "© OpenStreetMap · CartoDB" }).addTo(map);
+      L.control.attribution({ prefix: "© <a href='https://stadiamaps.com/'>Stadia Maps</a> · © <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a>" }).addTo(map);
 
       const shopLayer = L.layerGroup().addTo(map);
       const userLayer = L.layerGroup().addTo(map);
