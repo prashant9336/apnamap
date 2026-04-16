@@ -8,7 +8,7 @@ const DEFAULT_LAT = parseFloat(process.env.NEXT_PUBLIC_DEFAULT_LAT ?? "25.4358")
 const DEFAULT_LNG = parseFloat(process.env.NEXT_PUBLIC_DEFAULT_LNG ?? "81.8463");
 
 export default function ExplorePage() {
-  const { geo } = useGeo();
+  const { geo, detect } = useGeo();
 
   // Use GPS coords once available; fall back to env-defined defaults while loading
   const lat = geo.lat ?? DEFAULT_LAT;
@@ -30,6 +30,9 @@ export default function ExplorePage() {
         userLng={lng}
         userLocality={geo.locality ?? ""}
         gpsError={geo.error}
+        gpsConfirmed={geo.gpsConfirmed}
+        gpsAccuracy={geo.accuracy}
+        onDetect={detect}
       />
     </AppShell>
   );

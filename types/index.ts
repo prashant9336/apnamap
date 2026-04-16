@@ -197,6 +197,8 @@ export interface GeoState {
   lng: number | null;
   accuracy: number | null;
   loading: boolean;
+  /** true once GPS has given a real fix (success or error) — false while pending even if cache seeded coords */
+  gpsConfirmed: boolean;
   error: string | null;
   locality: string | null;
 }

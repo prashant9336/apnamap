@@ -22,9 +22,12 @@ interface Props {
   userLng:            number;
   userLocality:       string;
   gpsError?:          string | null;
+  gpsConfirmed?:      boolean;
+  gpsAccuracy?:       number | null;
+  onDetect?:          () => void;
 }
 
-export default function WalkView({ localities, nearestLocalityIdx, loading, userLat, userLng, userLocality, gpsError }: Props) {
+export default function WalkView({ localities, nearestLocalityIdx, loading, userLat, userLng, userLocality, gpsError, gpsConfirmed = true, gpsAccuracy, onDetect }: Props) {
   const { t }        = useI18n();
   const scrollRef    = useRef<HTMLDivElement>(null);
   const [activeIdx,  setAI]       = useState(0);
@@ -246,19 +249,26 @@ export default function WalkView({ localities, nearestLocalityIdx, loading, user
 
           {/* Location pill */}
           <motion.div
-            key={currentLoc}
+            key={gpsConfirmed ? (currentLoc || "loc") : "detecting"}
             initial={{ opacity: 0, scale: 0.92 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.25 }}
-            style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px 4px 7px", borderRadius: 100, fontSize: "11px", fontWeight: 600, color: "#1FBB5A", background: "rgba(31,187,90,0.09)", border: "1px solid rgba(31,187,90,0.22)", flexShrink: 1, minWidth: 0, overflow: "hidden" }}
+            style={{
+              display: "flex", alignItems: "center", gap: 5,
+              padding: "4px 10px 4px 7px", borderRadius: 100, fontSize: "11px", fontWeight: 600,
+              color:      gpsConfirmed ? "#1FBB5A" : "#E8A800",
+              background: gpsConfirmed ? "rgba(31,187,90,0.09)" : "rgba(232,168,0,0.09)",
+              border:     gpsConfirmed ? "1px solid rgba(31,187,90,0.22)" : "1px solid rgba(232,168,0,0.22)",
+              flexShrink: 1, minWidth: 0, overflow: "hidden",
+            }}
           >
             <motion.div
-              style={{ width: 6, height: 6, borderRadius: "50%", background: "#1FBB5A", flexShrink: 0 }}
+              style={{ width: 6, height: 6, borderRadius: "50%", background: gpsConfirmed ? "#1FBB5A" : "#E8A800", flexShrink: 0 }}
               animate={{ opacity: [1, 0.3, 1] }}
-              transition={{ duration: 2, repeat: Infinity }}
+              transition={{ duration: gpsConfirmed ? 2 : 0.8, repeat: Infinity }}
             />
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {currentLoc || userLocality || t("detecting")}
+              {!gpsConfirmed ? t("detecting") : (currentLoc || userLocality || t("detecting"))}
             </span>
           </motion.div>
 
@@ -312,14 +322,14 @@ export default function WalkView({ localities, nearestLocalityIdx, loading, user
       >
         {loading ? <SkelContent /> : (
           <>
-            {gpsError && (
-              <div style={{ margin: "10px 12px 0", padding: "8px 12px", borderRadius: 10, fontSize: "11px", background: "rgba(232,168,0,0.09)", border: "1px solid rgba(232,168,0,0.22)", color: "#E8A800" }}>
-                ⚠️ {gpsError}
-              </div>
-            )}
-
             {/* You are here */}
-            <YouAreHere locality={currentLoc || userLocality} />
+            <YouAreHere
+              locality={currentLoc || userLocality}
+              gpsConfirmed={gpsConfirmed}
+              gpsError={gpsError}
+              accuracy={gpsAccuracy}
+              onDetect={onDetect}
+            />
 
             {/* Live feed strip — uses ranked data for relevance */}
             <LiveFeedStrip localities={filteredLocalities} />
