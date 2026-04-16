@@ -123,15 +123,52 @@ interface ActionProps {
 
 export function ShopActionButtons({ shopId, phone, whatsapp, lat, lng }: ActionProps) {
   function handleAction(type: "call" | "whatsapp" | "direction") {
+    // Fire analytics — non-blocking, never delays the action
     fetch("/api/analytics", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ shop_id: shopId, event_type: type }),
     }).catch(() => {});
 
-    if (type === "call"      && phone)    window.location.href = `tel:${phone}`;
-    if (type === "whatsapp"  && whatsapp) window.open(`https://wa.me/91${whatsapp}?text=Hi, I found you on ApnaMap!`);
-    if (type === "direction")             window.open(`https://maps.google.com/?q=${lat},${lng}`);
+    if (type === "call" && phone) {
+      // tel: is always window.location.href — opens phone dialer natively
+      window.location.href = `tel:${phone}`;
+      return;
+    }
+
+    if (type === "whatsapp" && whatsapp) {
+      // Use location.href (not window.open) so the OS handles the wa.me URL
+      // directly. On mobile this opens the WhatsApp app without spawning a
+      // new browser tab that would leave a blank shell when dismissed.
+      window.location.href = `https://wa.me/91${whatsapp}?text=${encodeURIComponent("Hi, I found you on ApnaMap!")}`;
+      return;
+    }
+
+    if (type === "direction") {
+      // Platform-specific native maps handoff.
+      // Key rule: NEVER use window.open() for maps — it opens a browser tab
+      // containing the Google Maps website, which then tries to launch the app,
+      // leaving a blank browser shell that the user must manually close.
+      //
+      // window.location.href hands the URL to the OS directly:
+      //   • iOS   → maps:// opens Apple Maps natively (no web shell)
+      //   • Android → google.navigation: opens Google Maps turn-by-turn
+      //   • Other  → standard Google Maps URL opens in browser (desktop)
+      const ua = navigator.userAgent;
+      const isIOS     = /iPad|iPhone|iPod/.test(ua) && !(window as any).MSStream;
+      const isAndroid = /Android/.test(ua);
+
+      if (isIOS) {
+        // maps:// → Apple Maps opens directly; back button returns to ApnaMap
+        window.location.href = `maps://maps.apple.com/?daddr=${lat},${lng}&dirflg=d`;
+      } else if (isAndroid) {
+        // google.navigation: → opens Google Maps in navigation mode immediately
+        window.location.href = `google.navigation:q=${lat},${lng}`;
+      } else {
+        // Desktop / unknown — open Google Maps in a new tab (acceptable on desktop)
+        window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, "_blank");
+      }
+    }
   }
 
   const buttons = [

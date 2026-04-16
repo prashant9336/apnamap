@@ -398,8 +398,7 @@ export default function ShopCard({ shop, index, side }: Props) {
                 )}
                 {(shop.whatsapp || shop.phone) && (
                   <a
-                    href={`https://wa.me/91${(shop.whatsapp || shop.phone)?.replace(/\D/g, "").slice(-10)}`}
-                    target="_blank"
+                    href={`https://wa.me/91${(shop.whatsapp || shop.phone)?.replace(/\D/g, "").slice(-10)}?text=${encodeURIComponent("Hi, I found you on ApnaMap!")}`}
                     rel="noopener noreferrer"
                     style={{
                       flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
