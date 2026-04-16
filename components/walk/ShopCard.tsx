@@ -123,6 +123,7 @@ export default function ShopCard({ shop, index, side }: Props) {
   const inView   = useInView(ref, { once: true, margin: "-30px 0px" });
   const router   = useRouter();
   const { t }    = useI18n();
+  const [pressed, setPressed] = useState(false);
 
   // Focus zone: cards near the vertical center of the viewport scale up slightly;
   // peripheral cards dim. Driven by IntersectionObserver on a wrapper div so it
@@ -146,6 +147,12 @@ export default function ShopCard({ shop, index, side }: Props) {
     obs.observe(wrapper);
     return () => { obs.disconnect(); cancelAnimationFrame(raf); };
   }, []);
+
+  // Prefetch shop page as soon as the card is visible — eliminates cold-start
+  // latency when user taps, so loading.tsx appears almost instantly.
+  useEffect(() => {
+    if (inView) router.prefetch(`/shop/${shop.slug}`);
+  }, [inView, shop.slug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Track deal view 2 s after the card enters the viewport — fire once per session
   useEffect(() => {
@@ -200,16 +207,38 @@ export default function ShopCard({ shop, index, side }: Props) {
 
   return (
     <div ref={focusRef}>
+    {/*
+      Press-feedback wrapper: fires on pointerDown (before onClick) so the
+      user sees a scale response the instant their finger touches the screen.
+      CSS transitions run on the compositor — no React re-render delay.
+      touchAction:manipulation disables the browser's 300ms tap delay.
+    */}
+    <div
+      style={{
+        transform: pressed ? "scale(0.965)" : "scale(1)",
+        transition: pressed
+          ? "transform 55ms ease"
+          : "transform 200ms cubic-bezier(0.25,0,0,1)",
+        touchAction: "manipulation",
+        WebkitTapHighlightColor: "transparent",
+      }}
+      onPointerDown={() => setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerCancel={() => setPressed(false)}
+      onPointerLeave={() => setPressed(false)}
+    >
     <motion.div
       ref={ref}
       initial={{ opacity: 0, x: dx, scale: 0.97 }}
       animate={inView ? { opacity: 1, x: 0, scale: 1 } : {}}
       transition={{ duration: 0.45, delay: index * 0.05, ease: [0.25, 0, 0, 1] }}
       whileHover={{ y: -2, scale: 1.01 }}
-      whileTap={{ scale: 0.96 }}
+      // whileTap removed — replaced by the pointer-driven press wrapper above,
+      // which fires on the compositor before React processes synthetic events.
       onClick={() => {
-        if (shop.top_offer) trackDealClick(shop.top_offer.id, slug);
+        // Navigate first — analytics is truly fire-and-forget after push
         router.push(`/shop/${shop.slug}`);
+        if (shop.top_offer) trackDealClick(shop.top_offer.id, slug);
       }}
       className="relative overflow-hidden cursor-pointer group"
       style={{
@@ -506,6 +535,7 @@ export default function ShopCard({ shop, index, side }: Props) {
         )}
       </div>
     </motion.div>
+    </div>{/* press wrapper */}
     </div>
   );
 }
