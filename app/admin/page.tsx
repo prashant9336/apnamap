@@ -1,9 +1,9 @@
 "use client";
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 
 export default function AdminPage() {
-  const router = useRouter();
-  useEffect(() => { router.replace("/admin/dashboard"); }, [router]);
+  // Hard reload ensures fresh session cookies are sent to the server,
+  // avoiding a second soft-nav RSC fetch through AdminLayout.
+  useEffect(() => { window.location.href = "/admin/dashboard"; }, []);
   return null;
 }

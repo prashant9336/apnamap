@@ -4,38 +4,44 @@ import { createClient, createAdminClient } from "@/lib/supabase/server";
 /**
  * Admin layout — server component that enforces admin-only access.
  *
- * This runs once per admin page load (not on every request like middleware).
- * The profiles.role check was moved here FROM middleware to eliminate the
- * per-request DB query that was causing MIDDLEWARE_INVOCATION_TIMEOUT errors.
+ * Each Supabase call is individually wrapped in try/catch so a transient
+ * network error or SDK exception produces a clean redirect rather than an
+ * uncaught throw that Next.js would surface as "Application error".
+ *
+ * The profiles.role check lives here (not middleware) to keep middleware
+ * at zero DB queries and avoid MIDDLEWARE_INVOCATION_TIMEOUT.
  */
 export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  // Step 1: validate session — any exception → redirect to login
+  let userId: string | null = null;
+  try {
+    const { data } = await createClient().auth.getUser();
+    userId = data.user?.id ?? null;
+  } catch {
     redirect("/auth/login?redirect=/admin/dashboard");
   }
 
-  // Use admin client for the role lookup so RLS never blocks it
-  const adminSb = createAdminClient();
-  const { data: profile } = await adminSb
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
+  if (!userId) redirect("/auth/login?redirect=/admin/dashboard");
 
-  const role = profile?.role ?? "customer";
-
-  if (role !== "admin") {
-    redirect("/explore");
+  // Step 2: role check via admin client (bypasses RLS) — any exception → redirect
+  let role = "customer";
+  try {
+    const { data: profile } = await createAdminClient()
+      .from("profiles")
+      .select("role")
+      .eq("id", userId)
+      .maybeSingle();
+    role = profile?.role ?? "customer";
+  } catch {
+    // DB error or missing service role key — fail closed
+    redirect("/auth/login?redirect=/admin/dashboard");
   }
+
+  if (role !== "admin") redirect("/explore");
 
   return <>{children}</>;
 }
