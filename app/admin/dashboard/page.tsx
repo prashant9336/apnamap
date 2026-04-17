@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+export const dynamic = "force-dynamic";
+
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -1087,7 +1089,6 @@ function Skel({ rows }: { rows: number }) {
 ═══════════════════════════════════════════════════════════ */
 export default function AdminDashboard() {
   const router = useRouter();
-  const sb     = createClient();
 
   const [tab,        setTab]        = useState<Tab>("onboard");
   const [ready,      setReady]      = useState(false);
@@ -1097,6 +1098,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     let mounted = true;
+    const sb = createClient();
 
     async function init() {
       try {
