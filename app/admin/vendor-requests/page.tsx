@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
@@ -27,7 +26,6 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
 };
 
 export default function AdminVendorRequests() {
-  const router   = useRouter();
   const supabase = createClient();
 
   const [requests,  setRequests]  = useState<VendorRequest[]>([]);
@@ -38,15 +36,20 @@ export default function AdminVendorRequests() {
   const [noteText,  setNoteText]  = useState("");
 
   useEffect(() => {
+    let mounted = true;
+
     async function init() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { router.replace("/auth/login?redirect=/admin/vendor-requests"); return; }
-      const { data: p } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
-      const role = p?.role || user.user_metadata?.role || "customer";
-      if (role !== "admin") { router.replace("/"); return; }
-      await load();
+      try {
+        // Auth is enforced by app/admin/layout.tsx (server component) — skip
+        // redundant getUser() + role check to avoid double-redirect race on logout.
+        if (mounted) await load();
+      } catch {
+        if (mounted) setLoading(false);
+      }
     }
+
     init();
+    return () => { mounted = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

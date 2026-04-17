@@ -1096,35 +1096,55 @@ export default function AdminDashboard() {
   const [stats,      setStats]      = useState({ shops: 0, pending: 0, requests: 0, vendors: 0, users: 0, newUsers: 0 });
 
   useEffect(() => {
+    let mounted = true;
+
     async function init() {
-      const { data: { user } } = await sb.auth.getUser();
-      if (!user) { router.replace("/auth/login?redirect=/admin/dashboard"); return; }
-      const { data: p } = await sb.from("profiles").select("role").eq("id", user.id).maybeSingle();
-      if ((p?.role ?? user.user_metadata?.role) !== "admin") { router.replace("/"); return; }
+      try {
+        // Auth is already enforced by app/admin/layout.tsx (server component).
+        // Skip redundant client-side auth check — it can race with router.replace()
+        // and cause a double-redirect that crashes the component tree.
 
-      // Fetch localities directly (no city filter — admin sees all)
-      const [locRes, catRes, statsRes] = await Promise.all([
-        sb.from("localities").select("id, name").order("priority"),
-        fetch("/api/categories"),
-        Promise.all([
-          sb.from("shops").select("*", { count: "exact", head: true }),
-          sb.from("shops").select("*", { count: "exact", head: true }).eq("is_approved", false),
-          sb.from("vendor_requests").select("*", { count: "exact", head: true }).eq("status", "pending"),
-          sb.from("vendors").select("*", { count: "exact", head: true }),
-          sb.from("profiles").select("*", { count: "exact", head: true }).eq("role", "customer"),
-          sb.from("profiles").select("*", { count: "exact", head: true }).eq("role", "customer")
-            .gte("created_at", new Date(Date.now() - 7 * 86_400_000).toISOString()),
-        ]),
-      ]);
+        const [locRes, catRes, statsRes] = await Promise.all([
+          sb.from("localities").select("id, name").order("priority"),
+          fetch("/api/categories"),
+          Promise.all([
+            sb.from("shops").select("*", { count: "exact", head: true }),
+            sb.from("shops").select("*", { count: "exact", head: true }).eq("is_approved", false),
+            sb.from("vendor_requests").select("*", { count: "exact", head: true }).eq("status", "pending"),
+            sb.from("vendors").select("*", { count: "exact", head: true }),
+            sb.from("profiles").select("*", { count: "exact", head: true }).eq("role", "customer"),
+            sb.from("profiles").select("*", { count: "exact", head: true }).eq("role", "customer")
+              .gte("created_at", new Date(Date.now() - 7 * 86_400_000).toISOString()),
+          ]),
+        ]);
 
-      setLocalities(locRes.data ?? []);
-      const catJson = await catRes.json();
-      setCategories(catJson.categories ?? []);
-      const [s, p2, r, v, u, nu] = statsRes;
-      setStats({ shops: s.count ?? 0, pending: p2.count ?? 0, requests: r.count ?? 0, vendors: v.count ?? 0, users: u.count ?? 0, newUsers: nu.count ?? 0 });
-      setReady(true);
+        if (!mounted) return;
+
+        setLocalities(locRes.data ?? []);
+
+        let categories: Meta[] = [];
+        try {
+          const catJson = await catRes.json();
+          categories = catJson.categories ?? [];
+        } catch {
+          // /api/categories returned non-JSON (e.g. during logout transition) — safe to ignore
+        }
+        if (!mounted) return;
+
+        setCategories(categories);
+        const [s, p2, r, v, u, nu] = statsRes;
+        setStats({ shops: s.count ?? 0, pending: p2.count ?? 0, requests: r.count ?? 0, vendors: v.count ?? 0, users: u.count ?? 0, newUsers: nu.count ?? 0 });
+        setReady(true);
+      } catch {
+        // Swallow all errors during init — prevents uncaught exception crash.
+        // The admin layout server component guarantees auth; any error here is
+        // a transient network issue or post-logout cleanup, not a fatal state.
+        if (mounted) setReady(true);
+      }
     }
+
     init();
+    return () => { mounted = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
@@ -134,7 +133,6 @@ function CredCard({ result, onNew }: { result: CredResult; onNew: () => void }) 
 
 /* ── Main page ─────────────────────────────────────────────────── */
 export default function AdminOnboardVendor() {
-  const router   = useRouter();
   const supabase = createClient();
 
   const [ready,       setReady]       = useState(false);
@@ -159,25 +157,38 @@ export default function AdminOnboardVendor() {
 
   const up = (k: string, v: string | number) => setForm(f => ({ ...f, [k]: v }));
 
-  // ── Auth check + load meta ─────────────────────────────────────
+  // ── Load meta ─────────────────────────────────────────────────
+  // Auth is enforced by app/admin/layout.tsx (server component) — no
+  // redundant client-side check needed. It could race with logout and
+  // cause a double-redirect that crashes the component tree.
   useEffect(() => {
-    async function init() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { router.replace("/auth/login?redirect=/admin/onboard-vendor"); return; }
-      const { data: p } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
-      if ((p?.role ?? user.user_metadata?.role) !== "admin") { router.replace("/"); return; }
+    let mounted = true;
 
-      const [locRes, catRes] = await Promise.all([
-        fetch("/api/localities"),
-        fetch("/api/categories"),
-      ]);
-      const locJson = await locRes.json();
-      const catJson = await catRes.json();
-      setLocalities(locJson.localities ?? locJson ?? []);
-      setCategories(catJson.categories ?? []);
-      setReady(true);
+    async function init() {
+      try {
+        const [locRes, catRes] = await Promise.all([
+          fetch("/api/localities"),
+          fetch("/api/categories"),
+        ]);
+
+        if (!mounted) return;
+
+        let localities: Meta[] = [];
+        let categories: Meta[] = [];
+        try { const j = await locRes.json(); localities = j.localities ?? j ?? []; } catch { /* non-JSON during logout */ }
+        try { const j = await catRes.json(); categories = j.categories ?? []; } catch { /* non-JSON during logout */ }
+
+        if (!mounted) return;
+        setLocalities(localities);
+        setCategories(categories);
+        setReady(true);
+      } catch {
+        if (mounted) setReady(true); // fail open — admin layout already guards access
+      }
     }
+
     init();
+    return () => { mounted = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

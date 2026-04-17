@@ -31,9 +31,15 @@ export default function ProfilePage() {
     });
   }, []);
 
+  const [loggingOut, setLoggingOut] = useState(false);
+
   async function handleLogout() {
+    setLoggingOut(true);
     await supabase.auth.signOut();
-    router.push("/");
+    // Full page reload — clears all React state, Next.js router cache, and
+    // any in-flight requests. router.push("/") leaves stale state that causes
+    // the "Application error" crash on protected pages that check auth.
+    window.location.href = "/auth/login";
   }
 
   return (
@@ -144,9 +150,10 @@ export default function ProfilePage() {
               )}
 
               <button onClick={handleLogout}
+                disabled={loggingOut}
                 className="w-full py-3.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
-                style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.18)", color: "#f87171" }}>
-                <span>↩</span> Log Out
+                style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.18)", color: "#f87171", opacity: loggingOut ? 0.5 : 1 }}>
+                <span>↩</span> {loggingOut ? "Logging out…" : "Log Out"}
               </button>
             </>
           )}

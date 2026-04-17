@@ -49,16 +49,22 @@ export default function VendorOnboarding() {
 
   // ── Load categories + localities ──────────────────────────
   useEffect(() => {
+    let mounted = true;
+
     async function loadMeta() {
-      const [catRes, locRes] = await Promise.all([
-        fetch("/api/categories"),
-        supabase.from("localities").select("id, name").order("priority"),
-      ]);
-      const catJson = await catRes.json();
-      setCategories(catJson.categories ?? []);
-      setLocalities(locRes.data ?? []);
+      try {
+        const [catRes, locRes] = await Promise.all([
+          fetch("/api/categories"),
+          supabase.from("localities").select("id, name").order("priority"),
+        ]);
+        if (!mounted) return;
+        try { const j = await catRes.json(); if (mounted) setCategories(j.categories ?? []); } catch { /* non-JSON */ }
+        if (mounted) setLocalities(locRes.data ?? []);
+      } catch { /* network error — page will just have empty dropdowns */ }
     }
+
     loadMeta();
+    return () => { mounted = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

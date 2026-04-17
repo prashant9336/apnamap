@@ -26,25 +26,25 @@ export default function ChangePasswordPage() {
 
   // Ensure user is logged in and must_change_password is set
   useEffect(() => {
+    let mounted = true;
+
     async function check() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.replace("/vendor/login");
-        return;
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!mounted) return;
+        if (!user) { router.replace("/vendor/login"); return; }
+
+        const role = user.user_metadata?.role ?? "customer";
+        if (role !== "vendor" && role !== "admin") { router.replace("/"); return; }
+        if (role === "admin") { router.replace("/admin"); return; } // admin can skip this page
+        if (mounted) setChecking(false);
+      } catch {
+        if (mounted) router.replace("/vendor/login");
       }
-      const role = user.user_metadata?.role ?? "customer";
-      if (role !== "vendor" && role !== "admin") {
-        router.replace("/");
-        return;
-      }
-      // Allow admin to skip this page
-      if (role === "admin") {
-        router.replace("/admin");
-        return;
-      }
-      setChecking(false);
     }
+
     check();
+    return () => { mounted = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

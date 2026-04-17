@@ -10,22 +10,34 @@ export default function MyShopPage() {
   const router  = useRouter();
 
   useEffect(() => {
+    let mounted = true;
     const sb = createClient();
-    sb.auth.getUser().then(async ({ data: { user } }) => {
-      if (!user) {
-        router.replace("/auth/login?redirect=/my-shop");
-        return;
+
+    async function check() {
+      try {
+        const { data: { user } } = await sb.auth.getUser();
+        if (!mounted) return;
+        if (!user) { router.replace("/auth/login?redirect=/my-shop"); return; }
+
+        // Always read role from profiles table (authoritative); user_metadata can be stale
+        const { data: profile } = await sb
+          .from("profiles").select("role").eq("id", user.id).maybeSingle();
+        if (!mounted) return;
+
+        const role = profile?.role ?? "customer";
+        if (role !== "vendor" && role !== "admin") {
+          router.replace("/vendor/onboarding");
+          return;
+        }
+        setChecked(true);
+      } catch {
+        // Network error during auth — redirect to login as safe fallback
+        if (mounted) router.replace("/auth/login?redirect=/my-shop");
       }
-      // Always read role from profiles table (authoritative); user_metadata can be stale
-      const { data: profile } = await sb
-        .from("profiles").select("role").eq("id", user.id).maybeSingle();
-      const role = profile?.role ?? "customer";
-      if (role !== "vendor" && role !== "admin") {
-        router.replace("/vendor/onboarding");
-        return;
-      }
-      setChecked(true);
-    });
+    }
+
+    check();
+    return () => { mounted = false; };
   }, [router]);
 
   if (!checked) {
