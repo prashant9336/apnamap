@@ -1074,6 +1074,17 @@ export default function DashboardShell({ localities: initLocalities, categories:
   const [localities]               = useState<Meta[]>(initLocalities);
   const [categories]               = useState<Meta[]>(initCategories);
   const [stats]                    = useState(initStats);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  async function handleLogout() {
+    setLoggingOut(true);
+    try {
+      await createClient().auth.signOut();
+    } finally {
+      // Hard navigate so server session is fully cleared before login page renders
+      window.location.href = "/auth/login";
+    }
+  }
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "onboard",  label: "⚡ Onboard" },
@@ -1089,6 +1100,10 @@ export default function DashboardShell({ localities: initLocalities, categories:
       <div style={HDR}>
         <div style={{ width: 32, height: 32, borderRadius: 9, background: "linear-gradient(135deg,#FF5E1A,#E8A800)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🛡️</div>
         <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 18, fontWeight: 900, color: "#F2F5FF", flex: 1, letterSpacing: "-0.4px" }}>Admin Dashboard</span>
+        <button onClick={handleLogout} disabled={loggingOut}
+          style={{ padding: "7px 13px", borderRadius: 10, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)", color: loggingOut ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.50)", fontSize: 12, fontWeight: 600, cursor: loggingOut ? "default" : "pointer", fontFamily: "'DM Sans',sans-serif", flexShrink: 0 }}>
+          {loggingOut ? "…" : "Sign Out"}
+        </button>
       </div>
 
       <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 14 }}>
