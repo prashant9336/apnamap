@@ -1,7 +1,5 @@
 "use client";
 
-export const dynamic = "force-dynamic";
-
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -1090,6 +1088,8 @@ function Skel({ rows }: { rows: number }) {
 export default function AdminDashboard() {
   const router = useRouter();
 
+  // hydrated=false on both server and client first render → identical HTML → no hydration mismatch
+  const [hydrated,   setHydrated]   = useState(false);
   const [tab,        setTab]        = useState<Tab>("onboard");
   const [ready,      setReady]      = useState(false);
   const [localities, setLocalities] = useState<Meta[]>([]);
@@ -1097,6 +1097,7 @@ export default function AdminDashboard() {
   const [stats,      setStats]      = useState({ shops: 0, pending: 0, requests: 0, vendors: 0, users: 0, newUsers: 0 });
 
   useEffect(() => {
+    setHydrated(true);
     let mounted = true;
     const sb = createClient();
 
@@ -1158,6 +1159,9 @@ export default function AdminDashboard() {
     { id: "offers",   label: "🎯 Offers" },
     { id: "vendors",  label: `👔 Vendors${stats.vendors > 0 ? ` (${stats.vendors})` : ""}` },
   ];
+
+  // Server and initial client render are identical → no hydration mismatch
+  if (!hydrated) return <div style={{ minHeight: "100dvh", background: "#05070C" }} />;
 
   if (!ready) {
     return (
