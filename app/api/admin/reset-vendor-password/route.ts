@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
   if (shopErr) return NextResponse.json({ error: shopErr.message }, { status: 500 });
   if (!shops?.length) return NextResponse.json({ vendors: [] });
 
-  const vendorIds = [...new Set(shops.map(s => s.vendor_id))];
+  const vendorIds = Array.from(new Set(shops.map(s => s.vendor_id)));
   const { data: vendorRows } = await adminSb
     .from("vendors")
     .select("id, mobile")
