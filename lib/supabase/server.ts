@@ -1,6 +1,10 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
+// @supabase/ssr v0.3.0 createServerClient only calls cookies.get/set/remove.
+// getAll/setAll are a later API addition — using them here would make cookies.get
+// undefined, causing auth.getUser() to always return null on the server.
+
 export function createClient() {
   const cookieStore = cookies();
 
@@ -9,23 +13,20 @@ export function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() {
-          return cookieStore.getAll();
+        get(name: string) {
+          return cookieStore.get(name)?.value;
         },
-        setAll(
-          cookiesToSet: Array<{
-            name: string;
-            value: string;
-            options?: any;
-          }>
-        ) {
+        set(name: string, value: string, options: any) {
           try {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              cookieStore.set(name, value, options);
-            });
+            cookieStore.set(name, value, options);
           } catch {
-            // Server component — cookie setting is handled by middleware
+            // Server component — cookie writes are handled by middleware
           }
+        },
+        remove(name: string, options: any) {
+          try {
+            cookieStore.set(name, "", { ...options, maxAge: 0 });
+          } catch {}
         },
       },
     }
@@ -41,20 +42,17 @@ export function createAdminClient() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     {
       cookies: {
-        getAll() {
-          return cookieStore.getAll();
+        get(name: string) {
+          return cookieStore.get(name)?.value;
         },
-        setAll(
-          cookiesToSet: Array<{
-            name: string;
-            value: string;
-            options?: any;
-          }>
-        ) {
+        set(name: string, value: string, options: any) {
           try {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              cookieStore.set(name, value, options);
-            });
+            cookieStore.set(name, value, options);
+          } catch {}
+        },
+        remove(name: string, options: any) {
+          try {
+            cookieStore.set(name, "", { ...options, maxAge: 0 });
           } catch {}
         },
       },

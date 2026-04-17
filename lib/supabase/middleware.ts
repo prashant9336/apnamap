@@ -29,9 +29,15 @@ export async function updateSession(request: NextRequest) {
             return request.cookies.get(name)?.value;
           },
           set(name: string, value: string, options: any) {
+            // Update request so server components see refreshed tokens,
+            // then re-create response so it carries the updated request.
+            request.cookies.set(name, value);
+            response = NextResponse.next({ request });
             response.cookies.set(name, value, options);
           },
           remove(name: string, options: any) {
+            request.cookies.set(name, "");
+            response = NextResponse.next({ request });
             response.cookies.set(name, "", { ...options, maxAge: 0 });
           },
         },
