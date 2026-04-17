@@ -1120,6 +1120,7 @@ export default function DashboardShell({ localities: initLocalities, categories:
       <div style={HDR}>
         <div style={{ width: 32, height: 32, borderRadius: 9, background: "linear-gradient(135deg,#FF5E1A,#E8A800)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🛡️</div>
         <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 18, fontWeight: 900, color: "#F2F5FF", flex: 1, letterSpacing: "-0.4px" }}>Admin Dashboard</span>
+        <a href="/admin/reset-password" style={{ padding: "7px 11px", borderRadius: 10, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)", color: "rgba(255,255,255,0.45)", fontSize: 12, fontWeight: 600, textDecoration: "none", flexShrink: 0, fontFamily: "'DM Sans',sans-serif" }}>🔑 Reset PW</a>
         <button onClick={handleLogout} disabled={loggingOut}
           style={{ padding: "7px 13px", borderRadius: 10, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)", color: loggingOut ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.50)", fontSize: 12, fontWeight: 600, cursor: loggingOut ? "default" : "pointer", fontFamily: "'DM Sans',sans-serif", flexShrink: 0 }}>
           {loggingOut ? "…" : "Sign Out"}
