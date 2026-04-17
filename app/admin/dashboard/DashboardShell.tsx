@@ -354,25 +354,37 @@ function RequestsTab() {
   const [noteText, setNoteText] = useState("");
 
   useEffect(() => {
-    sb.from("vendor_requests")
-      .select("id,mobile,shop_name,request_type,status,note,created_at,reviewed_at,review_note,locality:localities(name),category:categories(name,icon)")
-      .order("created_at", { ascending: false })
-      .then(({ data }) => { setRequests((data ?? []) as unknown as VendorRequest[]); setLoading(false); });
+    sb.auth.getSession().then(async ({ data: { session } }) => {
+      const tok = session?.access_token ?? "";
+      const res = await fetch("/api/admin/vendor-requests", {
+        headers: tok ? { Authorization: `Bearer ${tok}` } : {},
+      });
+      if (res.ok) {
+        const { requests: data } = await res.json();
+        setRequests((data ?? []) as VendorRequest[]);
+      }
+      setLoading(false);
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function approve(id: string, note: string) {
+  async function requestAction(id: string, action: "approve" | "reject", note: string) {
     setActing(id);
-    await sb.from("vendor_requests").update({ status: "approved", reviewed_at: new Date().toISOString(), review_note: note || null }).eq("id", id);
-    setRequests(r => r.map(x => x.id === id ? { ...x, status: "approved", review_note: note || null } : x));
+    const { data: { session } } = await sb.auth.getSession();
+    const tok = session?.access_token ?? "";
+    const res = await fetch("/api/admin/vendor-requests", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...(tok ? { Authorization: `Bearer ${tok}` } : {}) },
+      body: JSON.stringify({ request_id: id, action, note: note || undefined }),
+    });
+    if (res.ok) {
+      const newStatus = action === "approve" ? "approved" : "rejected";
+      setRequests(r => r.map(x => x.id === id ? { ...x, status: newStatus, review_note: note || null } : x));
+    }
     setActing(null); setModal(null); setNoteText("");
   }
-  async function reject(id: string, note: string) {
-    setActing(id);
-    await sb.from("vendor_requests").update({ status: "rejected", reviewed_at: new Date().toISOString(), review_note: note || null }).eq("id", id);
-    setRequests(r => r.map(x => x.id === id ? { ...x, status: "rejected", review_note: note || null } : x));
-    setActing(null); setModal(null); setNoteText("");
-  }
+  const approve = (id: string, note: string) => requestAction(id, "approve", note);
+  const reject  = (id: string, note: string) => requestAction(id, "reject",  note);
 
   const counts = { all: requests.length, pending: 0, approved: 0, rejected: 0, activated: 0 };
   requests.forEach(r => { counts[r.status] = (counts[r.status] || 0) + 1; });

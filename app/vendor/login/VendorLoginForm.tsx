@@ -130,6 +130,15 @@ export default function VendorLoginForm() {
             </Link>
           </div>
 
+          <div style={{ marginTop: 4, padding: "12px", borderRadius: 12, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", textAlign: "center" }}>
+            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.30)", marginBottom: 4 }}>
+              Forgot your password?
+            </p>
+            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.22)", lineHeight: 1.5 }}>
+              Contact your ApnaMap admin — they can reset it for you.
+            </p>
+          </div>
+
           <p style={{ textAlign: "center", marginTop: 4 }}>
             <Link href="/auth/login" style={{ fontSize: 12, color: "rgba(255,255,255,0.25)", textDecoration: "none" }}>
               Sign in with email instead →
