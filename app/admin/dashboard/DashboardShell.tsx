@@ -489,18 +489,26 @@ function ShopsTab({ which, localities, categories }: { which: "pending" | "all";
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [which]);
 
-  async function approve(id: string) {
+  async function shopAction(id: string, action: "approve" | "reject") {
     setActing(id);
-    await sb.from("shops").update({ is_approved: true, is_active: true }).eq("id", id);
-    setShops(s => which === "pending" ? s.filter(x => x.id !== id) : s.map(x => x.id === id ? { ...x, is_approved: true } : x));
+    const { data: { session } } = await sb.auth.getSession();
+    const tok = session?.access_token ?? "";
+    const res = await fetch("/api/admin/shops", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...(tok ? { Authorization: `Bearer ${tok}` } : {}) },
+      body: JSON.stringify({ shop_id: id, action }),
+    });
+    if (res.ok) {
+      if (action === "approve") {
+        setShops(s => which === "pending" ? s.filter(x => x.id !== id) : s.map(x => x.id === id ? { ...x, is_approved: true } : x));
+      } else {
+        setShops(s => s.filter(x => x.id !== id));
+      }
+    }
     setActing(null); setPreview(null);
   }
-  async function reject(id: string) {
-    setActing(id);
-    await sb.from("shops").update({ is_approved: false, is_active: false }).eq("id", id);
-    setShops(s => s.filter(x => x.id !== id));
-    setActing(null); setPreview(null);
-  }
+  const approve = (id: string) => shopAction(id, "approve");
+  const reject  = (id: string) => shopAction(id, "reject");
 
   const filtered = shops.filter(s => !search || s.name.toLowerCase().includes(search.toLowerCase()) || s.locality?.name?.toLowerCase().includes(search.toLowerCase()));
 
