@@ -363,7 +363,7 @@ export default function WalkView({ localities, nearestLocalityIdx, localityMatch
           <>
             {/* You are here */}
             <YouAreHere
-              locality={resolvedDisplayName || userLocality}
+              locality={resolvedDisplayName}
               confidence={localityMatch?.confidence ?? null}
               gpsConfirmed={gpsConfirmed}
               gpsError={gpsError}
@@ -435,7 +435,7 @@ export default function WalkView({ localities, nearestLocalityIdx, localityMatch
       </div>
 
       {/* Floating deal bar — shows top-scored deal for current locality */}
-      <FloatingDealBar topDeals={topDeals} currentLoc={resolvedDisplayName || userLocality} localities={filteredLocalities} />
+      <FloatingDealBar topDeals={topDeals} currentLoc={resolvedDisplayName} localities={filteredLocalities} />
     </div>
   );
 }
