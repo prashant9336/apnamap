@@ -121,6 +121,19 @@ export default function WalkView({ localities, nearestLocalityIdx, localityMatch
     setCL(localities.length > 0 ? localities[0].name : userLocality);
   }, [localities, userLocality, gpsConfirmed]);
 
+  /* Auto-scroll to user's matched locality once GPS resolves.
+     Only fires once per mount — if the user has already scrolled we don't interrupt. */
+  const hasAutoScrolled = useRef(false);
+  useEffect(() => {
+    if (hasAutoScrolled.current) return;
+    if (nearestLocalityIdx <= 0) return;   // 0 = already at top; -1 = no reliable match
+    if (loading) return;
+    hasAutoScrolled.current = true;
+    // Small delay so the layout has settled after the loading→content transition
+    const t = setTimeout(() => scrollToLocality(nearestLocalityIdx), 450);
+    return () => clearTimeout(t);
+  }, [nearestLocalityIdx, loading, scrollToLocality]);
+
   /* Cleanup inertia + scroll-end timer on unmount */
   useEffect(() => {
     return () => {

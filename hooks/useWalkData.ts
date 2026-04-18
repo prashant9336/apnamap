@@ -21,11 +21,17 @@ interface UseWalkDataResult {
   error:              string | null;
 }
 
+// GPS accuracy must be better than this to trust it for distance-based sorting.
+// Network/IP/cell-tower fixes are often 500–2000m off — sorting by those coords
+// would push the user's real locality far down the feed behind wrong-area results.
+const GPS_SORT_THRESHOLD_M = 500;
+
 export function useWalkData(
   lat: number,
   lng: number,
   radiusM: number = 50000,
-  gpsConfirmed: boolean = false
+  gpsConfirmed: boolean = false,
+  gpsAccuracy?: number | null,
 ): UseWalkDataResult {
   const [localities,         setLocalities]         = useState<WalkLocality[]>([]);
   const [nearestLocalityIdx, setNearestLocalityIdx] = useState(-1);
@@ -36,6 +42,13 @@ export function useWalkData(
   // Round to 3 decimal places ≈ 111 m grid — prevents re-fetch on sub-100m GPS jitter
   const stableLat = Math.round(lat * 1000) / 1000;
   const stableLng = Math.round(lng * 1000) / 1000;
+
+  // Boolean dep: re-run the effect only when GPS crosses the reliable/unreliable boundary,
+  // not on every minor accuracy reading change (e.g. 480→460→440m during satellite lock-on).
+  const gpsReliableDep =
+    gpsConfirmed &&
+    gpsAccuracy != null &&
+    gpsAccuracy <= GPS_SORT_THRESHOLD_M;
 
   useEffect(() => {
     async function load() {
@@ -127,6 +140,9 @@ export function useWalkData(
         const hour = new Date().getHours();
         const live = getLiveCrowd(hour);
 
+        // Use the component-scope flag (computed before the effect) for sorting + matching.
+        const gpsReliable = gpsReliableDep;
+
         // ── Build WalkLocality[], skip localities with no shops ────────────
         const walkLocs: WalkLocality[] = allLocalities
           .map((loc: any) => {
@@ -167,10 +183,12 @@ export function useWalkData(
             };
           })
           .filter(Boolean)
-          // Only sort by GPS distance once confirmed — avoids wrong fallback-coord ordering.
-          // Before GPS resolves, keep DB priority order (most important localities first).
+          // Sort by GPS distance only when confirmed AND accuracy is within threshold.
+          // Poor-accuracy GPS (network/cell fix, typically 500–2000m off) would sort the
+          // feed around the wrong location — e.g. Airport area instead of Jhalwa — burying
+          // the user's real locality far down the list. Fall back to DB priority in that case.
           .sort((a: any, b: any) =>
-            gpsConfirmed
+            gpsReliable
               ? a.locality_distance - b.locality_distance
               : a.priority - b.priority
           );
@@ -179,8 +197,9 @@ export function useWalkData(
         // Match against walkLocs (localities that have shops in the feed), NOT allLocalities.
         // This ensures the display label always corresponds to a locality the user can see,
         // preventing "Near Bamrauli" appearing while the feed shows Jhalwa/Civil Lines shops.
+        // Skip matching when GPS accuracy is poor — the coordinates are too unreliable.
         let match: LocalityMatch | null = null;
-        if (gpsConfirmed && walkLocs.length > 0) {
+        if (gpsReliable && walkLocs.length > 0) {
           match = matchLocality(lat, lng, walkLocs);
         }
 
@@ -194,13 +213,13 @@ export function useWalkData(
         }
 
         // Debug log
-        if (process.env.NODE_ENV !== "production" && match) {
-          const c = match.candidates;
+        if (process.env.NODE_ENV !== "production") {
           console.debug(
-            `[locality] gpsConfirmed=${gpsConfirmed} lat=${lat.toFixed(5)} lng=${lng.toFixed(5)}` +
-            ` → "${match.locality.name}" (${match.confidence}, ${Math.round(match.locality.distanceM)}m)` +
-            (c[1] ? ` | 2nd: "${c[1].name}" ${Math.round(c[1].distanceM)}m` : "") +
-            (c[2] ? ` | 3rd: "${c[2].name}" ${Math.round(c[2].distanceM)}m` : "")
+            `[locality] gpsConfirmed=${gpsConfirmed} accuracy=${gpsAccuracy != null ? Math.round(gpsAccuracy) + "m" : "null"} gpsReliable=${gpsReliable}` +
+            (match
+              ? ` → "${match.locality.name}" (${match.confidence}, ${Math.round(match.locality.distanceM)}m)` +
+                (match.candidates[1] ? ` | 2nd: "${match.candidates[1].name}" ${Math.round(match.candidates[1].distanceM)}m` : "")
+              : " → no match (poor accuracy or unconfirmed)")
           );
         }
 
@@ -215,10 +234,10 @@ export function useWalkData(
     }
 
     load();
-  // stableLat/stableLng are rounded to 3dp — only re-fetch when user moves >~111m
-  // gpsConfirmed is also a dep — re-run when GPS resolves to apply confidence matching
+  // stableLat/stableLng rounded to 3dp — only re-fetch when user moves >~111m.
+  // gpsReliableDep is a boolean — re-runs only when GPS crosses the reliable threshold.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stableLat, stableLng, radiusM, gpsConfirmed]);
+  }, [stableLat, stableLng, radiusM, gpsReliableDep]);
 
   return { localities, nearestLocalityIdx, localityMatch, loading, error };
 }
