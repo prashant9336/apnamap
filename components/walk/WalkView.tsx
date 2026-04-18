@@ -30,6 +30,10 @@ export default function WalkView({ localities, nearestLocalityIdx, loading, user
   const [activeIdx,  setAI]       = useState(0);
   const [scrollProgress, setSP]   = useState(0);   // 0-1 continuous scroll fraction
   const [currentLoc, setCL]       = useState("");
+
+  // Use nearest DB locality name (distance-sorted) instead of Nominatim reverse-geocode.
+  // Nominatim often returns the city name ("Prayagraj") rather than the suburb ("Jhalwa").
+  const displayLocality = localities[0]?.name || userLocality;
   const [crowd,      setCrowd]    = useState(142);
   const raf            = useRef<number>(0);
   const inertiaRaf     = useRef<number>(0);
@@ -259,7 +263,7 @@ export default function WalkView({ localities, nearestLocalityIdx, loading, user
 
           {/* Location pill */}
           <motion.div
-            key={userLocality || "loc"}
+            key={displayLocality || "loc"}
             initial={{ opacity: 0, scale: 0.92 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.25 }}
@@ -278,7 +282,7 @@ export default function WalkView({ localities, nearestLocalityIdx, loading, user
               transition={{ duration: 2, repeat: Infinity }}
             />
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {userLocality || t("detecting")}
+              {displayLocality || t("detecting")}
             </span>
           </motion.div>
 
@@ -333,7 +337,7 @@ export default function WalkView({ localities, nearestLocalityIdx, loading, user
         {loading ? <SkelContent /> : (
           <>
             {/* You are here */}
-            <YouAreHere locality={userLocality} />
+            <YouAreHere locality={displayLocality} />
 
             {/* Live feed strip — uses ranked data for relevance */}
             <LiveFeedStrip localities={filteredLocalities} />
@@ -378,7 +382,7 @@ export default function WalkView({ localities, nearestLocalityIdx, loading, user
       </div>
 
       {/* Floating deal bar — shows top-scored deal for current locality */}
-      <FloatingDealBar topDeals={topDeals} currentLoc={userLocality} localities={filteredLocalities} />
+      <FloatingDealBar topDeals={topDeals} currentLoc={displayLocality} localities={filteredLocalities} />
     </div>
   );
 }
