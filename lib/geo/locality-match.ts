@@ -52,18 +52,20 @@ type LocalityInput = {
 
 const DEFAULT_RADIUS_M = 1500;
 
-// If nearest locality is beyond this, we have no confident match
-const MAX_MATCH_DISTANCE_M = 5000;
+// Beyond this distance from any locality centre, no confident match is possible
+const MAX_MATCH_DISTANCE_M = 8000;
 
-// If nearest / second < this ratio, the boundary is ambiguous.
-// 0.65: nearest must be ≥35% closer than second to claim "inside" with confidence.
-// Tighter than naive nearest-neighbour — avoids overconfident labels at boundaries.
+// Nearest locality must be this fraction closer than the second candidate to be
+// labelled "high" confidence. 0.65 = nearest must be ≥35% closer than second.
 const SEPARATION_RATIO = 0.65;
 
 export function matchLocality(
   userLat: number,
   userLng: number,
-  localities: LocalityInput[]
+  localities: LocalityInput[],
+  /** When true (GPS accuracy > 500m) confidence is capped at "medium" — we still
+   *  pick the best ApnaMap locality but never claim "high" certainty. */
+  poorAccuracy = false
 ): LocalityMatch | null {
   if (!localities.length) return null;
 
@@ -83,25 +85,26 @@ export function matchLocality(
     })
     .sort((a, b) => a.distanceM - b.distanceM);
 
-  const top3    = candidates.slice(0, 5);   // expose top-5 for debug panel
-  const nearest = top3[0];
-  const second  = top3[1];
+  const top5    = candidates.slice(0, 5);
+  const nearest = top5[0];
+  const second  = top5[1];
 
   let confidence: MatchConfidence;
 
   if (nearest.distanceM > MAX_MATCH_DISTANCE_M) {
-    // User is far from everything — unmapped area or bad GPS
     confidence = "low";
   } else {
     const withinRadius   = nearest.distanceM < nearest.radius_m;
     const clearlyNearest = !second || (nearest.distanceM / second.distanceM) < SEPARATION_RATIO;
-    confidence = (withinRadius && clearlyNearest) ? "high" : "medium";
+    const rawHigh        = withinRadius && clearlyNearest;
+    // When GPS accuracy is poor, never claim "high" — but still pick the right locality
+    confidence = poorAccuracy ? "medium" : (rawHigh ? "high" : "medium");
   }
 
   const displayName =
     confidence === "high"   ? nearest.name :
-    confidence === "medium" ? `Nearby ${nearest.name}` :
-                              "Nearby area";
+    confidence === "medium" ? `Near ${nearest.name}` :
+                              "Nearby";
 
-  return { locality: nearest, confidence, displayName, candidates: top3 };
+  return { locality: nearest, confidence, displayName, candidates: top5 };
 }

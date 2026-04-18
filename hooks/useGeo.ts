@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { reverseGeocode } from "@/lib/geo/distance";
 import type { GeoState } from "@/types";
 
 const CACHE_KEY    = "apnamap_geo";
@@ -91,18 +90,12 @@ export function useGeo() {
     }
 
     navigator.geolocation.getCurrentPosition(
-      async (pos) => {
+      (pos) => {
         const { latitude: lat, longitude: lng, accuracy } = pos.coords;
-
-        // If accuracy is worse than threshold, keep coords but flag it
         const poorAccuracy = accuracy > MAX_ACCURACY_M;
 
-        const locality = await reverseGeocode(lat, lng);
-
-        // Only cache high-accuracy fixes — don't persist network-location guesses
-        if (!poorAccuracy) {
-          saveCache(lat, lng, locality);
-        }
+        // Only cache high-accuracy fixes
+        if (!poorAccuracy) saveCache(lat, lng, "");
 
         setGeo({
           lat,
@@ -110,10 +103,11 @@ export function useGeo() {
           accuracy,
           loading:      false,
           gpsConfirmed: true,
+          // locality is intentionally blank — WalkView uses the DB locality match name
+          locality:     "",
           error:        poorAccuracy
             ? `Low GPS accuracy (±${Math.round(accuracy)}m). Location may be approximate.`
             : null,
-          locality,
         });
       },
       (err) => {
@@ -136,24 +130,22 @@ export function useGeo() {
     // Use maximumAge: 0 — never accept a stale position when coming back to the tab
     function onVisible() {
       if (document.visibilityState !== "visible") return;
-      // Mark GPS as unconfirmed again while we re-acquire
       setGeo(g => ({ ...g, gpsConfirmed: false }));
       navigator.geolocation?.getCurrentPosition(
-        async (pos) => {
+        (pos) => {
           const { latitude: lat, longitude: lng, accuracy } = pos.coords;
           const poorAccuracy = accuracy > MAX_ACCURACY_M;
-          const locality = await reverseGeocode(lat, lng);
-          if (!poorAccuracy) saveCache(lat, lng, locality);
+          if (!poorAccuracy) saveCache(lat, lng, "");
           setGeo({
             lat,
             lng,
             accuracy,
             loading:      false,
             gpsConfirmed: true,
+            locality:     "",
             error:        poorAccuracy
               ? `Low GPS accuracy (±${Math.round(accuracy)}m).`
               : null,
-            locality,
           });
         },
         () => {
@@ -180,21 +172,20 @@ export function useGeo() {
     setGeo(g => ({ ...g, loading: true, error: null, gpsConfirmed: false }));
 
     navigator.geolocation.getCurrentPosition(
-      async (pos) => {
+      (pos) => {
         const { latitude: lat, longitude: lng, accuracy } = pos.coords;
         const poorAccuracy = accuracy > MAX_ACCURACY_M;
-        const locality = await reverseGeocode(lat, lng);
-        if (!poorAccuracy) saveCache(lat, lng, locality);
+        if (!poorAccuracy) saveCache(lat, lng, "");
         setGeo({
           lat,
           lng,
           accuracy,
           loading:      false,
           gpsConfirmed: true,
+          locality:     "",
           error:        poorAccuracy
             ? `Low GPS accuracy (±${Math.round(accuracy)}m). Location may be approximate.`
             : null,
-          locality,
         });
       },
       (err) => {
