@@ -21,13 +21,14 @@ interface UseWalkDataResult {
   error:              string | null;
 }
 
-// Below this accuracy we still use GPS for sorting/matching, but confidence is
-// capped at "medium" so the label shows "Near Jhalwa" rather than "Jhalwa".
-// Above this (e.g. network/IP fix at 2000m+) we fall back to DB priority order.
-const GPS_ACCURACY_THRESHOLD_M = 500;
+// Below this: GPS coords are accurate enough to match a specific locality name.
+// Above this: coords could be 600m+ off — matching against them gives wrong area.
+const GPS_MATCH_THRESHOLD_M = 500;
 
-// Beyond this accuracy we don't trust the fix at all for ANY geo logic.
-const GPS_UNUSABLE_THRESHOLD_M = 3000;
+// Below this: GPS is still useful for ordering the feed by distance even if
+// the specific locality label isn't trustworthy. Two localities 15km apart
+// (Jhalwa vs Bamrauli) will still sort correctly with 1500m accuracy.
+const GPS_SORT_THRESHOLD_M = 2000;
 
 export function useWalkData(
   lat: number,
@@ -136,10 +137,11 @@ export function useWalkData(
         const hour = new Date().getHours();
         const live = getLiveCrowd(hour);
 
-        // GPS is usable for distance-based sorting when confirmed and accuracy is not unusable.
-        // Even poor-accuracy fixes (500–3000m) sort better than DB priority order.
-        const poorAccuracy = gpsAccuracy != null && gpsAccuracy > GPS_ACCURACY_THRESHOLD_M;
-        const gpsReliable  = gpsConfirmed && (gpsAccuracy == null || gpsAccuracy <= GPS_UNUSABLE_THRESHOLD_M);
+        // Sortable: GPS is good enough to order the feed by distance (≤2000m).
+        // Matchable: GPS is accurate enough to assign a specific locality name (≤500m).
+        // These are deliberately separate — wrong coords in matching = wrong label.
+        const gpsSortable  = gpsConfirmed && (gpsAccuracy == null || gpsAccuracy <= GPS_SORT_THRESHOLD_M);
+        const gpsMatchable = gpsConfirmed && (gpsAccuracy == null || gpsAccuracy <= GPS_MATCH_THRESHOLD_M);
 
         // ── Build WalkLocality[], skip localities with no shops ────────────
         const walkLocs: WalkLocality[] = allLocalities
@@ -181,22 +183,22 @@ export function useWalkData(
             };
           })
           .filter(Boolean)
-          // Sort by distance when GPS is confirmed (any accuracy up to GPS_UNUSABLE_THRESHOLD_M).
-          // Even a 600m-accuracy fix places Jhalwa correctly vs. sorting by DB priority (29).
-          // Only fall back to DB priority when GPS is unconfirmed or completely unusable.
+          // Sort by distance when GPS is good enough for ordering (≤2000m).
+          // Jhalwa vs Bamrauli are 15km apart — 1500m accuracy still orders them correctly.
+          // Fall back to DB priority only when GPS is unconfirmed or very inaccurate.
           .sort((a: any, b: any) =>
-            gpsReliable
+            gpsSortable
               ? a.locality_distance - b.locality_distance
               : a.priority - b.priority
           );
 
         // ── Confidence-based locality match ──────────────────────────────
-        // Always match against ApnaMap localities when GPS is confirmed (any accuracy).
-        // poorAccuracy caps confidence at "medium" → shows "Near Jhalwa" not "Jhalwa".
-        // This prevents Nominatim labels like "Bamrauli" from leaking into the display.
+        // Only match a specific locality NAME when GPS accuracy is ≤500m.
+        // With worse accuracy the coordinates themselves can be 600m+ off,
+        // which causes matchLocality to pick a wrong nearby area (Bamrauli, Civil Lines).
         let match: LocalityMatch | null = null;
-        if (gpsReliable && walkLocs.length > 0) {
-          match = matchLocality(lat, lng, walkLocs, poorAccuracy);
+        if (gpsMatchable && walkLocs.length > 0) {
+          match = matchLocality(lat, lng, walkLocs);
         }
 
         // nearestLocalityIdx: find the matched locality's position in the walk list
@@ -204,17 +206,17 @@ export function useWalkData(
         if (match && walkLocs.length > 0) {
           const matchedId = match.locality.id;
           nearestIdx = (walkLocs as any[]).findIndex((l: any) => l.id === matchedId);
-          // If matched locality has no shops (filtered out), fall back to index 0
           if (nearestIdx === -1) nearestIdx = 0;
         }
 
         if (process.env.NODE_ENV !== "production") {
+          const acc = gpsAccuracy != null ? Math.round(gpsAccuracy) + "m" : "null";
           console.debug(
-            `[locality] confirmed=${gpsConfirmed} accuracy=${gpsAccuracy != null ? Math.round(gpsAccuracy) + "m" : "null"} poor=${poorAccuracy} reliable=${gpsReliable}` +
+            `[locality] confirmed=${gpsConfirmed} accuracy=${acc} sortable=${gpsSortable} matchable=${gpsMatchable}` +
             (match
               ? ` → "${match.locality.name}" (${match.confidence}, ${Math.round(match.locality.distanceM)}m away)` +
                 (match.candidates[1] ? ` | 2nd: "${match.candidates[1].name}" ${Math.round(match.candidates[1].distanceM)}m` : "")
-              : " → no match")
+              : " → no label (GPS accuracy too low for name match)")
           );
         }
 
@@ -229,10 +231,13 @@ export function useWalkData(
     }
 
     load();
-  // stableLat/stableLng rounded to 3dp — only re-fetch when user moves >~111m.
-  // gpsConfirmed triggers exactly once after mount (when GPS gives its first reading).
+  // Re-run when coords change, GPS confirms, or accuracy crosses the 500m match boundary.
+  // The accuracy bucket prevents re-runs on every minor accuracy reading (e.g. 480→460→440m)
+  // while still triggering when accuracy improves enough to enable locality name matching.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stableLat, stableLng, radiusM, gpsConfirmed]);
+  }, [stableLat, stableLng, radiusM, gpsConfirmed,
+      // "good" | "poor" | "unknown" — only changes when crossing GPS_MATCH_THRESHOLD_M
+      gpsAccuracy == null ? "unknown" : gpsAccuracy <= GPS_MATCH_THRESHOLD_M ? "good" : "poor"]);
 
   return { localities, nearestLocalityIdx, localityMatch, loading, error };
 }
