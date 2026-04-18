@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   // Fetch offer + shop details for all unique offer IDs
-  const offerIds = [...new Set((rows ?? []).map((r: any) => r.reward_offer_id).filter(Boolean))];
+  const offerIds = Array.from(new Set((rows ?? []).map((r: any) => r.reward_offer_id).filter(Boolean)));
   const offerMap = new Map<string, { title: string; shop_name: string }>();
 
   if (offerIds.length > 0) {
@@ -72,7 +72,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Also fetch user emails via admin auth (profiles may not store email)
-  const userIds = [...new Set((rows ?? []).map((r: any) => r.user_id).filter(Boolean))];
+  const userIds = Array.from(new Set((rows ?? []).map((r: any) => r.user_id).filter(Boolean)));
   const emailMap = new Map<string, string>();
 
   if (userIds.length > 0) {
