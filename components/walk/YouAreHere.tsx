@@ -14,7 +14,9 @@ interface Props {
 export default function YouAreHere({ locality, confidence, gpsConfirmed, gpsError, accuracy, onDetect }: Props) {
   const isDetecting  = !gpsConfirmed;
   const hasError     = !!gpsError;
-  const poorAccuracy = accuracy != null && accuracy > 500;
+  // Match ERROR_ACCURACY_M in useGeo: 500–2000m is "approximate" (medium confidence),
+  // only >2000m is a true error that warrants the red "Location issue" state.
+  const poorAccuracy = accuracy != null && accuracy > 2000;
   const isMedium     = gpsConfirmed && !hasError && !poorAccuracy && confidence === "medium";
   const isLow        = gpsConfirmed && !hasError && !poorAccuracy && confidence === "low";
 

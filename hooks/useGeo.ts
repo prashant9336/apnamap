@@ -6,9 +6,12 @@ import type { GeoState } from "@/types";
 const CACHE_KEY    = "apnamap_geo_v3";  // bumped: old cache had Nominatim labels
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 min — optimistic seed while fresh GPS loads
 
-// Accuracy threshold: positions worse than this are considered unreliable
-// (network/IP location typically returns 500–2000 m)
-const MAX_ACCURACY_M = 500;
+// Accuracy thresholds:
+//   CACHE_ACCURACY_M  — only cache high-quality GPS fixes (500m keeps stale network fixes out)
+//   ERROR_ACCURACY_M  — only surface an error to the user for truly bad accuracy (>2000m)
+//     Between 500–2000m: valid GPS, just approximate — useWalkData caps confidence at "medium"
+const CACHE_ACCURACY_M = 500;
+const ERROR_ACCURACY_M = 2000;
 
 interface CachedGeo {
   lat: number;
@@ -92,10 +95,9 @@ export function useGeo() {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude: lat, longitude: lng, accuracy } = pos.coords;
-        const poorAccuracy = accuracy > MAX_ACCURACY_M;
 
-        // Only cache high-accuracy fixes
-        if (!poorAccuracy) saveCache(lat, lng, "");
+        // Cache only clean fixes — network fixes (500–2000m) are too noisy to store
+        if (accuracy <= CACHE_ACCURACY_M) saveCache(lat, lng, "");
 
         setGeo({
           lat,
@@ -103,9 +105,11 @@ export function useGeo() {
           accuracy,
           loading:      false,
           gpsConfirmed: true,
-          // locality is intentionally blank — WalkView uses the DB locality match name
+          // locality intentionally blank — WalkView uses the DB locality match name
           locality:     "",
-          error:        poorAccuracy
+          // Only surface an error for truly bad accuracy (>2000m).
+          // 500–2000m is "approximate but usable" — useWalkData shows it as medium confidence.
+          error:        accuracy > ERROR_ACCURACY_M
             ? `Low GPS accuracy (±${Math.round(accuracy)}m). Location may be approximate.`
             : null,
         });
@@ -134,8 +138,7 @@ export function useGeo() {
       navigator.geolocation?.getCurrentPosition(
         (pos) => {
           const { latitude: lat, longitude: lng, accuracy } = pos.coords;
-          const poorAccuracy = accuracy > MAX_ACCURACY_M;
-          if (!poorAccuracy) saveCache(lat, lng, "");
+          if (accuracy <= CACHE_ACCURACY_M) saveCache(lat, lng, "");
           setGeo({
             lat,
             lng,
@@ -143,7 +146,7 @@ export function useGeo() {
             loading:      false,
             gpsConfirmed: true,
             locality:     "",
-            error:        poorAccuracy
+            error:        accuracy > ERROR_ACCURACY_M
               ? `Low GPS accuracy (±${Math.round(accuracy)}m).`
               : null,
           });
@@ -174,8 +177,7 @@ export function useGeo() {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude: lat, longitude: lng, accuracy } = pos.coords;
-        const poorAccuracy = accuracy > MAX_ACCURACY_M;
-        if (!poorAccuracy) saveCache(lat, lng, "");
+        if (accuracy <= CACHE_ACCURACY_M) saveCache(lat, lng, "");
         setGeo({
           lat,
           lng,
@@ -183,7 +185,7 @@ export function useGeo() {
           loading:      false,
           gpsConfirmed: true,
           locality:     "",
-          error:        poorAccuracy
+          error:        accuracy > ERROR_ACCURACY_M
             ? `Low GPS accuracy (±${Math.round(accuracy)}m). Location may be approximate.`
             : null,
         });
