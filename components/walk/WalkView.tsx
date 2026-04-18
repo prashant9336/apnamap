@@ -30,10 +30,6 @@ export default function WalkView({ localities, nearestLocalityIdx, loading, user
   const [activeIdx,  setAI]       = useState(0);
   const [scrollProgress, setSP]   = useState(0);   // 0-1 continuous scroll fraction
   const [currentLoc, setCL]       = useState("");
-
-  // Use nearest DB locality name (distance-sorted) instead of Nominatim reverse-geocode.
-  // Nominatim often returns the city name ("Prayagraj") rather than the suburb ("Jhalwa").
-  const displayLocality = localities[0]?.name || userLocality;
   const [crowd,      setCrowd]    = useState(142);
   const raf            = useRef<number>(0);
   const inertiaRaf     = useRef<number>(0);
@@ -96,19 +92,6 @@ export default function WalkView({ localities, nearestLocalityIdx, loading, user
   useEffect(() => {
     setCL(localities.length > 0 ? localities[0].name : userLocality);
   }, [localities, userLocality]);
-
-  /* Auto-scroll to user's matched locality once GPS resolves.
-     Only fires once per mount — if the user has already scrolled we don't interrupt. */
-  const hasAutoScrolled = useRef(false);
-  useEffect(() => {
-    if (hasAutoScrolled.current) return;
-    if (nearestLocalityIdx <= 0) return;   // 0 = already at top; -1 = no reliable match
-    if (loading) return;
-    hasAutoScrolled.current = true;
-    // Small delay so the layout has settled after the loading→content transition
-    const t = setTimeout(() => scrollToLocality(nearestLocalityIdx), 450);
-    return () => clearTimeout(t);
-  }, [nearestLocalityIdx, loading, scrollToLocality]);
 
   /* Cleanup inertia + scroll-end timer on unmount */
   useEffect(() => {
@@ -200,8 +183,6 @@ export default function WalkView({ localities, nearestLocalityIdx, loading, user
         const nxt = Math.max(-10, Math.min(10, cur + delta * 0.045));
         c.dataset.px = String(nxt); c.style.transform = `translateX(${nxt}px)`;
       });
-      // Section headers scroll 20% slower than the rest → depth parallax
-      // Positive delta (scroll down) → header shifts up less → appears further back
       el.querySelectorAll<HTMLElement>("[data-section-bg]").forEach(c => {
         const cur = parseFloat(c.dataset.bgpy ?? "0");
         const nxt = Math.max(-8, Math.min(8, cur - delta * 0.022));
@@ -221,7 +202,7 @@ export default function WalkView({ localities, nearestLocalityIdx, loading, user
           if (Math.abs(cur) < 0.12) {
             c.dataset.px = "0"; c.style.transform = "translateX(0px)"; return;
           }
-          const nxt = cur * 0.80;  // exponential decay toward 0
+          const nxt = cur * 0.80;
           c.dataset.px = String(nxt); c.style.transform = `translateX(${nxt}px)`;
           anyMoving = true;
         });
@@ -249,9 +230,9 @@ export default function WalkView({ localities, nearestLocalityIdx, loading, user
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#05070C" }}>
 
-      {/* ── Top nav — real header (no fake status bar) ── */}
-      <div style={{ flexShrink: 0, padding: "10px 14px 10px", paddingTop: "10px", background: "rgba(5,7,12,0.96)", backdropFilter: "blur(20px)" }}>
-        {/* Row 1: logo · activity count · lang toggle */}
+      {/* ── Top nav ── */}
+      <div style={{ flexShrink: 0, padding: "10px 14px 10px", background: "rgba(5,7,12,0.96)", backdropFilter: "blur(20px)" }}>
+        {/* Row 1: logo · location pill · activity count · lang toggle */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
           {/* Logo */}
           <div style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: "'Syne',sans-serif", fontSize: "19px", fontWeight: 800, color: "#EDEEF5", letterSpacing: "-0.5px", flexShrink: 0 }}>
@@ -263,18 +244,11 @@ export default function WalkView({ localities, nearestLocalityIdx, loading, user
 
           {/* Location pill */}
           <motion.div
-            key={displayLocality || "loc"}
+            key={currentLoc}
             initial={{ opacity: 0, scale: 0.92 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.25 }}
-            style={{
-              display: "flex", alignItems: "center", gap: 5,
-              padding: "4px 10px 4px 7px", borderRadius: 100, fontSize: "11px", fontWeight: 600,
-              color:      "#1FBB5A",
-              background: "rgba(31,187,90,0.09)",
-              border:     "1px solid rgba(31,187,90,0.22)",
-              flexShrink: 1, minWidth: 0, overflow: "hidden", cursor: "default",
-            }}
+            style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px 4px 7px", borderRadius: 100, fontSize: "11px", fontWeight: 600, color: "#1FBB5A", background: "rgba(31,187,90,0.09)", border: "1px solid rgba(31,187,90,0.22)", flexShrink: 1, minWidth: 0, overflow: "hidden" }}
           >
             <motion.div
               style={{ width: 6, height: 6, borderRadius: "50%", background: "#1FBB5A", flexShrink: 0 }}
@@ -282,7 +256,7 @@ export default function WalkView({ localities, nearestLocalityIdx, loading, user
               transition={{ duration: 2, repeat: Infinity }}
             />
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {displayLocality || t("detecting")}
+              {currentLoc || userLocality || t("detecting")}
             </span>
           </motion.div>
 
@@ -309,7 +283,7 @@ export default function WalkView({ localities, nearestLocalityIdx, loading, user
         <ModeTabs />
       </div>
 
-      {/* Locality indicator — progress line + dot track scroll continuously */}
+      {/* Locality indicator */}
       <LocalityIndicator
         localities={filteredLocalities.map(l => l.name)}
         activeIdx={activeIdx}
@@ -336,27 +310,30 @@ export default function WalkView({ localities, nearestLocalityIdx, loading, user
       >
         {loading ? <SkelContent /> : (
           <>
-            {/* You are here */}
-            <YouAreHere locality={displayLocality} />
+            {gpsError && (
+              <div style={{ margin: "10px 12px 0", padding: "8px 12px", borderRadius: 10, fontSize: "11px", background: "rgba(232,168,0,0.09)", border: "1px solid rgba(232,168,0,0.22)", color: "#E8A800" }}>
+                ⚠️ {gpsError}
+              </div>
+            )}
 
-            {/* Live feed strip — uses ranked data for relevance */}
+            {/* You are here */}
+            <YouAreHere locality={currentLoc || userLocality} />
+
+            {/* Live feed strip */}
             <LiveFeedStrip localities={filteredLocalities} />
 
             {/* Crowd banner */}
             <CrowdBanner crowd={crowd} localities={filteredLocalities} />
 
-            {/* Localities — ranked by deal score, filtered by category */}
+            {/* Localities */}
             {filteredLocalities.map((loc, i) => (
               <div key={loc.id} data-loc={loc.name} data-loc-idx={i}>
-                {/* Top-3 deal leaderboard — collapsed by default, expands on tap */}
                 <LocalityLeaderboard locality={loc} />
-                {/* Streak badge — fires /api/streak on mount, idempotent per day */}
                 <StreakBadge localityId={loc.id} localityName={loc.name} />
                 <LocalitySection locality={loc} index={i} />
                 {i < filteredLocalities.length - 1 && (
                   <>
                     <LocalityTransition fromName={loc.name} toName={filteredLocalities[i + 1].name} />
-                    {/* Mystery deal teaser — appears after first locality transition only */}
                     {i === 0 && (
                       <MysteryDeal
                         revealOffer={filteredLocalities[1]?.shops?.find(s => s.top_offer)?.top_offer ?? null}
@@ -381,13 +358,13 @@ export default function WalkView({ localities, nearestLocalityIdx, loading, user
         )}
       </div>
 
-      {/* Floating deal bar — shows top-scored deal for current locality */}
-      <FloatingDealBar topDeals={topDeals} currentLoc={displayLocality} localities={filteredLocalities} />
+      {/* Floating deal bar */}
+      <FloatingDealBar topDeals={topDeals} currentLoc={currentLoc || userLocality} localities={filteredLocalities} />
     </div>
   );
 }
 
-/* ─── Mode tabs — navigates to real pages ───────────────────── */
+/* ─── Mode tabs ──────────────────────────────────────────────── */
 function ModeTabs() {
   const router   = useRouter();
   const path     = usePathname();
@@ -424,7 +401,6 @@ function LiveFeedStrip({ localities }: { localities: WalkLocality[] }) {
   const allShops = localities.flatMap(l => l.shops);
   if (allShops.length === 0) return null;
 
-  // Build feed items purely from in-memory locality data — zero extra API calls
   const items: FeedItem[] = [];
   allShops
     .filter(s => (s.view_count ?? 0) > 0)
@@ -450,11 +426,7 @@ function LiveFeedStrip({ localities }: { localities: WalkLocality[] }) {
 
   return (
     <div style={{ margin: "10px 0 0", paddingLeft: 12 }}>
-      {/* Label */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: 5,
-        marginBottom: 6, paddingRight: 12,
-      }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 6, paddingRight: 12 }}>
         <motion.div
           style={{ width: 5, height: 5, borderRadius: "50%", background: "#FF5E1A" }}
           animate={{ opacity: [1, 0.3, 1] }}
@@ -464,7 +436,6 @@ function LiveFeedStrip({ localities }: { localities: WalkLocality[] }) {
           Live activity
         </span>
       </div>
-      {/* Horizontal scroll strip */}
       <div style={{ display: "flex", gap: 7, overflowX: "auto", paddingRight: 12 }} className="scroll-none">
         {items.map((item, i) => (
           <motion.div
@@ -518,9 +489,7 @@ function CrowdBanner({ crowd, localities }: { crowd: number; localities: WalkLoc
         🔥
       </motion.span>
       <div style={{ flex: 1 }}>
-        <div style={{ fontSize: "11px", fontWeight: 700, color: "#EDEEF5" }}>
-          Active right now
-        </div>
+        <div style={{ fontSize: "11px", fontWeight: 700, color: "#EDEEF5" }}>Active right now</div>
         {totalOffers > 0 && (
           <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.35)", marginTop: 1 }}>
             {totalOffers} live deal{totalOffers !== 1 ? "s" : ""} in this area
@@ -556,16 +525,13 @@ function MysteryDeal({ revealOffer }: { revealOffer?: Offer | null }) {
     >
       <AnimatePresence mode="wait">
         {!revealed ? (
-          /* ── Locked state ── */
           <motion.button
             key="locked"
             initial={{ opacity: 1 }}
             exit={{ opacity: 0, scale: 0.96 }}
             transition={{ duration: 0.2 }}
             onClick={() => setRevealed(true)}
-            style={{
-              width: "100%", cursor: "pointer", background: "none", border: "none", padding: 0, textAlign: "left",
-            }}
+            style={{ width: "100%", cursor: "pointer", background: "none", border: "none", padding: 0, textAlign: "left" }}
           >
             <motion.div
               whileTap={{ scale: 0.98 }}
@@ -576,7 +542,6 @@ function MysteryDeal({ revealOffer }: { revealOffer?: Offer | null }) {
                 display: "flex", alignItems: "center", gap: 12,
               }}
             >
-              {/* Lock icon */}
               <motion.div
                 animate={{ rotate: [0, -5, 5, 0] }}
                 transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
@@ -593,21 +558,16 @@ function MysteryDeal({ revealOffer }: { revealOffer?: Offer | null }) {
                   🎁 Mystery Deal Nearby
                 </div>
                 <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", lineHeight: 1.4 }}>
-                  {revealOffer
-                    ? "Tap to reveal a hidden offer in this area"
-                    : "Keep exploring to unlock a hidden offer in this area"}
+                  {revealOffer ? "Tap to reveal a hidden offer in this area" : "Keep exploring to unlock a hidden offer in this area"}
                 </div>
               </div>
-              {/* Pulse unlock badge */}
               <motion.div
                 animate={{ opacity: [0.4, 1, 0.4], scale: [1, 1.05, 1] }}
                 transition={{ duration: 1.8, repeat: Infinity }}
                 style={{
                   flexShrink: 0, fontSize: "9px", fontWeight: 700,
-                  color: "rgba(167,139,250,0.7)",
-                  background: "rgba(167,139,250,0.08)",
-                  border: "1px solid rgba(167,139,250,0.18)",
-                  borderRadius: 100, padding: "3px 8px", whiteSpace: "nowrap",
+                  color: "rgba(167,139,250,0.7)", background: "rgba(167,139,250,0.08)",
+                  border: "1px solid rgba(167,139,250,0.18)", borderRadius: 100, padding: "3px 8px", whiteSpace: "nowrap",
                 }}
               >
                 🔓 Tap to reveal
@@ -615,7 +575,6 @@ function MysteryDeal({ revealOffer }: { revealOffer?: Offer | null }) {
             </motion.div>
           </motion.button>
         ) : (
-          /* ── Revealed state ── */
           <motion.div
             key="revealed"
             initial={{ opacity: 0, scale: 0.94, y: 6 }}
@@ -628,7 +587,6 @@ function MysteryDeal({ revealOffer }: { revealOffer?: Offer | null }) {
               display: "flex", alignItems: "center", gap: 12,
             }}
           >
-            {/* Unlocked icon */}
             <motion.div
               animate={{ scale: [1, 1.2, 1] }}
               transition={{ duration: 0.5, ease: "easeOut" }}
@@ -668,12 +626,9 @@ function MysteryDeal({ revealOffer }: { revealOffer?: Offer | null }) {
                 </>
               )}
             </div>
-            {/* Unlocked badge */}
             <div style={{
-              flexShrink: 0, fontSize: "9px", fontWeight: 700,
-              color: "#FF5E1A",
-              background: "rgba(255,94,26,0.10)",
-              border: "1px solid rgba(255,94,26,0.25)",
+              flexShrink: 0, fontSize: "9px", fontWeight: 700, color: "#FF5E1A",
+              background: "rgba(255,94,26,0.10)", border: "1px solid rgba(255,94,26,0.25)",
               borderRadius: 100, padding: "3px 8px", whiteSpace: "nowrap",
             }}>
               ✅ Unlocked
@@ -686,16 +641,7 @@ function MysteryDeal({ revealOffer }: { revealOffer?: Offer | null }) {
 }
 
 /* ─── Floating Deal Bar ──────────────────────────────────────── */
-function FloatingDealBar({
-  topDeals,
-  currentLoc,
-  localities,
-}: {
-  topDeals:   ScoredOffer[];
-  currentLoc: string;
-  localities: WalkLocality[];
-}) {
-  // Rotate through top deals every 4 s
+function FloatingDealBar({ topDeals, currentLoc, localities }: { topDeals: ScoredOffer[]; currentLoc: string; localities: WalkLocality[] }) {
   const [idx, setIdx] = useState(0);
   useEffect(() => {
     if (topDeals.length <= 1) return;
@@ -703,7 +649,6 @@ function FloatingDealBar({
     return () => clearInterval(iv);
   }, [topDeals.length]);
 
-  // Count active offers in the current locality only
   const localDealCount = useMemo(() => {
     const loc = localities.find(l => l.name === currentLoc);
     if (!loc) return topDeals.length;
@@ -713,19 +658,8 @@ function FloatingDealBar({
   const show = topDeals.length > 0;
   const top  = topDeals[idx];
 
-  // Deal type → colour
-  const TYPE_COLOR: Record<string, string> = {
-    big_deal:  "#FF5E1A",
-    flash_deal: "#E8A800",
-    mystery:   "#A78BFA",
-    new_deal:  "#1FBB5A",
-  };
-  const TYPE_ICON: Record<string, string> = {
-    big_deal:  "🔥",
-    flash_deal: "⚡",
-    mystery:   "🎁",
-    new_deal:  "🎯",
-  };
+  const TYPE_COLOR: Record<string, string> = { big_deal: "#FF5E1A", flash_deal: "#E8A800", mystery: "#A78BFA", new_deal: "#1FBB5A" };
+  const TYPE_ICON:  Record<string, string> = { big_deal: "🔥", flash_deal: "⚡", mystery: "🎁", new_deal: "🎯" };
   const accent = top ? (TYPE_COLOR[top.dealType] ?? "#FF5E1A") : "#FF5E1A";
   const icon   = top ? (TYPE_ICON[top.dealType]  ?? "🔥")     : "🔥";
 
@@ -739,15 +673,12 @@ function FloatingDealBar({
           exit={{ y: 60, opacity: 0 }}
           transition={{ duration: 0.35, ease: [0.25,0,0,1] }}
           style={{
-            flexShrink: 0,
-            padding: "10px 14px",
-            background: "rgba(5,7,12,0.92)",
-            backdropFilter: "blur(18px)",
+            flexShrink: 0, padding: "10px 14px",
+            background: "rgba(5,7,12,0.92)", backdropFilter: "blur(18px)",
             borderTop: `1px solid ${accent}28`,
             display: "flex", alignItems: "center", gap: 10,
           }}
         >
-          {/* Pulsing dot */}
           <motion.div
             animate={{ scale: [1, 1.5, 1], opacity: [1, 0.5, 1] }}
             transition={{ duration: 1.4, repeat: Infinity }}
@@ -766,11 +697,8 @@ function FloatingDealBar({
                 {icon} {localDealCount} deal{localDealCount !== 1 ? "s" : ""} nearby · {currentLoc}
               </motion.span>
             </AnimatePresence>
-            <span style={{ fontSize: "10.5px", color: "rgba(255,255,255,0.30)" }}>
-              Tap any shop to claim
-            </span>
+            <span style={{ fontSize: "10.5px", color: "rgba(255,255,255,0.30)" }}>Tap any shop to claim</span>
           </div>
-          {/* Top deal score chip */}
           {top && (
             <motion.div
               key={`chip-${idx}`}
@@ -778,17 +706,13 @@ function FloatingDealBar({
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.2 }}
               style={{
-                flexShrink: 0, fontSize: "9.5px", fontWeight: 700,
-                color: accent,
-                background: `${accent}18`,
-                border: `1px solid ${accent}30`,
+                flexShrink: 0, fontSize: "9.5px", fontWeight: 700, color: accent,
+                background: `${accent}18`, border: `1px solid ${accent}30`,
                 borderRadius: 100, padding: "3px 9px", whiteSpace: "nowrap",
                 maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis",
               }}
             >
-              {top.offer.title.length > 13
-                ? top.offer.title.slice(0, 12) + "…"
-                : top.offer.title}
+              {top.offer.title.length > 13 ? top.offer.title.slice(0, 12) + "…" : top.offer.title}
             </motion.div>
           )}
         </motion.div>
@@ -811,20 +735,14 @@ function EndCTA({ localities }: { localities: WalkLocality[] }) {
       <p style={{ fontSize:"12.5px", color:"rgba(255,255,255,0.42)", lineHeight:1.6, maxWidth:260, marginBottom:4 }}>
         You've explored {localities.length} {localities.length === 1 ? "locality" : "localities"}. More areas are waiting just around the corner.
       </p>
-      {/* Stats */}
       <div style={{ display:"flex", gap:20, marginTop:4 }}>
-        {[
-          { n: shops,   l: "Shops visited"   },
-          { n: km,      l: "Walked digitally" },
-          { n: offers,  l: "Active offers"   },
-        ].map(s => (
+        {[{ n: shops, l: "Shops visited" }, { n: km, l: "Walked digitally" }, { n: offers, l: "Active offers" }].map(s => (
           <div key={s.l} style={{ textAlign:"center" }}>
             <div className="font-syne" style={{ fontSize:"20px", fontWeight:800, color:"#FF5E1A" }}>{s.n}</div>
             <div style={{ fontSize:"9.5px", color:"rgba(255,255,255,0.20)", marginTop:1 }}>{s.l}</div>
           </div>
         ))}
       </div>
-      {/* CTA */}
       <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8, marginTop:4, width:"100%" }}>
         <motion.button
           whileTap={{ scale: 0.97 }}
@@ -858,71 +776,14 @@ function EmptyState() {
   );
 }
 
-/* ─── Category filter chip strip ───────────────────────────────── */
-function CategoryFilter({
-  categories,
-  selected,
-  onChange,
-}: {
-  categories: Array<{ id: string; name: string; icon: string }>;
-  selected:   string | null;
-  onChange:   (id: string | null) => void;
-}) {
+/* ─── Category filter ───────────────────────────────────────── */
+function CategoryFilter({ categories, selected, onChange }: { categories: Array<{ id: string; name: string; icon: string }>; selected: string | null; onChange: (id: string | null) => void }) {
   return (
-    <div style={{
-      flexShrink: 0,
-      padding: "7px 0 7px 12px",
-      background: "rgba(5,7,12,0.92)",
-      borderBottom: "1px solid rgba(255,255,255,0.05)",
-    }}>
-      <div
-        className="scroll-none"
-        style={{ display: "flex", alignItems: "center", gap: 7, overflowX: "auto", paddingRight: 12 }}
-      >
-        {/* "All" chip */}
-        <button
-          onClick={() => onChange(null)}
-          style={{
-            flexShrink: 0,
-            padding: "6px 14px",
-            borderRadius: 100,
-            fontSize: "12px",
-            fontWeight: 700,
-            cursor: "pointer",
-            border: "none",
-            fontFamily: "'DM Sans',sans-serif",
-            transition: "all .18s",
-            ...(selected === null
-              ? { background: "#FF5E1A", color: "#fff", boxShadow: "0 0 14px rgba(255,94,26,0.4)" }
-              : { background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.50)", outline: "1px solid rgba(255,255,255,0.10)" }),
-          }}
-        >
-          All
-        </button>
-
-        {/* Category chips */}
+    <div style={{ flexShrink: 0, padding: "7px 0 7px 12px", background: "rgba(5,7,12,0.92)", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+      <div className="scroll-none" style={{ display: "flex", alignItems: "center", gap: 7, overflowX: "auto", paddingRight: 12 }}>
+        <button onClick={() => onChange(null)} style={{ flexShrink: 0, padding: "6px 14px", borderRadius: 100, fontSize: "12px", fontWeight: 700, cursor: "pointer", border: "none", fontFamily: "'DM Sans',sans-serif", transition: "all .18s", ...(selected === null ? { background: "#FF5E1A", color: "#fff", boxShadow: "0 0 14px rgba(255,94,26,0.4)" } : { background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.50)", outline: "1px solid rgba(255,255,255,0.10)" }) }}>All</button>
         {categories.map(cat => (
-          <button
-            key={cat.id}
-            onClick={() => onChange(selected === cat.id ? null : cat.id)}
-            style={{
-              flexShrink: 0,
-              padding: "6px 14px",
-              borderRadius: 100,
-              fontSize: "12px",
-              fontWeight: 600,
-              cursor: "pointer",
-              border: "none",
-              fontFamily: "'DM Sans',sans-serif",
-              transition: "all .18s",
-              display: "flex",
-              alignItems: "center",
-              gap: 5,
-              ...(selected === cat.id
-                ? { background: "#FF5E1A", color: "#fff", boxShadow: "0 0 14px rgba(255,94,26,0.4)" }
-                : { background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.50)", outline: "1px solid rgba(255,255,255,0.10)" }),
-            }}
-          >
+          <button key={cat.id} onClick={() => onChange(selected === cat.id ? null : cat.id)} style={{ flexShrink: 0, padding: "6px 14px", borderRadius: 100, fontSize: "12px", fontWeight: 600, cursor: "pointer", border: "none", fontFamily: "'DM Sans',sans-serif", transition: "all .18s", display: "flex", alignItems: "center", gap: 5, ...(selected === cat.id ? { background: "#FF5E1A", color: "#fff", boxShadow: "0 0 14px rgba(255,94,26,0.4)" } : { background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.50)", outline: "1px solid rgba(255,255,255,0.10)" }) }}>
             <span style={{ fontSize: "13px" }}>{cat.icon}</span>
             {cat.name}
           </button>
@@ -932,34 +793,19 @@ function CategoryFilter({
   );
 }
 
-/* ─── Category empty state ──────────────────────────────────────── */
+/* ─── Category empty state ──────────────────────────────────── */
 function CategoryEmptyState({ categoryName, onReset }: { categoryName: string; onReset: () => void }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 24px", textAlign: "center", gap: 12 }}>
       <div style={{ fontSize: "38px" }}>🔍</div>
-      <div className="font-syne" style={{ fontSize: "17px", fontWeight: 800, color: "#F2F5FF" }}>
-        No {categoryName} shops nearby
-      </div>
-      <p style={{ fontSize: "12.5px", color: "rgba(255,255,255,0.42)", lineHeight: 1.6, maxWidth: 240 }}>
-        No approved shops in this category are nearby right now.
-      </p>
-      <button
-        onClick={onReset}
-        style={{
-          marginTop: 8, padding: "11px 24px", borderRadius: 100,
-          fontSize: "13px", fontWeight: 700, color: "#fff",
-          background: "#FF5E1A", border: "none", cursor: "pointer",
-          boxShadow: "0 0 18px rgba(255,94,26,0.35)",
-          fontFamily: "'DM Sans',sans-serif",
-        }}
-      >
-        Show all shops
-      </button>
+      <div className="font-syne" style={{ fontSize: "17px", fontWeight: 800, color: "#F2F5FF" }}>No {categoryName} shops nearby</div>
+      <p style={{ fontSize: "12.5px", color: "rgba(255,255,255,0.42)", lineHeight: 1.6, maxWidth: 240 }}>No approved shops in this category are nearby right now.</p>
+      <button onClick={onReset} style={{ marginTop: 8, padding: "11px 24px", borderRadius: 100, fontSize: "13px", fontWeight: 700, color: "#fff", background: "#FF5E1A", border: "none", cursor: "pointer", boxShadow: "0 0 18px rgba(255,94,26,0.35)", fontFamily: "'DM Sans',sans-serif" }}>Show all shops</button>
     </div>
   );
 }
 
-/* ─── Skeleton (content area only — header stays stable) ────── */
+/* ─── Skeleton ───────────────────────────────────────────────── */
 function SkelContent() {
   return (
     <div style={{ padding:12, display:"flex", flexDirection:"column", gap:12 }}>
