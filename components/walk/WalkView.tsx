@@ -12,47 +12,25 @@ import LangToggle             from "@/components/ui/LangToggle";
 import { useI18n }            from "@/lib/i18n/context";
 import { rankLocalities, topOffersAcrossLocalities } from "@/lib/deal-engine";
 import type { ScoredOffer } from "@/lib/deal-engine";
-import type { WalkLocality, WalkShop, Offer, LocalityMatch } from "@/types";
+import type { WalkLocality, WalkShop, Offer } from "@/types";
 
 interface Props {
   localities:         WalkLocality[];
   nearestLocalityIdx: number;
-  localityMatch?:     LocalityMatch | null;
   loading:            boolean;
   userLat:            number;
   userLng:            number;
   userLocality:       string;
   gpsError?:          string | null;
-  gpsConfirmed?:      boolean;
-  gpsAccuracy?:       number | null;
-  onDetect?:          () => void;
 }
 
-export default function WalkView({ localities, nearestLocalityIdx, localityMatch, loading, userLat, userLng, userLocality, gpsError, gpsConfirmed = true, gpsAccuracy, onDetect }: Props) {
+export default function WalkView({ localities, nearestLocalityIdx, loading, userLat, userLng, userLocality, gpsError }: Props) {
   const { t }        = useI18n();
   const scrollRef    = useRef<HTMLDivElement>(null);
   const [activeIdx,  setAI]       = useState(0);
   const [scrollProgress, setSP]   = useState(0);   // 0-1 continuous scroll fraction
   const [currentLoc, setCL]       = useState("");
   const [crowd,      setCrowd]    = useState(142);
-  const [debugVisible, setDebugVisible] = useState(false);
-  const debugTapCount = useRef(0);
-  const debugTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // GPS location label: ONLY the DB-matched locality name.
-  // currentLoc (scroll position) and userLocality (Nominatim) must never fill this —
-  // they can point to wrong areas (Bamrauli) when GPS is inaccurate.
-  const resolvedDisplayName = gpsConfirmed ? (localityMatch?.displayName ?? "") : "";
-
-  function handlePillTap() {
-    debugTapCount.current += 1;
-    if (debugTapTimer.current) clearTimeout(debugTapTimer.current);
-    debugTapTimer.current = setTimeout(() => { debugTapCount.current = 0; }, 2000);
-    if (debugTapCount.current >= 5) {
-      debugTapCount.current = 0;
-      setDebugVisible(v => !v);
-    }
-  }
   const raf            = useRef<number>(0);
   const inertiaRaf     = useRef<number>(0);
   const scrollEndTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -112,14 +90,8 @@ export default function WalkView({ localities, nearestLocalityIdx, localityMatch
   }, []);
 
   useEffect(() => {
-    // Don't snap currentLoc to localities[0] before GPS confirms — that locality is
-    // sorted by DB priority, not distance, so it could be wrong for the user's position.
-    if (!gpsConfirmed) {
-      setCL("");
-      return;
-    }
     setCL(localities.length > 0 ? localities[0].name : userLocality);
-  }, [localities, userLocality, gpsConfirmed]);
+  }, [localities, userLocality]);
 
   /* Auto-scroll to user's matched locality once GPS resolves.
      Only fires once per mount — if the user has already scrolled we don't interrupt. */
@@ -287,27 +259,26 @@ export default function WalkView({ localities, nearestLocalityIdx, localityMatch
 
           {/* Location pill */}
           <motion.div
-            key={gpsConfirmed ? (resolvedDisplayName || "loc") : "detecting"}
+            key={userLocality || "loc"}
             initial={{ opacity: 0, scale: 0.92 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.25 }}
-            onClick={handlePillTap}
             style={{
               display: "flex", alignItems: "center", gap: 5,
               padding: "4px 10px 4px 7px", borderRadius: 100, fontSize: "11px", fontWeight: 600,
-              color:      gpsConfirmed ? (localityMatch?.confidence === "high" ? "#1FBB5A" : "#E8A800") : "#E8A800",
-              background: gpsConfirmed ? (localityMatch?.confidence === "high" ? "rgba(31,187,90,0.09)" : "rgba(232,168,0,0.09)") : "rgba(232,168,0,0.09)",
-              border:     gpsConfirmed ? (localityMatch?.confidence === "high" ? "1px solid rgba(31,187,90,0.22)" : "1px solid rgba(232,168,0,0.22)") : "1px solid rgba(232,168,0,0.22)",
+              color:      "#1FBB5A",
+              background: "rgba(31,187,90,0.09)",
+              border:     "1px solid rgba(31,187,90,0.22)",
               flexShrink: 1, minWidth: 0, overflow: "hidden", cursor: "default",
             }}
           >
             <motion.div
-              style={{ width: 6, height: 6, borderRadius: "50%", background: gpsConfirmed ? (localityMatch?.confidence === "high" ? "#1FBB5A" : "#E8A800") : "#E8A800", flexShrink: 0 }}
+              style={{ width: 6, height: 6, borderRadius: "50%", background: "#1FBB5A", flexShrink: 0 }}
               animate={{ opacity: [1, 0.3, 1] }}
-              transition={{ duration: gpsConfirmed ? 2 : 0.8, repeat: Infinity }}
+              transition={{ duration: 2, repeat: Infinity }}
             />
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {!gpsConfirmed ? t("detecting") : (resolvedDisplayName || t("detecting"))}
+              {userLocality || t("detecting")}
             </span>
           </motion.div>
 
@@ -362,35 +333,7 @@ export default function WalkView({ localities, nearestLocalityIdx, localityMatch
         {loading ? <SkelContent /> : (
           <>
             {/* You are here */}
-            <YouAreHere
-              locality={resolvedDisplayName}
-              confidence={localityMatch?.confidence ?? null}
-              gpsConfirmed={gpsConfirmed}
-              gpsError={gpsError}
-              accuracy={gpsAccuracy}
-              onDetect={onDetect}
-            />
-
-            {/* Debug panel — toggle by tapping location pill 5× */}
-            {debugVisible && localityMatch && (
-              <div style={{
-                margin: "8px 12px 0", padding: "10px 12px", borderRadius: 10,
-                background: "rgba(0,0,0,0.75)", border: "1px solid rgba(255,94,26,0.4)",
-                fontFamily: "monospace", fontSize: "10px", color: "rgba(255,255,255,0.75)",
-              }}>
-                <div style={{ color: "#FF5E1A", fontWeight: 700, marginBottom: 4 }}>📍 Locality Debug (tap pill 5× to hide)</div>
-                <div>GPS: {userLat.toFixed(5)}, {userLng.toFixed(5)} {gpsAccuracy ? `±${Math.round(gpsAccuracy)}m` : ""}</div>
-                <div>Confirmed: {gpsConfirmed ? "yes" : "no"}</div>
-                <div style={{ marginTop: 4, color: localityMatch.confidence === "high" ? "#1FBB5A" : localityMatch.confidence === "medium" ? "#E8A800" : "#f87171" }}>
-                  Match: <strong>{localityMatch.locality.name}</strong> ({localityMatch.confidence}) — {Math.round(localityMatch.locality.distanceM)}m away (radius {localityMatch.locality.radius_m}m)
-                </div>
-                {localityMatch.candidates.slice(1).map((c, i) => (
-                  <div key={c.id} style={{ color: "rgba(255,255,255,0.40)", marginTop: 1 }}>
-                    #{i + 2}: {c.name} — {Math.round(c.distanceM)}m
-                  </div>
-                ))}
-              </div>
-            )}
+            <YouAreHere locality={userLocality} />
 
             {/* Live feed strip — uses ranked data for relevance */}
             <LiveFeedStrip localities={filteredLocalities} />
@@ -435,7 +378,7 @@ export default function WalkView({ localities, nearestLocalityIdx, localityMatch
       </div>
 
       {/* Floating deal bar — shows top-scored deal for current locality */}
-      <FloatingDealBar topDeals={topDeals} currentLoc={resolvedDisplayName} localities={filteredLocalities} />
+      <FloatingDealBar topDeals={topDeals} currentLoc={userLocality} localities={filteredLocalities} />
     </div>
   );
 }

@@ -1,17 +1,11 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import { reverseGeocode } from "@/lib/geo/distance";
 import type { GeoState } from "@/types";
 
-const CACHE_KEY    = "apnamap_geo_v3";  // bumped: old cache had Nominatim labels
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 min — optimistic seed while fresh GPS loads
-
-// Accuracy thresholds:
-//   CACHE_ACCURACY_M  — only cache high-quality GPS fixes (500m keeps stale network fixes out)
-//   ERROR_ACCURACY_M  — only surface an error to the user for truly bad accuracy (>2000m)
-//     Between 500–2000m: valid GPS, just approximate — useWalkData caps confidence at "medium"
-const CACHE_ACCURACY_M = 500;
-const ERROR_ACCURACY_M = 2000;
+const CACHE_KEY   = "apnamap_geo";
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 min — use as optimistic seed while fresh GPS loads
 
 interface CachedGeo {
   lat: number;
@@ -41,10 +35,6 @@ function saveCache(lat: number, lng: number, locality: string) {
   } catch {}
 }
 
-function clearCache() {
-  try { localStorage.removeItem(CACHE_KEY); } catch {}
-}
-
 const DEFAULT_LAT = parseFloat(process.env.NEXT_PUBLIC_DEFAULT_LAT ?? "25.4358");
 const DEFAULT_LNG = parseFloat(process.env.NEXT_PUBLIC_DEFAULT_LNG ?? "81.8463");
 
@@ -56,7 +46,7 @@ const DEFAULT: GeoState = {
   lng:          DEFAULT_LNG,
   accuracy:     null,
   loading:      true,
-  gpsConfirmed: false,  // GPS has not yet given a fix
+  gpsConfirmed: false,
   error:        null,
   locality:     DEFAULT_LOCALITY,
 };
@@ -66,60 +56,42 @@ export function useGeo() {
 
   useEffect(() => {
     // Step 1: seed with cache immediately (fast, optimistic)
-    // gpsConfirmed stays false — cache is not a GPS fix
     const cached = loadCache();
     if (cached) {
-      setGeo(g => ({
-        ...g,
+      setGeo({
         lat:          cached.lat,
         lng:          cached.lng,
         accuracy:     null,
-        loading:      false,      // content can show, but GPS is still pending
-        gpsConfirmed: false,      // explicitly not confirmed yet
+        loading:      true,        // still loading = true; fresh GPS request is in flight
+        gpsConfirmed: false,
         error:        null,
         locality:     cached.locality,
-      }));
+      });
     }
 
-    // Step 2: always request fresh GPS, even if cache was available
+    // Step 2: always request fresh GPS in background, even if cache was available
     if (!navigator?.geolocation) {
       setGeo(g => ({
         ...g,
         loading:      false,
-        gpsConfirmed: true,   // no GPS available — consider it resolved (won't improve)
+        gpsConfirmed: true,
         error:        "GPS not available on this device.",
       }));
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
+      async (pos) => {
         const { latitude: lat, longitude: lng, accuracy } = pos.coords;
-
-        // Cache only clean fixes — network fixes (500–2000m) are too noisy to store
-        if (accuracy <= CACHE_ACCURACY_M) saveCache(lat, lng, "");
-
-        setGeo({
-          lat,
-          lng,
-          accuracy,
-          loading:      false,
-          gpsConfirmed: true,
-          // locality intentionally blank — WalkView uses the DB locality match name
-          locality:     "",
-          // Only surface an error for truly bad accuracy (>2000m).
-          // 500–2000m is "approximate but usable" — useWalkData shows it as medium confidence.
-          error:        accuracy > ERROR_ACCURACY_M
-            ? `Low GPS accuracy (±${Math.round(accuracy)}m). Location may be approximate.`
-            : null,
-        });
+        const locality = await reverseGeocode(lat, lng);
+        saveCache(lat, lng, locality);
+        setGeo({ lat, lng, accuracy, loading: false, gpsConfirmed: true, error: null, locality });
       },
       (err) => {
-        // GPS denied or failed — keep cached/default coords, mark GPS as resolved
-        const errMsg =
-          err.code === 1
-            ? "Location access denied. Showing nearest area."
-            : "Could not get location. Showing nearest area.";
+        // GPS denied or failed — keep cached/default coords but stop spinner
+        const errMsg = err.code === 1
+          ? "Location access denied."
+          : "Could not get location.";
         setGeo(g => ({
           ...g,
           loading:      false,
@@ -129,66 +101,23 @@ export function useGeo() {
       },
       { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 },
     );
-
-    // Step 3: re-request GPS when tab becomes visible again (fixes bfcache / idle tab restore)
-    // Use maximumAge: 0 — never accept a stale position when coming back to the tab
-    function onVisible() {
-      if (document.visibilityState !== "visible") return;
-      setGeo(g => ({ ...g, gpsConfirmed: false }));
-      navigator.geolocation?.getCurrentPosition(
-        (pos) => {
-          const { latitude: lat, longitude: lng, accuracy } = pos.coords;
-          if (accuracy <= CACHE_ACCURACY_M) saveCache(lat, lng, "");
-          setGeo({
-            lat,
-            lng,
-            accuracy,
-            loading:      false,
-            gpsConfirmed: true,
-            locality:     "",
-            error:        accuracy > ERROR_ACCURACY_M
-              ? `Low GPS accuracy (±${Math.round(accuracy)}m).`
-              : null,
-          });
-        },
-        () => {
-          setGeo(g => ({ ...g, loading: false, gpsConfirmed: true }));
-        },
-        // maximumAge: 0 — always get a fresh reading when returning to the tab
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 },
-      );
-    }
-
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
   }, []); // runs once on mount
 
-  /** Manual re-detect — clears cache to force a completely fresh fix */
+  /** Manual re-detect */
   const detect = useCallback(async () => {
     if (!navigator.geolocation) {
       setGeo(g => ({ ...g, error: "GPS not available on this device.", gpsConfirmed: true }));
       return;
     }
 
-    // Clear cache so stale coords can't bleed back in
-    clearCache();
     setGeo(g => ({ ...g, loading: true, error: null, gpsConfirmed: false }));
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
+      async (pos) => {
         const { latitude: lat, longitude: lng, accuracy } = pos.coords;
-        if (accuracy <= CACHE_ACCURACY_M) saveCache(lat, lng, "");
-        setGeo({
-          lat,
-          lng,
-          accuracy,
-          loading:      false,
-          gpsConfirmed: true,
-          locality:     "",
-          error:        accuracy > ERROR_ACCURACY_M
-            ? `Low GPS accuracy (±${Math.round(accuracy)}m). Location may be approximate.`
-            : null,
-        });
+        const locality = await reverseGeocode(lat, lng);
+        saveCache(lat, lng, locality);
+        setGeo({ lat, lng, accuracy, loading: false, gpsConfirmed: true, error: null, locality });
       },
       (err) => {
         setGeo(g => ({
@@ -197,11 +126,11 @@ export function useGeo() {
           gpsConfirmed: true,
           error:
             err.code === 1
-              ? "Location access denied. Enable GPS in browser settings."
-              : "Could not get location. Check GPS signal.",
+              ? "Location access denied. Showing nearest area."
+              : "Could not get location.",
         }));
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 },
     );
   }, []);
 
