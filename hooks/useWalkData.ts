@@ -176,11 +176,12 @@ export function useWalkData(
           );
 
         // ── Confidence-based locality match ──────────────────────────────
-        // Run only when GPS is confirmed. Uses all raw localities (not just those with shops)
-        // so the match is against the full locality grid, not just the shops we loaded.
+        // Match against walkLocs (localities that have shops in the feed), NOT allLocalities.
+        // This ensures the display label always corresponds to a locality the user can see,
+        // preventing "Near Bamrauli" appearing while the feed shows Jhalwa/Civil Lines shops.
         let match: LocalityMatch | null = null;
-        if (gpsConfirmed && allLocalities.length > 0) {
-          match = matchLocality(lat, lng, allLocalities);
+        if (gpsConfirmed && walkLocs.length > 0) {
+          match = matchLocality(lat, lng, walkLocs);
         }
 
         // nearestLocalityIdx: find the matched locality's position in the walk list

@@ -37,7 +37,7 @@ export interface LocalityMatch {
   confidence:  MatchConfidence;
   /** Ready-to-display string. "Civil Lines", "Near Civil Lines", or "Nearby area" */
   displayName: string;
-  /** Top 3 candidates — used by debug panel */
+  /** Top 5 nearest candidates — used by debug panel */
   candidates:  LocalityCandidate[];
 }
 
@@ -55,8 +55,10 @@ const DEFAULT_RADIUS_M = 1500;
 // If nearest locality is beyond this, we have no confident match
 const MAX_MATCH_DISTANCE_M = 5000;
 
-// If nearest / second < this ratio, the boundary is ambiguous
-const SEPARATION_RATIO = 0.60;
+// If nearest / second < this ratio, the boundary is ambiguous.
+// 0.65: nearest must be ≥35% closer than second to claim "inside" with confidence.
+// Tighter than naive nearest-neighbour — avoids overconfident labels at boundaries.
+const SEPARATION_RATIO = 0.65;
 
 export function matchLocality(
   userLat: number,
@@ -81,7 +83,7 @@ export function matchLocality(
     })
     .sort((a, b) => a.distanceM - b.distanceM);
 
-  const top3    = candidates.slice(0, 3);
+  const top3    = candidates.slice(0, 5);   // expose top-5 for debug panel
   const nearest = top3[0];
   const second  = top3[1];
 
@@ -98,7 +100,7 @@ export function matchLocality(
 
   const displayName =
     confidence === "high"   ? nearest.name :
-    confidence === "medium" ? `Near ${nearest.name}` :
+    confidence === "medium" ? `Nearby ${nearest.name}` :
                               "Nearby area";
 
   return { locality: nearest, confidence, displayName, candidates: top3 };

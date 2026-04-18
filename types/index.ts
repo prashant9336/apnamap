@@ -223,7 +223,7 @@ export interface LocalityMatch {
   confidence:  MatchConfidence;
   /** Ready-to-display: "Civil Lines", "Near Civil Lines", or "Nearby area" */
   displayName: string;
-  /** Top 3 candidates — used by debug panel */
+  /** Top 5 nearest candidates — used by debug panel */
   candidates:  LocalityCandidate[];
 }
 
