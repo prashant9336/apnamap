@@ -84,7 +84,7 @@ export function useGeo() {
       async (pos) => {
         const { latitude: lat, longitude: lng, accuracy } = pos.coords;
         const locality = await reverseGeocode(lat, lng);
-        saveCache(lat, lng, locality);
+        if (accuracy <= 500) saveCache(lat, lng, locality);
         setGeo({ lat, lng, accuracy, loading: false, gpsConfirmed: true, error: null, locality });
       },
       (err) => {
@@ -116,7 +116,7 @@ export function useGeo() {
       async (pos) => {
         const { latitude: lat, longitude: lng, accuracy } = pos.coords;
         const locality = await reverseGeocode(lat, lng);
-        saveCache(lat, lng, locality);
+        if (accuracy <= 500) saveCache(lat, lng, locality);
         setGeo({ lat, lng, accuracy, loading: false, gpsConfirmed: true, error: null, locality });
       },
       (err) => {
