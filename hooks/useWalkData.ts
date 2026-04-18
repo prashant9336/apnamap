@@ -190,11 +190,40 @@ export function useWalkData(
 
         // ── Confidence-based locality match ──────────────────────────────
         // Only match a specific locality NAME when GPS accuracy is ≤500m.
-        // With worse accuracy the coordinates themselves can be 600m+ off,
-        // which causes matchLocality to pick a wrong nearby area (Bamrauli, Civil Lines).
+        // Prefer server-side resolution (migration 025 RPC) over client JS matching.
+        // Server query uses the same center-point logic but runs against live DB data,
+        // not a stale client-side locality list. Falls back to client matchLocality if
+        // the RPC isn't available yet (migration 025 not run).
         let match: LocalityMatch | null = null;
         if (gpsReliable && walkLocs.length > 0) {
-          match = matchLocality(lat, lng, walkLocs);
+          try {
+            const res = await fetch(
+              `/api/locality/resolve?lat=${lat}&lng=${lng}`,
+              { cache: "no-store" }
+            );
+            if (res.ok) {
+              const { locality: resolved } = await res.json();
+              if (resolved && resolved.confidence !== "low") {
+                // Map server result into the LocalityMatch shape the UI expects
+                const candidate = walkLocs.find((l: any) => l.id === resolved.id)
+                  ?? walkLocs.find((l: any) => l.slug === resolved.slug);
+                if (candidate) {
+                  match = {
+                    locality:    { id: resolved.id, name: resolved.name, slug: resolved.slug,
+                                   lat: parseFloat(resolved.lat), lng: parseFloat(resolved.lng),
+                                   radius_m: resolved.radius_m, distanceM: resolved.distance_m },
+                    confidence:  resolved.confidence,
+                    displayName: resolved.displayName,
+                    candidates:  [],
+                  };
+                }
+              }
+            }
+          } catch {
+            // Server resolve failed — fall through to client-side matching
+          }
+          // Client-side fallback (also used when server result had no matching walkLoc)
+          if (!match) match = matchLocality(lat, lng, walkLocs);
         }
 
         // nearestLocalityIdx: find the matched locality's position in the walk list
