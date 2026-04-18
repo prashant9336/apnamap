@@ -135,6 +135,7 @@ export function useWalkData(
             if (locShops.length === 0) return null;
 
             const distToUser = locDistMap.get(loc.id) ?? Infinity;
+            const nearestShopDist = Math.min(...locShops.map((s: WalkShop) => s.distance_m));
             const crowd = {
               count: live.base + Math.floor(Math.random() * 15) + locShops.length * 2,
               label: live.label,
@@ -148,13 +149,13 @@ export function useWalkData(
               crowd_count:       crowd.count,
               crowd_label:       crowd.label,
               crowd_badge:       crowd.badge,
-              nearest_distance:  locShops[0].distance_m,
+              nearest_distance:  nearestShopDist,
               locality_distance: distToUser,
             };
           })
           .filter(Boolean)
-          // Sort by distance from user to locality centre
-          .sort((a: any, b: any) => a.locality_distance - b.locality_distance);
+          // Sort by nearest shop distance — locality with closest shop to user comes first
+          .sort((a: any, b: any) => a.nearest_distance - b.nearest_distance);
 
         // Nearest locality by GPS from ALL localities (no shop filter)
         const nearestAll = [...allLocalities]
