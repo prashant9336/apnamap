@@ -21,14 +21,11 @@ interface UseWalkDataResult {
   error:              string | null;
 }
 
-// Below this: GPS coords are accurate enough to match a specific locality name.
-// Above this: coords could be 600m+ off — matching against them gives wrong area.
-const GPS_MATCH_THRESHOLD_M = 500;
-
-// Below this: GPS is still useful for ordering the feed by distance even if
-// the specific locality label isn't trustworthy. Two localities 15km apart
-// (Jhalwa vs Bamrauli) will still sort correctly with 1500m accuracy.
-const GPS_SORT_THRESHOLD_M = 2000;
+// GPS must be better than this for ANY distance-based logic (sort OR name match).
+// Network/cell-tower fixes are 500–3000m off and can point to a completely wrong
+// area (e.g. airport coords when user is in Jhalwa). Sorting by wrong coords is
+// worse than sorting by DB priority — it puts the wrong locality first.
+const GPS_RELIABLE_THRESHOLD_M = 500;
 
 export function useWalkData(
   lat: number,
@@ -137,11 +134,10 @@ export function useWalkData(
         const hour = new Date().getHours();
         const live = getLiveCrowd(hour);
 
-        // Sortable: GPS is good enough to order the feed by distance (≤2000m).
-        // Matchable: GPS is accurate enough to assign a specific locality name (≤500m).
-        // These are deliberately separate — wrong coords in matching = wrong label.
-        const gpsSortable  = gpsConfirmed && (gpsAccuracy == null || gpsAccuracy <= GPS_SORT_THRESHOLD_M);
-        const gpsMatchable = gpsConfirmed && (gpsAccuracy == null || gpsAccuracy <= GPS_MATCH_THRESHOLD_M);
+        // Trust GPS for sorting AND matching only when accuracy is ≤500m.
+        // A 600m-inaccurate fix can point to the airport area when user is in Jhalwa —
+        // sorting by those coords puts Bamrauli first, which is worse than DB priority order.
+        const gpsReliable = gpsConfirmed && (gpsAccuracy == null || gpsAccuracy <= GPS_RELIABLE_THRESHOLD_M);
 
         // ── Build WalkLocality[], skip localities with no shops ────────────
         const walkLocs: WalkLocality[] = allLocalities
@@ -187,7 +183,7 @@ export function useWalkData(
           // Jhalwa vs Bamrauli are 15km apart — 1500m accuracy still orders them correctly.
           // Fall back to DB priority only when GPS is unconfirmed or very inaccurate.
           .sort((a: any, b: any) =>
-            gpsSortable
+            gpsReliable
               ? a.locality_distance - b.locality_distance
               : a.priority - b.priority
           );
@@ -197,7 +193,7 @@ export function useWalkData(
         // With worse accuracy the coordinates themselves can be 600m+ off,
         // which causes matchLocality to pick a wrong nearby area (Bamrauli, Civil Lines).
         let match: LocalityMatch | null = null;
-        if (gpsMatchable && walkLocs.length > 0) {
+        if (gpsReliable && walkLocs.length > 0) {
           match = matchLocality(lat, lng, walkLocs);
         }
 
@@ -212,7 +208,7 @@ export function useWalkData(
         if (process.env.NODE_ENV !== "production") {
           const acc = gpsAccuracy != null ? Math.round(gpsAccuracy) + "m" : "null";
           console.debug(
-            `[locality] confirmed=${gpsConfirmed} accuracy=${acc} sortable=${gpsSortable} matchable=${gpsMatchable}` +
+            `[locality] confirmed=${gpsConfirmed} accuracy=${acc} sortable=${gpsReliable} matchable=${gpsReliable}` +
             (match
               ? ` → "${match.locality.name}" (${match.confidence}, ${Math.round(match.locality.distanceM)}m away)` +
                 (match.candidates[1] ? ` | 2nd: "${match.candidates[1].name}" ${Math.round(match.candidates[1].distanceM)}m` : "")
@@ -231,13 +227,12 @@ export function useWalkData(
     }
 
     load();
-  // Re-run when coords change, GPS confirms, or accuracy crosses the 500m match boundary.
-  // The accuracy bucket prevents re-runs on every minor accuracy reading (e.g. 480→460→440m)
-  // while still triggering when accuracy improves enough to enable locality name matching.
+  // Re-run when coords change, GPS confirms, or accuracy crosses the reliable threshold.
+  // "good"/"poor"/"unknown" bucket avoids re-runs on minor jitter (480→460m)
+  // but triggers when accuracy crosses the 500m line that enables distance logic.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stableLat, stableLng, radiusM, gpsConfirmed,
-      // "good" | "poor" | "unknown" — only changes when crossing GPS_MATCH_THRESHOLD_M
-      gpsAccuracy == null ? "unknown" : gpsAccuracy <= GPS_MATCH_THRESHOLD_M ? "good" : "poor"]);
+      gpsAccuracy == null ? "unknown" : gpsAccuracy <= GPS_RELIABLE_THRESHOLD_M ? "good" : "poor"]);
 
   return { localities, nearestLocalityIdx, localityMatch, loading, error };
 }

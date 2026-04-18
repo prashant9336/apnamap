@@ -39,10 +39,10 @@ export default function WalkView({ localities, nearestLocalityIdx, localityMatch
   const debugTapCount = useRef(0);
   const debugTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Resolved display name: prefer confidence-matched DB locality over Nominatim string
-  const resolvedDisplayName = gpsConfirmed
-    ? (localityMatch?.displayName ?? currentLoc ?? userLocality)
-    : "";
+  // GPS location label: ONLY the DB-matched locality name.
+  // currentLoc (scroll position) and userLocality (Nominatim) must never fill this —
+  // they can point to wrong areas (Bamrauli) when GPS is inaccurate.
+  const resolvedDisplayName = gpsConfirmed ? (localityMatch?.displayName ?? "") : "";
 
   function handlePillTap() {
     debugTapCount.current += 1;
