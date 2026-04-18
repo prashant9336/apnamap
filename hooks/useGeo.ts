@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from "react";
 import { reverseGeocode } from "@/lib/geo/distance";
 import type { GeoState } from "@/types";
 
-const CACHE_KEY   = "apnamap_geo";
+const CACHE_KEY   = "apnamap_geo_v2";
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 min — use as optimistic seed while fresh GPS loads
 
 interface CachedGeo {
