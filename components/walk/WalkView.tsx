@@ -93,8 +93,14 @@ export default function WalkView({ localities, nearestLocalityIdx, loading, user
   }, []);
 
   useEffect(() => {
+    // Don't snap currentLoc to localities[0] before GPS confirms — that locality is
+    // sorted by DB priority, not distance, so it could be wrong for the user's position.
+    if (!gpsConfirmed) {
+      setCL("");
+      return;
+    }
     setCL(localities.length > 0 ? localities[0].name : userLocality);
-  }, [localities, userLocality]);
+  }, [localities, userLocality, gpsConfirmed]);
 
   /* Cleanup inertia + scroll-end timer on unmount */
   useEffect(() => {

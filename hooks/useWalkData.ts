@@ -22,7 +22,8 @@ interface UseWalkDataResult {
 export function useWalkData(
   lat: number,
   lng: number,
-  radiusM: number = 50000
+  radiusM: number = 50000,
+  gpsConfirmed: boolean = false
 ): UseWalkDataResult {
   const [localities,          setLocalities]          = useState<WalkLocality[]>([]);
   const [nearestLocalityIdx,  setNearestLocalityIdx]  = useState(0);
@@ -170,11 +171,25 @@ export function useWalkData(
             };
           })
           .filter(Boolean)
-          // ── PRIMARY SORT: distance from user to locality centre ───────────
-          .sort((a: any, b: any) => a.locality_distance - b.locality_distance);
+          // Only sort by GPS distance once confirmed — avoids wrong fallback-coord ordering.
+          // Before GPS resolves, keep DB priority order (most important localities first).
+          .sort((a: any, b: any) =>
+            gpsConfirmed
+              ? a.locality_distance - b.locality_distance
+              : a.priority - b.priority
+          );
+
+        // Debug: log what GPS coords were used and which locality won
+        if (process.env.NODE_ENV !== "production") {
+          const top = walkLocs[0] as any;
+          console.debug(
+            `[locality] gpsConfirmed=${gpsConfirmed} lat=${lat.toFixed(5)} lng=${lng.toFixed(5)}` +
+            (top ? ` → nearest="${top.name}" dist=${Math.round(top.locality_distance ?? 0)}m` : " → no localities")
+          );
+        }
 
         setLocalities(walkLocs as WalkLocality[]);
-        setNearestLocalityIdx(0); // index 0 = nearest after sort
+        setNearestLocalityIdx(gpsConfirmed ? 0 : -1); // -1 = GPS not yet confirmed, don't pin
         setLoading(false);
       } catch (err: any) {
         setError(err?.message || "Something went wrong");

@@ -187,7 +187,7 @@ export default function LocalityIndicator({
                 }}
               >
                 {/* GPS "you are here" dot on nearest locality */}
-                {isNearest && (
+                {isNearest && nearestIdx >= 0 && (
                   <span style={{
                     position: "absolute",
                     top: -5,
