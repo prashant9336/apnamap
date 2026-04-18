@@ -15,6 +15,7 @@ function getLiveCrowd(h: number) {
 interface UseWalkDataResult {
   localities:         WalkLocality[];
   nearestLocalityIdx: number;   // index in localities[] closest to user GPS
+  gpsLocalityName:    string;   // nearest locality by GPS distance, ignoring shop filter
   loading:            boolean;
   error:              string | null;
 }
@@ -26,6 +27,7 @@ export function useWalkData(
 ): UseWalkDataResult {
   const [localities,          setLocalities]          = useState<WalkLocality[]>([]);
   const [nearestLocalityIdx,  setNearestLocalityIdx]  = useState(0);
+  const [gpsLocalityName,     setGpsLocalityName]     = useState("");
   const [loading,             setLoading]             = useState(true);
   const [error,               setError]               = useState<string | null>(null);
 
@@ -154,6 +156,11 @@ export function useWalkData(
           // Sort by distance from user to locality centre
           .sort((a: any, b: any) => a.locality_distance - b.locality_distance);
 
+        // Nearest locality by GPS from ALL localities (no shop filter)
+        const nearestAll = [...allLocalities]
+          .sort((a: any, b: any) => (locDistMap.get(a.id) ?? Infinity) - (locDistMap.get(b.id) ?? Infinity))[0];
+        setGpsLocalityName(nearestAll?.name ?? "");
+
         setLocalities(walkLocs as WalkLocality[]);
         setNearestLocalityIdx(0); // index 0 = nearest after sort
         setLoading(false);
@@ -166,5 +173,5 @@ export function useWalkData(
     load();
   }, [lat, lng, radiusM]);
 
-  return { localities, nearestLocalityIdx, loading, error };
+  return { localities, nearestLocalityIdx, gpsLocalityName, loading, error };
 }

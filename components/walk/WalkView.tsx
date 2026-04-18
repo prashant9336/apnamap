@@ -21,10 +21,11 @@ interface Props {
   userLat:            number;
   userLng:            number;
   userLocality:       string;
+  gpsLocalityName?:   string;
   gpsError?:          string | null;
 }
 
-export default function WalkView({ localities, nearestLocalityIdx, loading, userLat, userLng, userLocality, gpsError }: Props) {
+export default function WalkView({ localities, nearestLocalityIdx, loading, userLat, userLng, userLocality, gpsLocalityName, gpsError }: Props) {
   const { t }        = useI18n();
   const scrollRef    = useRef<HTMLDivElement>(null);
   const [activeIdx,  setAI]       = useState(0);
@@ -317,7 +318,7 @@ export default function WalkView({ localities, nearestLocalityIdx, loading, user
             )}
 
             {/* You are here */}
-            <YouAreHere locality={currentLoc || userLocality} />
+            <YouAreHere locality={gpsLocalityName || userLocality} />
 
             {/* Live feed strip */}
             <LiveFeedStrip localities={filteredLocalities} />
