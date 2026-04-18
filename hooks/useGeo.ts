@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from "react";
 import type { GeoState } from "@/types";
 
-const CACHE_KEY    = "apnamap_geo";
+const CACHE_KEY    = "apnamap_geo_v3";  // bumped: old cache had Nominatim labels
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 min — optimistic seed while fresh GPS loads
 
 // Accuracy threshold: positions worse than this are considered unreliable
