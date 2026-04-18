@@ -11,8 +11,18 @@ type StreakResponse = {
     streak_count: number;
     last_visit_date: string;
     reward_unlocked: boolean;
-    reward_code?: string | null;
+    reward_offer_id?: string | null;
+    reward_unlocked_at?: string | null;
+    reward_expires_at?: string | null;
+    reward_redeemed_at?: string | null;
   };
+  reward_offer?: {
+    id: string;
+    title: string;
+    shop_name: string;
+    expires_at: string | null;
+  } | null;
+  streak_goal?: number;
   status?: "started" | "updated" | "already_counted_today" | "reward_unlocked";
   error?: string;
 };

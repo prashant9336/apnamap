@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 /* ═══════════════════════════════════════════════════════════
    TYPES
 ═══════════════════════════════════════════════════════════ */
-type Tab = "onboard" | "requests" | "pending" | "claims" | "shops" | "offers" | "vendors";
+type Tab = "onboard" | "requests" | "pending" | "claims" | "shops" | "offers" | "vendors" | "rewards";
 
 type Meta = { id: string; name: string; icon?: string };
 
@@ -1113,6 +1113,7 @@ export default function DashboardShell({ localities: initLocalities, categories:
     { id: "shops",    label: "✅ Shops" },
     { id: "offers",   label: "🎯 Offers" },
     { id: "vendors",  label: `👔 Vendors${stats.vendors > 0 ? ` (${stats.vendors})` : ""}` },
+    { id: "rewards",  label: "🎁 Rewards" },
   ];
 
   return (
@@ -1164,9 +1165,9 @@ export default function DashboardShell({ localities: initLocalities, categories:
         {/* Tab bar */}
         <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 }}>
           {TABS.map(t =>
-            t.id === "shops"
-              ? <button key={t.id} onClick={() => router.push("/admin/shops")} style={sTab(false)}>{t.label}</button>
-              : <button key={t.id} onClick={() => setTab(t.id)} style={sTab(tab === t.id)}>{t.label}</button>
+            t.id === "shops"   ? <button key={t.id} onClick={() => router.push("/admin/shops")}   style={sTab(false)}>{t.label}</button>
+            : t.id === "rewards" ? <button key={t.id} onClick={() => router.push("/admin/rewards")} style={sTab(false)}>{t.label}</button>
+            : <button key={t.id} onClick={() => setTab(t.id)} style={sTab(tab === t.id)}>{t.label}</button>
           )}
         </div>
 
