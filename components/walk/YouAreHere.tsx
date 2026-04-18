@@ -1,33 +1,45 @@
 "use client";
 import { motion } from "framer-motion";
+import type { MatchConfidence } from "@/types";
 
 interface Props {
   locality:     string;
+  confidence?:  MatchConfidence | null;
   gpsConfirmed: boolean;
   gpsError?:    string | null;
   accuracy?:    number | null;
   onDetect?:    () => void;
 }
 
-export default function YouAreHere({ locality, gpsConfirmed, gpsError, accuracy, onDetect }: Props) {
-  const isDetecting = !gpsConfirmed;
-  const hasError    = !!gpsError;
+export default function YouAreHere({ locality, confidence, gpsConfirmed, gpsError, accuracy, onDetect }: Props) {
+  const isDetecting  = !gpsConfirmed;
+  const hasError     = !!gpsError;
   const poorAccuracy = accuracy != null && accuracy > 500;
+  const isMedium     = gpsConfirmed && !hasError && !poorAccuracy && confidence === "medium";
+  const isLow        = gpsConfirmed && !hasError && !poorAccuracy && confidence === "low";
 
   /* ── Colour palette by state ── */
-  const palette = isDetecting
-    ? { bg: "rgba(255,200,50,0.07)", border: "rgba(255,200,50,0.22)", dot: "#E8A800", text: "#E8A800" }
+  const palette =
+    isDetecting || isLow
+      ? { bg: "rgba(255,200,50,0.07)", border: "rgba(255,200,50,0.22)", dot: "#E8A800", text: "#E8A800" }
     : hasError || poorAccuracy
-    ? { bg: "rgba(239,68,68,0.07)", border: "rgba(239,68,68,0.22)", dot: "#f87171", text: "#f87171" }
+      ? { bg: "rgba(239,68,68,0.07)", border: "rgba(239,68,68,0.22)", dot: "#f87171", text: "#f87171" }
+    : isMedium
+      ? { bg: "rgba(255,200,50,0.07)", border: "rgba(255,200,50,0.22)", dot: "#E8A800", text: "#E8A800" }
     : { bg: "rgba(31,187,90,0.09)", border: "rgba(31,187,90,0.25)", dot: "#1FBB5A", text: "#1FBB5A" };
 
-  const statusLine = isDetecting
-    ? "Detecting your location…"
+  const statusLine =
+    isDetecting
+      ? "Detecting your location…"
+    : isLow
+      ? "Updating your locality…"
     : hasError
-    ? gpsError!
+      ? gpsError!
     : poorAccuracy
-    ? `±${Math.round(accuracy!)}m accuracy · ${locality}`
-    : `${locality} · GPS confirmed`;
+      ? `±${Math.round(accuracy!)}m accuracy · ${locality}`
+    : isMedium
+      ? `${locality} · approximate`
+      : `${locality} · GPS confirmed`;
 
   return (
     <motion.div
@@ -87,7 +99,11 @@ export default function YouAreHere({ locality, gpsConfirmed, gpsError, accuracy,
       {/* Text */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: "11.5px", fontWeight: 700, color: palette.text }}>
-          {isDetecting ? "Finding you…" : hasError ? "Location issue" : "You are here"}
+          {isDetecting ? "Finding you…"
+           : hasError ? "Location issue"
+           : isLow ? "Updating locality…"
+           : isMedium ? "Approximate location"
+           : "You are here"}
         </div>
         <div style={{ fontSize: "10.5px", color: "rgba(255,255,255,0.42)", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {statusLine}

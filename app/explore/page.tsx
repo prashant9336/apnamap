@@ -15,7 +15,7 @@ export default function ExplorePage() {
   const lng = geo.lng ?? DEFAULT_LNG;
 
   // 50km radius covers all localities around the default city
-  const { localities, nearestLocalityIdx, loading: dataLoading } = useWalkData(lat, lng, 50000, geo.gpsConfirmed);
+  const { localities, nearestLocalityIdx, localityMatch, loading: dataLoading } = useWalkData(lat, lng, 50000, geo.gpsConfirmed);
 
   // Show loading until we have BOTH a location AND the walk data
   const loading = geo.loading || dataLoading;
@@ -25,6 +25,7 @@ export default function ExplorePage() {
       <WalkView
         localities={localities}
         nearestLocalityIdx={nearestLocalityIdx}
+        localityMatch={localityMatch}
         loading={loading}
         userLat={lat}
         userLng={lng}

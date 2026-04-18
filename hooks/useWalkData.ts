@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getDistanceMetres, isShopOpen } from "@/lib/utils/cn";
-import type { WalkLocality, WalkShop, Offer } from "@/types";
+import { matchLocality } from "@/lib/geo/locality-match";
+import type { WalkLocality, WalkShop, Offer, LocalityMatch } from "@/types";
 
 function getLiveCrowd(h: number) {
   if (h >= 9  && h <= 12) return { base: 20, label: "morning rush",  badge: "busy"  as const };
@@ -14,7 +15,8 @@ function getLiveCrowd(h: number) {
 
 interface UseWalkDataResult {
   localities:         WalkLocality[];
-  nearestLocalityIdx: number;   // index in localities[] closest to user GPS
+  nearestLocalityIdx: number;        // index in localities[] for GPS-nearest locality (-1 = not yet confirmed)
+  localityMatch:      LocalityMatch | null; // confidence-based match result for display + debug
   loading:            boolean;
   error:              string | null;
 }
@@ -25,10 +27,11 @@ export function useWalkData(
   radiusM: number = 50000,
   gpsConfirmed: boolean = false
 ): UseWalkDataResult {
-  const [localities,          setLocalities]          = useState<WalkLocality[]>([]);
-  const [nearestLocalityIdx,  setNearestLocalityIdx]  = useState(0);
-  const [loading,             setLoading]             = useState(true);
-  const [error,               setError]               = useState<string | null>(null);
+  const [localities,         setLocalities]         = useState<WalkLocality[]>([]);
+  const [nearestLocalityIdx, setNearestLocalityIdx] = useState(-1);
+  const [localityMatch,      setLocalityMatch]      = useState<LocalityMatch | null>(null);
+  const [loading,            setLoading]            = useState(true);
+  const [error,              setError]              = useState<string | null>(null);
 
   // Round to 3 decimal places ≈ 111 m grid — prevents re-fetch on sub-100m GPS jitter
   const stableLat = Math.round(lat * 1000) / 1000;
@@ -110,9 +113,7 @@ export function useWalkData(
                 : false,
             top_offer:     shop.top_offer ?? activeOffers[0] ?? null,
             active_offers: activeOffers,
-            // Use DB is_trending flag; fall back to tier signal (no random)
             is_trending: shop.is_trending ?? ((shop.top_offer?.tier ?? 5) <= 1),
-            // Busy = nearby + has real engagement
             is_busy:     dist < 2000 && (shop.view_count ?? 0) > 10,
           };
 
@@ -131,7 +132,6 @@ export function useWalkData(
           .map((loc: any) => {
             const locShops = (localityShopMap.get(loc.id) ?? [])
               .sort((a: WalkShop, b: WalkShop) => {
-                // Boosted / prioritised shops float to the top within their locality
                 const aBoost = (a.is_boosted ? 100_000 : 0) + (a.manual_priority ?? 0) * 10_000;
                 const bBoost = (b.is_boosted ? 100_000 : 0) + (b.manual_priority ?? 0) * 10_000;
                 if (aBoost !== bBoost) return bBoost - aBoost;
@@ -142,10 +142,6 @@ export function useWalkData(
 
             const distToUser = locDistMap.get(loc.id) ?? Infinity;
 
-            // Crowd count grows with real platform activity:
-            //   • locShops.length * 3  — each approved vendor/shop adds weight
-            //   • totalViews / 12      — each shop page visit (user activity) adds weight
-            // Both signals accumulate naturally over time; no manual seeding needed.
             const totalViews = locShops.reduce(
               (sum: number, s: WalkShop) => sum + (s.view_count ?? 0),
               0
@@ -167,7 +163,7 @@ export function useWalkData(
               crowd_label:       crowd.label,
               crowd_badge:       crowd.badge,
               nearest_distance:  locShops[0].distance_m,
-              locality_distance: distToUser,  // distance to locality centre
+              locality_distance: distToUser,
             };
           })
           .filter(Boolean)
@@ -179,17 +175,37 @@ export function useWalkData(
               : a.priority - b.priority
           );
 
-        // Debug: log what GPS coords were used and which locality won
-        if (process.env.NODE_ENV !== "production") {
-          const top = walkLocs[0] as any;
+        // ── Confidence-based locality match ──────────────────────────────
+        // Run only when GPS is confirmed. Uses all raw localities (not just those with shops)
+        // so the match is against the full locality grid, not just the shops we loaded.
+        let match: LocalityMatch | null = null;
+        if (gpsConfirmed && allLocalities.length > 0) {
+          match = matchLocality(lat, lng, allLocalities);
+        }
+
+        // nearestLocalityIdx: find the matched locality's position in the walk list
+        let nearestIdx = -1;
+        if (match && walkLocs.length > 0) {
+          const matchedId = match.locality.id;
+          nearestIdx = (walkLocs as any[]).findIndex((l: any) => l.id === matchedId);
+          // If matched locality has no shops (filtered out), fall back to index 0
+          if (nearestIdx === -1) nearestIdx = 0;
+        }
+
+        // Debug log
+        if (process.env.NODE_ENV !== "production" && match) {
+          const c = match.candidates;
           console.debug(
             `[locality] gpsConfirmed=${gpsConfirmed} lat=${lat.toFixed(5)} lng=${lng.toFixed(5)}` +
-            (top ? ` → nearest="${top.name}" dist=${Math.round(top.locality_distance ?? 0)}m` : " → no localities")
+            ` → "${match.locality.name}" (${match.confidence}, ${Math.round(match.locality.distanceM)}m)` +
+            (c[1] ? ` | 2nd: "${c[1].name}" ${Math.round(c[1].distanceM)}m` : "") +
+            (c[2] ? ` | 3rd: "${c[2].name}" ${Math.round(c[2].distanceM)}m` : "")
           );
         }
 
         setLocalities(walkLocs as WalkLocality[]);
-        setNearestLocalityIdx(gpsConfirmed ? 0 : -1); // -1 = GPS not yet confirmed, don't pin
+        setNearestLocalityIdx(nearestIdx);
+        setLocalityMatch(match);
         setLoading(false);
       } catch (err: any) {
         setError(err?.message || "Something went wrong");
@@ -199,8 +215,9 @@ export function useWalkData(
 
     load();
   // stableLat/stableLng are rounded to 3dp — only re-fetch when user moves >~111m
+  // gpsConfirmed is also a dep — re-run when GPS resolves to apply confidence matching
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stableLat, stableLng, radiusM]);
+  }, [stableLat, stableLng, radiusM, gpsConfirmed]);
 
-  return { localities, nearestLocalityIdx, loading, error };
+  return { localities, nearestLocalityIdx, localityMatch, loading, error };
 }

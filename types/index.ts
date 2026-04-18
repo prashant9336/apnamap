@@ -31,6 +31,8 @@ export interface Locality {
   lat: number;
   lng: number;
   priority: number;
+  /** Physical radius in metres — user within this distance is "inside" the locality */
+  radius_m?: number;
   city?: City;
 }
 
@@ -201,6 +203,28 @@ export interface GeoState {
   gpsConfirmed: boolean;
   error: string | null;
   locality: string | null;
+}
+
+// ─── Locality matching ─────────────────────────────────────────────
+export type MatchConfidence = "high" | "medium" | "low";
+
+export interface LocalityCandidate {
+  id:        string;
+  name:      string;
+  slug:      string;
+  lat:       number;
+  lng:       number;
+  distanceM: number;
+  radius_m:  number;
+}
+
+export interface LocalityMatch {
+  locality:    LocalityCandidate;
+  confidence:  MatchConfidence;
+  /** Ready-to-display: "Civil Lines", "Near Civil Lines", or "Nearby area" */
+  displayName: string;
+  /** Top 3 candidates — used by debug panel */
+  candidates:  LocalityCandidate[];
 }
 
 // ─── Voice Post types ──────────────────────────────────────────────
