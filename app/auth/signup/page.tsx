@@ -82,7 +82,10 @@ function CustomerSignupForm({ onBack }: { onBack: () => void }) {
     setLoading(true); setError("");
     const { error: err } = await sb.auth.signUp({
       email, password,
-      options: { data: { name, role: "customer" } },
+      options: {
+        data: { name, role: "customer" },
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
     });
     if (err) { setError(err.message); setLoading(false); return; }
     setDone(true); setLoading(false);
