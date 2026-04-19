@@ -1,9 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getDistanceMetres, isShopOpen } from "@/lib/utils/cn";
 import type { WalkLocality, WalkShop, Offer } from "@/types";
+
+// Minimum coordinate delta that triggers a data re-fetch.
+// ~100 m in degrees — prevents GPS accuracy micro-updates from hammering the DB.
+const MIN_REFETCH_DISTANCE_M = 100;
 
 function getLiveCrowd(h: number) {
   if (h >= 9  && h <= 12) return { base: 20, label: "morning rush",  badge: "busy"  as const };
@@ -31,7 +35,17 @@ export function useWalkData(
   const [loading,             setLoading]             = useState(true);
   const [error,               setError]               = useState<string | null>(null);
 
+  // Track last-fetched coords — skip refetch if user moved < MIN_REFETCH_DISTANCE_M.
+  // This prevents micro-GPS accuracy updates from cascading into redundant DB hits.
+  const lastFetched = useRef<{ lat: number; lng: number } | null>(null);
+
   useEffect(() => {
+    if (lastFetched.current) {
+      const moved = getDistanceMetres(lat, lng, lastFetched.current.lat, lastFetched.current.lng);
+      if (moved < MIN_REFETCH_DISTANCE_M) return;
+    }
+    lastFetched.current = { lat, lng };
+
     async function load() {
       try {
         setLoading(true);
@@ -45,7 +59,7 @@ export function useWalkData(
             .from("localities")
             .select("*, city:cities(id, name, slug)")
             .order("priority"),
-          fetch(`/api/shops?lat=${lat}&lng=${lng}&radius=${radiusM}`, { cache: "no-store" }),
+          fetch(`/api/shops?lat=${lat}&lng=${lng}&radius=${radiusM}`),
         ]);
 
         if (locResult.error) {

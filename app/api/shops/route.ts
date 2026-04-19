@@ -95,11 +95,10 @@ export async function GET(req: Request) {
         return (b.top_offer?.tier ?? 5) - (a.top_offer?.tier ?? 5);
       });
 
-    return NextResponse.json({
-      shops:   finalShops,
-      total:   count ?? finalShops.length,
-      hasMore: offset + limit < (count ?? 0),
-    });
+    return NextResponse.json(
+      { shops: finalShops, total: count ?? finalShops.length, hasMore: offset + limit < (count ?? 0) },
+      { headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=90" } }
+    );
   } catch (err: any) {
     return NextResponse.json(
       { error: err?.message || "Server error" },

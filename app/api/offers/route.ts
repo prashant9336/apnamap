@@ -21,7 +21,13 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ offers: data ?? [] });
+
+  // Cache the global offer feed — not per-shop (those are vendor-facing and must be fresh)
+  const headers: Record<string, string> = !shopId
+    ? { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" }
+    : { "Cache-Control": "no-store" };
+
+  return NextResponse.json({ offers: data ?? [] }, { headers });
 }
 
 /**

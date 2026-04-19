@@ -23,13 +23,17 @@ export async function GET(req: NextRequest) {
       });
 
       if (!error) {
-        return NextResponse.json({ localities: data ?? [], gps_sorted: true });
+        return NextResponse.json({ localities: data ?? [], gps_sorted: true }, {
+          headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=3600" },
+        });
       }
       // RPC not yet available — fall through to city mode
     }
   }
 
   // ── City mode: return localities for a given city slug ───────────────────
+  const CACHE_HEADERS = { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=3600" };
+
   const { data: city, error: cityErr } = await supabase
     .from("cities")
     .select("id")
@@ -41,7 +45,7 @@ export async function GET(req: NextRequest) {
       .from("localities")
       .select("id, name, slug, lat, lng, type, zone, priority")
       .order("priority");
-    return NextResponse.json({ localities: all ?? [] });
+    return NextResponse.json({ localities: all ?? [] }, { headers: CACHE_HEADERS });
   }
 
   const { data, error } = await supabase
@@ -51,5 +55,5 @@ export async function GET(req: NextRequest) {
     .order("priority");
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ localities: data ?? [] });
+  return NextResponse.json({ localities: data ?? [] }, { headers: CACHE_HEADERS });
 }
