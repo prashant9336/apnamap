@@ -171,10 +171,11 @@ export function useWalkData(
           // Sort by nearest shop distance — locality with closest shop to user comes first
           .sort((a: any, b: any) => a.nearest_distance - b.nearest_distance);
 
-        // Nearest locality by GPS from ALL localities (no shop filter)
-        const nearestAll = [...allLocalities]
-          .sort((a: any, b: any) => (locDistMap.get(a.id) ?? Infinity) - (locDistMap.get(b.id) ?? Infinity))[0];
-        setGpsLocalityName(nearestAll?.name ?? "");
+        // "You are here" label = locality whose nearest shop is closest to user.
+        // Do NOT use locality center distance — center-point proximity is a poor proxy
+        // when locality boundaries are irregular. Using the nearest shop's parent
+        // locality keeps the label consistent with the first section in the feed.
+        setGpsLocalityName(walkLocs[0]?.name ?? "");
 
         setLocalities(walkLocs as WalkLocality[]);
         setNearestLocalityIdx(0); // index 0 = nearest after sort

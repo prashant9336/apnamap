@@ -45,10 +45,10 @@ export default function YouAreHere({ locality }: { locality: string }) {
       {/* Text */}
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: "11.5px", fontWeight: 700, color: "#1FBB5A" }}>
-          You are here
+          Nearest to you · {locality}
         </div>
         <div style={{ fontSize: "10.5px", color: "rgba(255,255,255,0.42)", marginTop: 1 }}>
-          {locality}, Prayagraj · GPS active
+          Shops sorted by distance from your location
         </div>
       </div>
 
