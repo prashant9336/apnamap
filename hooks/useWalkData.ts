@@ -9,6 +9,15 @@ import type { WalkLocality, WalkShop, Offer } from "@/types";
 // ~100 m in degrees — prevents GPS accuracy micro-updates from hammering the DB.
 const MIN_REFETCH_DISTANCE_M = 100;
 
+const GPS_LOCALITY_CACHE_KEY = "apnamap_nearest_locality";
+
+function readCachedLocality(): string {
+  try { return localStorage.getItem(GPS_LOCALITY_CACHE_KEY) ?? ""; } catch { return ""; }
+}
+function writeCachedLocality(name: string) {
+  try { localStorage.setItem(GPS_LOCALITY_CACHE_KEY, name); } catch {}
+}
+
 function getLiveCrowd(h: number) {
   if (h >= 9  && h <= 12) return { base: 20, label: "morning rush",  badge: "busy"  as const };
   if (h >= 13 && h <= 16) return { base: 35, label: "afternoon peak", badge: "hot"   as const };
@@ -32,7 +41,7 @@ export function useWalkData(
 ): UseWalkDataResult {
   const [localities,          setLocalities]          = useState<WalkLocality[]>([]);
   const [nearestLocalityIdx,  setNearestLocalityIdx]  = useState(0);
-  const [gpsLocalityName,     setGpsLocalityName]     = useState("");
+  const [gpsLocalityName,     setGpsLocalityName]     = useState<string>(readCachedLocality);
   const [loading,             setLoading]             = useState(true);
   const [error,               setError]               = useState<string | null>(null);
 
@@ -176,7 +185,11 @@ export function useWalkData(
         // Do NOT use locality center distance — center-point proximity is a poor proxy
         // when locality boundaries are irregular. Using the nearest shop's parent
         // locality keeps the label consistent with the first section in the feed.
-        if (gpsConfirmed) setGpsLocalityName(walkLocs[0]?.name ?? "");
+        if (gpsConfirmed) {
+          const name = walkLocs[0]?.name ?? "";
+          setGpsLocalityName(name);
+          writeCachedLocality(name);
+        }
 
         setLocalities(walkLocs as WalkLocality[]);
         setNearestLocalityIdx(0); // index 0 = nearest after sort
