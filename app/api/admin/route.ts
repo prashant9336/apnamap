@@ -40,7 +40,7 @@ export async function PATCH(req: NextRequest) {
   const adminClient = createAdminClient();
 
   if (action === "approve") {
-    await adminClient.from("shops").update({ is_approved: true }).eq("id", shop_id);
+    await adminClient.from("shops").update({ is_approved: true, is_active: true }).eq("id", shop_id);
   } else if (action === "reject") {
     await adminClient.from("shops").update({ is_approved: false, is_active: false }).eq("id", shop_id);
   }

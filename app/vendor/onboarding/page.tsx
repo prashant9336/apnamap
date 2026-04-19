@@ -76,22 +76,7 @@ export default function VendorOnboarding() {
       async pos => {
         const { latitude: lat, longitude: lng } = pos.coords;
         setShopLat(lat); setShopLng(lng);
-        try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
-            { headers: { "User-Agent": "ApnaMap/1.0" } }
-          );
-          const data = await res.json();
-          setGpsLabel(
-            data.address?.suburb ||
-            data.address?.neighbourhood ||
-            data.address?.road ||
-            data.address?.city ||
-            "Your Location"
-          );
-        } catch {
-          setGpsLabel(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
-        }
+        setGpsLabel(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
         setGpsLoading(false);
       },
       () => { setError("Location access denied. City centre will be used."); setGpsLoading(false); },
