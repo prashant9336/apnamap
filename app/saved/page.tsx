@@ -16,12 +16,12 @@ function UnsaveBtn({ onClick }: { onClick: () => void }) {
 }
 
 export default function SavedPage() {
+  const supabase = createClient(); // singleton — same instance across all calls
   const [favorites, setFavorites] = useState<any[]>([]);
   const [loading,   setLoading]   = useState(true);
   const [authed,    setAuthed]    = useState(true);
 
   useEffect(() => {
-    const supabase = createClient();
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) { setAuthed(false); setLoading(false); return; }
       try {
@@ -42,7 +42,6 @@ export default function SavedPage() {
   async function unsave(fav: any) {
     // Optimistic removal
     setFavorites(f => f.filter(x => x.id !== fav.id));
-    const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
     const body: Record<string, string> = {};
