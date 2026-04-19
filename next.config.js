@@ -7,9 +7,14 @@ const { withSentryConfig } = require("@sentry/nextjs");
 const withPWAWrapped = withPWA({
   dest: "public",
 
-  cacheOnFrontEndNav:           true, // cache pages on client-side navigation
-  aggressiveFrontEndNavCaching: true, // cache prefetched pages too
-  reloadOnOnline:               true, // reload stale page when back online
+  // cacheOnFrontEndNav and aggressiveFrontEndNavCaching are intentionally
+  // disabled. They power the swe-worker which calls cache.put() inside a
+  // comma expression — the returned Promise is never awaited or caught.
+  // On iOS Safari (50 MB quota) cache.put() rejects on quota exceeded →
+  // unhandled Promise rejection in the SW context → recurring Sentry errors.
+  // Keeping page caching off eliminates the swe-worker entirely.
+
+  reloadOnOnline: true, // safe: reloads stale page when connection restores
 
   // Offline fallback — served when user is offline and page isn't cached
   fallbacks: { document: "/offline" },
@@ -21,13 +26,15 @@ const withPWAWrapped = withPWA({
     disableDevLogs: true,
 
     runtimeCaching: [
+      // ── Images: safe to cache — content-addressed URLs or external CDN ──
+
       /* Supabase storage (shop logos, cover images) — Cache First, 30 days */
       {
         urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/.*/i,
         handler: "CacheFirst",
         options: {
           cacheName:         "supabase-images",
-          expiration:        { maxEntries: 200, maxAgeSeconds: 30 * 24 * 60 * 60 },
+          expiration:        { maxEntries: 150, maxAgeSeconds: 30 * 24 * 60 * 60 },
           cacheableResponse: { statuses: [0, 200] },
         },
       },
@@ -38,12 +45,12 @@ const withPWAWrapped = withPWA({
         handler: "CacheFirst",
         options: {
           cacheName:         "unsplash-images",
-          expiration:        { maxEntries: 50, maxAgeSeconds: 7 * 24 * 60 * 60 },
+          expiration:        { maxEntries: 30, maxAgeSeconds: 7 * 24 * 60 * 60 },
           cacheableResponse: { statuses: [0, 200] },
         },
       },
 
-      /* Google Fonts — Cache First forever (font files are immutable) */
+      /* Google Fonts — Cache First (font files are versioned and immutable) */
       {
         urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,
         handler: "CacheFirst",
@@ -54,30 +61,24 @@ const withPWAWrapped = withPWA({
         },
       },
 
-      /* PWA icons — Cache First forever (generated PNG, content never changes) */
+      /* PWA icons — Cache First (generated PNG, URL includes size param) */
       {
         urlPattern: /^\/api\/icon(\?.*)?$/i,
         handler: "CacheFirst",
         options: {
           cacheName:         "pwa-icons",
-          expiration:        { maxEntries: 10, maxAgeSeconds: 365 * 24 * 60 * 60 },
+          expiration:        { maxEntries: 10, maxAgeSeconds: 7 * 24 * 60 * 60 },
           cacheableResponse: { statuses: [0, 200] },
         },
       },
 
-      /* App API routes — Network First, fall back to cache for 24 h offline */
-      {
-        urlPattern: /^\/api\/(?!icon).*/i,
-        handler: "NetworkFirst",
-        options: {
-          cacheName:             "api-responses",
-          networkTimeoutSeconds: 10,
-          expiration:            { maxEntries: 32, maxAgeSeconds: 24 * 60 * 60 },
-          cacheableResponse:     { statuses: [0, 200] },
-        },
-      },
+      // ── NOTE: API routes are intentionally NOT cached ──────────────────
+      // ApnaMap serves real-time data (shops, offers, deals). Caching API
+      // responses would serve yesterday's deals as "live". Auth-bearing
+      // requests also fail when a cached 200 is returned with an expired
+      // token embedded. All /api/* requests always go to the network.
 
-      /* Next.js static chunks — Cache First (immutable, hashed filenames) */
+      /* Next.js static chunks — Cache First (content-addressed by hash) */
       {
         urlPattern: /\/_next\/static\/.*/i,
         handler: "CacheFirst",
