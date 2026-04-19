@@ -27,7 +27,8 @@ interface UseWalkDataResult {
 export function useWalkData(
   lat: number,
   lng: number,
-  radiusM: number = 50000
+  radiusM: number = 50000,
+  gpsConfirmed: boolean = false
 ): UseWalkDataResult {
   const [localities,          setLocalities]          = useState<WalkLocality[]>([]);
   const [nearestLocalityIdx,  setNearestLocalityIdx]  = useState(0);
@@ -175,7 +176,7 @@ export function useWalkData(
         // Do NOT use locality center distance — center-point proximity is a poor proxy
         // when locality boundaries are irregular. Using the nearest shop's parent
         // locality keeps the label consistent with the first section in the feed.
-        setGpsLocalityName(walkLocs[0]?.name ?? "");
+        if (gpsConfirmed) setGpsLocalityName(walkLocs[0]?.name ?? "");
 
         setLocalities(walkLocs as WalkLocality[]);
         setNearestLocalityIdx(0); // index 0 = nearest after sort
@@ -187,7 +188,7 @@ export function useWalkData(
     }
 
     load();
-  }, [lat, lng, radiusM]);
+  }, [lat, lng, radiusM, gpsConfirmed]);
 
   return { localities, nearestLocalityIdx, gpsLocalityName, loading, error };
 }
