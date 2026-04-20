@@ -71,7 +71,7 @@ export default function SearchPage() {
                     style={{ background: "rgba(255,255,255,0.034)", border: "1px solid rgba(255,255,255,0.07)" }}>
                     <div className="w-9 h-9 rounded-lg flex items-center justify-center text-lg flex-shrink-0"
                       style={{ background: "rgba(255,255,255,0.06)" }}>
-                      {shop.category?.icon ?? "🏪"}
+                      {shop.subcategory?.icon ?? shop.category?.icon ?? "🏪"}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-sm truncate">{shop.name}</p>

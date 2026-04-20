@@ -142,7 +142,7 @@ export default function NearMePage() {
               style={{ background: "rgba(255,255,255,0.034)", border: "1px solid rgba(255,255,255,0.07)" }}>
               <div className="w-12 h-12 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
                 style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                {shop.category?.icon ?? "🏪"}
+                {shop.subcategory?.icon ?? shop.category?.icon ?? "🏪"}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-syne font-bold text-sm truncate">{shop.name}</p>

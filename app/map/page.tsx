@@ -188,7 +188,7 @@ export default function MapPage() {
                 font-size:14px;
                 box-shadow:0 2px 10px rgba(255,94,26,0.5);
                 cursor:pointer;
-              ">${shop.category?.icon ?? "🏪"}</div>`,
+              ">${shop.subcategory?.icon ?? shop.category?.icon ?? "🏪"}</div>`,
               iconSize:   [30, 30],
               iconAnchor: [15, 15],
             });
@@ -269,7 +269,7 @@ export default function MapPage() {
             style={{ background: "rgba(10,12,20,0.98)", borderTop: "1px solid rgba(255,255,255,0.09)", zIndex: 60 }}>
             <div className="w-11 h-11 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
               style={{ background: "rgba(255,94,26,0.1)", border: "1px solid rgba(255,94,26,0.22)" }}>
-              {selected.category?.icon ?? "🏪"}
+              {selected.subcategory?.icon ?? selected.category?.icon ?? "🏪"}
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-syne font-bold text-sm truncate">{selected.name}</p>
@@ -302,7 +302,7 @@ export default function MapPage() {
                 <button key={shop.id} onClick={() => setSelected(shop)}
                   className="flex items-center gap-2 px-3 py-2 rounded-xl flex-shrink-0 transition-all"
                   style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                  <span>{shop.category?.icon ?? "🏪"}</span>
+                  <span>{shop.subcategory?.icon ?? shop.category?.icon ?? "🏪"}</span>
                   <div className="text-left">
                     <p className="text-xs font-semibold" style={{ color: "var(--t1)" }}>{shop.name}</p>
                     {typeof shop.distance_m === "number" && (

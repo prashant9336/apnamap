@@ -15,6 +15,7 @@ const getShop = cache(async (slug: string) => {
       *,
       locality:localities(name, city:cities(name)),
       category:categories(name, icon, color),
+      subcategory:subcategories(name, icon),
       offers(*)
     `)
     .eq("slug", slug)
@@ -54,6 +55,8 @@ export default async function ShopPage({ params }: { params: { slug: string } })
   if (!shop) notFound();
 
   const cat    = (shop as any).category;
+  const sub    = (shop as any).subcategory;
+  const shopIcon = sub?.icon ?? cat?.icon ?? "🏪";
   const loc    = (shop as any).locality;
   const offers = ((shop as any).offers ?? [] as Offer[]).filter(
     (o: Offer) => o.is_active && (!o.ends_at || new Date(o.ends_at) > new Date())
@@ -67,12 +70,12 @@ export default async function ShopPage({ params }: { params: { slug: string } })
       {/* Cover */}
       <div className="relative" style={{ height: 200, background: `linear-gradient(135deg,${cat?.color ?? "#FF5E1A"}22, rgba(5,7,12,0.9) 80%)` }}>
         <div className="absolute inset-0 flex items-center justify-center text-8xl opacity-20">
-          {cat?.icon ?? "🏪"}
+          {shopIcon}
         </div>
         <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between">
           <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl"
             style={{ background: `${cat?.color ?? "var(--accent)"}22`, border: `1px solid ${cat?.color ?? "var(--accent)"}44` }}>
-            {cat?.icon ?? "🏪"}
+            {shopIcon}
           </div>
           <span className="text-xs font-bold px-2.5 py-1 rounded-full"
             style={shop.is_active

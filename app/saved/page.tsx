@@ -108,7 +108,7 @@ export default function SavedPage() {
                 <Link href={`/shop/${shop.slug}`} className="flex items-center gap-3 flex-1 min-w-0 py-3">
                   <div className="w-11 h-11 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
                     style={{ background: "rgba(255,255,255,0.06)" }}>
-                    {shop.category?.icon ?? "🏪"}
+                    {shop.subcategory?.icon ?? shop.category?.icon ?? "🏪"}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-syne font-bold text-sm truncate">{shop.name}</p>

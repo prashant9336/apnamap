@@ -148,7 +148,7 @@ function OfferCard({ offer, showDistance }: { offer: Offer; showDistance?: boole
       {/* Icon */}
       <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl flex-shrink-0"
         style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}>
-        {(shop as any)?.category?.icon ?? "🏪"}
+        {(shop as any)?.subcategory?.icon ?? (shop as any)?.category?.icon ?? "🏪"}
       </div>
 
       <div className="flex-1 min-w-0">

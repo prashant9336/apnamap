@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   const [shops, offers] = await Promise.all([
     // Search name, description, address, and tags
     supabase.from("shops")
-      .select("id, name, slug, logo_url, description, address, category:categories(name,icon), locality:localities(name)")
+      .select("id, name, slug, logo_url, description, address, category:categories(name,icon), subcategory:subcategories(icon), locality:localities(name)")
       .eq("is_approved", true)
       .eq("is_active", true)
       .or(`name.ilike.${p},description.ilike.${p},address.ilike.${p}`)

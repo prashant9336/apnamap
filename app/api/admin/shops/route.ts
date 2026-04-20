@@ -37,6 +37,7 @@ export async function GET(req: NextRequest) {
       view_count, avg_rating, review_count,
       updated_at, created_at,
       category:categories(id, name, icon),
+      subcategory:subcategories(id, name, icon),
       locality:localities(id, name),
       offers(id, is_active, ends_at)
     `)

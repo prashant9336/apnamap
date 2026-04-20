@@ -97,6 +97,7 @@ export interface Shop {
   // joined
   locality?: Locality;
   category?: Category;
+  subcategory?: Subcategory;
   offers?: Offer[];
   distance_m?: number;
 }

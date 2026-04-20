@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from("offers")
-    .select("*, shop:shops(id, name, slug, logo_url, locality:localities(name), category:categories(icon,color))")
+    .select("*, shop:shops(id, name, slug, logo_url, locality:localities(name), category:categories(icon,color), subcategory:subcategories(icon))")
     .eq("is_active", true);
 
   if (shopId)   query = query.eq("shop_id", shopId);

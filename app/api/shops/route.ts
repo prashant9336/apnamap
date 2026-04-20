@@ -36,6 +36,7 @@ export async function GET(req: Request) {
         open_time, close_time, open_days, vendor_id,
         locality_id, category_id,
         category:categories(id,name,slug,icon,color),
+        subcategory:subcategories(id,name,icon),
         locality:localities(id,name,slug,lat,lng),
         offers(id,title,tier,is_active,ends_at,discount_type,discount_value,coupon_code)
       `, { count: "exact" })

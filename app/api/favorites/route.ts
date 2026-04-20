@@ -43,6 +43,7 @@ export async function GET(req: NextRequest) {
       id, created_at,
       shop:shops(id, name, slug, logo_url, avg_rating,
         category:categories(name, icon),
+        subcategory:subcategories(icon),
         locality:localities(name)
       ),
       offer:offers(id, title, shop:shops(name, slug)),

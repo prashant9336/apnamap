@@ -23,8 +23,9 @@ interface ShopRow {
   review_count: number;
   updated_at: string;
   created_at: string;
-  category: { id: string; name: string; icon: string } | null;
-  locality:  { id: string; name: string } | null;
+  category:    { id: string; name: string; icon: string } | null;
+  subcategory: { id: string; name: string; icon: string } | null;
+  locality:    { id: string; name: string } | null;
   offers: ShopOffer[];
 }
 
@@ -335,7 +336,7 @@ export default function AdminShopsPage() {
 
               {/* Top row */}
               <div className="flex items-start gap-3 mb-3">
-                <span className="text-2xl flex-shrink-0 mt-0.5">{shop.category?.icon ?? "🏪"}</span>
+                <span className="text-2xl flex-shrink-0 mt-0.5">{shop.subcategory?.icon ?? shop.category?.icon ?? "🏪"}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-syne font-bold text-sm leading-tight">{shop.name}</p>
