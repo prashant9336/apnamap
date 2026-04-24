@@ -75,7 +75,7 @@ export async function PATCH(req: NextRequest) {
   if (!before) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
   let updates: Record<string, unknown> = {};
-  let auditAction = action;
+  let auditAction: string = action;
 
   if (action === "change_role") {
     const VALID_ROLES = ["customer", "vendor", "admin"];
