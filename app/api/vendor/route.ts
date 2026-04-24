@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 
 async function requireUser(supabase: ReturnType<typeof createClient>) {
   const {
@@ -38,9 +38,11 @@ export async function GET(req: NextRequest) {
   let analytics: any[] = [];
 
   if (shopIds.length > 0) {
+    // Use admin client — analytics_events has no vendor SELECT RLS policy.
     // Limit to last 30 days to keep this query fast as analytics_events grows.
+    const adminSb = createAdminClient();
     const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
-    const { data } = await supabase
+    const { data } = await adminSb
       .from("analytics_events")
       .select("event_type, shop_id")
       .in("shop_id", shopIds)
@@ -102,7 +104,7 @@ export async function PATCH(req: NextRequest) {
     .from("shops")
     .select("vendor_id")
     .eq("id", shop_id)
-    .single();
+    .maybeSingle();
 
   if (!shop || shop.vendor_id !== user.id) {
     return NextResponse.json({ error: "Not your shop" }, { status: 403 });

@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
     // Link shop if claim_existing
     if (vr.request_type === "claim_existing" && vr.shop_id) {
       await admin.from("shops")
-        .update({ vendor_id: userId, is_claimed: true })
+        .update({ vendor_id: userId, claim_status: "approved" })
         .eq("id", vr.shop_id);
     }
 

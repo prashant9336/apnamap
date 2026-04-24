@@ -160,8 +160,10 @@ export function useWalkData(
 
             const distToUser = locDistMap.get(loc.id) ?? Infinity;
             const nearestShopDist = Math.min(...locShops.map((s: WalkShop) => s.distance_m));
+            // Stable jitter based on locality id chars — no re-render flicker
+            const idJitter = (loc.id.charCodeAt(0) + loc.id.charCodeAt(1)) % 15;
             const crowd = {
-              count: live.base + Math.floor(Math.random() * 15) + locShops.length * 2,
+              count: live.base + idJitter + locShops.length * 2,
               label: live.label,
               badge: live.badge,
             };

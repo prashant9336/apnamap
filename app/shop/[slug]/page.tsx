@@ -20,6 +20,8 @@ const getShop = cache(async (slug: string) => {
     `)
     .eq("slug", slug)
     .eq("is_approved", true)
+    .eq("is_active", true)
+    .is("deleted_at", null)
     .single();
   return data ?? null;
 });

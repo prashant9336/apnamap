@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
   const closeTime   = String(body.close_time      ?? "21:00");
 
   // ── Input validation ─────────────────────────────────────────────
-  if (name.length < 2)
+  if (name.length < 3)
     return NextResponse.json({ error: "Shop name is required (min 3 characters)" }, { status: 400 });
   if (!categoryId)
     return NextResponse.json({ error: "Category is required" }, { status: 400 });
