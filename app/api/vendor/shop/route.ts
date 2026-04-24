@@ -193,9 +193,10 @@ export async function POST(req: NextRequest) {
       open_days:  Array.isArray(body.open_days)
                     ? body.open_days
                     : ["mon", "tue", "wed", "thu", "fri", "sat"],
-      is_approved: approved,
-      is_active:   approved,   // pending shops are not visible
-      is_featured: false,
+      approval_status: approved ? "approved" : "pending",
+      is_approved:     approved,
+      is_active:       approved,
+      is_featured:     false,
     })
     .select()
     .single();

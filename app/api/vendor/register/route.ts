@@ -155,9 +155,10 @@ export async function POST(req: NextRequest) {
         open_time:  "09:00",
         close_time: "21:00",
         open_days:  ["mon","tue","wed","thu","fri","sat"],
-        is_approved: false,   // admin reviews before going live to users
-        is_active:   true,
-        is_featured: false,
+        approval_status: "pending",
+        is_approved:     false,
+        is_active:       false,
+        is_featured:     false,
         custom_business_type: body.custom_business_type ?? null,
         tags:                 body.tags                 ?? [],
       }).select().single();

@@ -7,14 +7,16 @@ import VendorPostPanel from "./VendorPostPanel";
 
 /* ── Types ───────────────────────────────────────────────────────── */
 interface ShopRow {
-  id:           string;
-  name:         string;
-  is_approved:  boolean;
-  avg_rating:   number;
-  review_count: number;
-  category?:    { icon: string } | null;
-  locality?:    { name: string } | null;
-  offers:       { id: string; is_active: boolean; ends_at: string | null }[];
+  id:              string;
+  name:            string;
+  is_approved:     boolean;
+  approval_status: "pending" | "approved" | "rejected";
+  rejection_reason?: string | null;
+  avg_rating:      number;
+  review_count:    number;
+  category?:       { icon: string } | null;
+  locality?:       { name: string } | null;
+  offers:          { id: string; is_active: boolean; ends_at: string | null }[];
 }
 
 interface TodayStats {
@@ -225,7 +227,7 @@ export default function VendorHome() {
     /* Shops + active offer count */
     const { data: shopData } = await supabase
       .from("shops")
-      .select("id, name, is_approved, avg_rating, review_count, category:categories(icon), locality:localities(name), offers(id, is_active, ends_at)")
+      .select("id, name, is_approved, approval_status, rejection_reason, avg_rating, review_count, category:categories(icon), locality:localities(name), offers(id, is_active, ends_at)")
       .eq("vendor_id", user.id)
       .order("created_at", { ascending: false });
 
@@ -341,12 +343,16 @@ export default function VendorHome() {
                 <span
                   style={{
                     fontSize: "9.5px", fontWeight: 700, padding: "1px 7px", borderRadius: 100,
-                    ...(activeShop?.is_approved
+                    ...(activeShop?.approval_status === "approved"
                       ? { background: "rgba(31,187,90,0.12)", color: "#1FBB5A" }
+                      : activeShop?.approval_status === "rejected"
+                      ? { background: "rgba(239,68,68,0.12)", color: "#f87171" }
                       : { background: "rgba(232,168,0,0.12)", color: "#E8A800" }),
                   }}
                 >
-                  {activeShop?.is_approved ? "✓ Live" : "⏳ Pending"}
+                  {activeShop?.approval_status === "approved" ? "✓ Live"
+                    : activeShop?.approval_status === "rejected" ? "✕ Rejected"
+                    : "⏳ Pending"}
                 </span>
               </div>
             </div>
@@ -379,13 +385,22 @@ export default function VendorHome() {
         className="scroll-none"
         style={{ flex: 1, overflowY: "scroll", padding: "14px 16px 20px", display: "flex", flexDirection: "column", gap: 14 }}
       >
-        {/* ── Pending approval banner ──────────────────────────── */}
-        {activeShop && !activeShop.is_approved && (
-          <div style={{
-            padding: "14px 16px", borderRadius: 14,
-            background: "rgba(232,168,0,0.08)",
-            border: "1px solid rgba(232,168,0,0.28)",
-          }}>
+        {/* ── Approval status banner ──────────────────────────── */}
+        {activeShop && activeShop.approval_status === "rejected" && (
+          <div style={{ padding: "14px 16px", borderRadius: 14, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.28)" }}>
+            <div style={{ fontSize: "13px", fontWeight: 800, color: "#f87171", marginBottom: 4 }}>
+              ✕ Your shop was not approved
+            </div>
+            <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.50)", lineHeight: 1.6 }}>
+              {activeShop.rejection_reason
+                ? `Reason: ${activeShop.rejection_reason}. `
+                : ""}
+              Please contact ApnaMap support to understand what changes are needed before resubmitting.
+            </div>
+          </div>
+        )}
+        {activeShop && activeShop.approval_status === "pending" && (
+          <div style={{ padding: "14px 16px", borderRadius: 14, background: "rgba(232,168,0,0.08)", border: "1px solid rgba(232,168,0,0.28)" }}>
             <div style={{ fontSize: "13px", fontWeight: 800, color: "#E8A800", marginBottom: 4 }}>
               ⏳ Your shop is under review
             </div>

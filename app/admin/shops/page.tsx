@@ -3,10 +3,12 @@ import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
-/* ── Types ─────────────────────────────────────────────────────────────── */
+/* ── Types ──────────────────────────────────────────────────────────────── */
 interface ShopOffer { id: string; is_active: boolean; ends_at: string | null; }
 interface VendorOwner { name: string | null; phone: string | null; status: string; }
 interface ShopVendor  { id: string; mobile: string | null; is_approved: boolean; owner: VendorOwner | null; }
+
+type ApprovalStatus = "pending" | "approved" | "rejected";
 
 interface ShopRow {
   id: string;
@@ -17,6 +19,7 @@ interface ShopRow {
   whatsapp: string | null;
   address: string | null;
   vendor_id: string | null;
+  approval_status: ApprovalStatus;
   is_approved: boolean;
   is_active: boolean;
   is_featured: boolean;
@@ -30,6 +33,8 @@ interface ShopRow {
   deleted_by: string | null;
   delete_reason: string | null;
   rejected_at: string | null;
+  rejection_reason: string | null;
+  approved_at: string | null;
   category:    { id: string; name: string; icon: string } | null;
   subcategory: { id: string; name: string; icon: string } | null;
   locality:    { id: string; name: string } | null;
@@ -40,37 +45,28 @@ interface ShopRow {
 type Health = "healthy" | "needs_attention" | "dead";
 
 interface Filters {
-  search:         string;
-  health:         Health | "all";
-  status:         "all" | "approved" | "pending" | "rejected" | "deleted";
-  offer:          "all" | "has_offer" | "no_offer";
-  active:         "all" | "active" | "inactive";
-  locality:       string;
-  category:       string;
+  search:   string;
+  health:   Health | "all";
+  status:   "all" | "pending" | "approved" | "rejected" | "deleted";
+  offer:    "all" | "has_offer" | "no_offer";
+  active:   "all" | "active" | "inactive";
+  locality: string;
+  category: string;
 }
 
-interface DeleteModal {
-  shopId: string;
-  shopName: string;
-}
+interface SimpleModal { shopId: string; shopName: string; }
 
-/* ── Health logic ───────────────────────────────────────────────────────── */
+/* ── Health ─────────────────────────────────────────────────────────────── */
 function computeHealth(shop: ShopRow): Health {
-  if (!shop.is_approved || shop.deleted_at) return "dead";
-
-  const activeOffers = shop.offers.filter(o => {
-    if (!o.is_active) return false;
-    if (o.ends_at && new Date(o.ends_at) < new Date()) return false;
-    return true;
-  });
+  if (shop.approval_status !== "approved" || shop.deleted_at) return "dead";
+  const activeOffers = shop.offers.filter(o => o.is_active && (!o.ends_at || new Date(o.ends_at) > new Date()));
   const hasOffer   = activeOffers.length > 0;
   const hasContact = !!(shop.phone || shop.whatsapp);
   const hasDesc    = !!shop.description?.trim();
   const daysSince  = (Date.now() - new Date(shop.updated_at).getTime()) / 86_400_000;
   const isStale    = daysSince > 30;
-
   if (hasOffer && hasContact && hasDesc && !isStale) return "healthy";
-  if (!hasOffer && isStale && shop.view_count < 10)   return "dead";
+  if (!hasOffer && isStale && shop.view_count < 10)  return "dead";
   return "needs_attention";
 }
 
@@ -80,13 +76,12 @@ const HEALTH: Record<Health, { label: string; color: string; bg: string; border:
   dead:            { label: "Dead",         color: "#f87171", bg: "rgba(239,68,68,0.09)",  border: "rgba(239,68,68,0.25)"  },
 };
 
-const SORT_ORDER: Record<string, number> = {
-  pending_approval: 0, dead: 1, needs_attention: 2, healthy: 3,
-};
 function sortKey(shop: ShopRow, h: Health): number {
   if (shop.deleted_at) return 99;
-  if (!shop.is_approved) return SORT_ORDER["pending_approval"];
-  return SORT_ORDER[h];
+  if (shop.approval_status === "pending")  return 0;
+  if (shop.approval_status === "rejected") return 1;
+  const ord: Record<Health, number> = { dead: 2, needs_attention: 3, healthy: 4 };
+  return ord[h];
 }
 
 function daysAgo(iso: string): string {
@@ -106,12 +101,13 @@ export default function AdminShopsPage() {
   const [acting,        setActing]        = useState<string | null>(null);
   const [autoApproval,  setAutoApproval]  = useState<boolean | null>(null);
   const [showDeleted,   setShowDeleted]   = useState(false);
-  const [deleteModal,   setDeleteModal]   = useState<DeleteModal | null>(null);
+  const [deleteModal,   setDeleteModal]   = useState<SimpleModal | null>(null);
+  const [rejectModal,   setRejectModal]   = useState<SimpleModal | null>(null);
   const [deleteReason,  setDeleteReason]  = useState("");
+  const [rejectReason,  setRejectReason]  = useState("");
   const [suspendVendor, setSuspendVendor] = useState(true);
   const [filters, setFilters] = useState<Filters>({
-    search: "", health: "all", status: "all", offer: "all",
-    active: "all", locality: "", category: "",
+    search: "", health: "all", status: "all", offer: "all", active: "all", locality: "", category: "",
   });
 
   /* ── Load ── */
@@ -120,11 +116,7 @@ export default function AdminShopsPage() {
     const qs = withDeleted ? "?include_deleted=true" : "";
     fetch(`/api/admin/shops${qs}`, { headers: tok ? { Authorization: `Bearer ${tok}` } : {} })
       .then(r => r.json())
-      .then(d => {
-        setShops(d.shops ?? []);
-        setAutoApproval(d.auto_approval_enabled ?? true);
-        setLoading(false);
-      })
+      .then(d => { setShops(d.shops ?? []); setAutoApproval(d.auto_approval_enabled ?? true); setLoading(false); })
       .catch(() => setLoading(false));
   }
 
@@ -132,7 +124,7 @@ export default function AdminShopsPage() {
     createClient().auth.getSession().then(({ data: { session } }) => {
       const tok = session?.access_token ?? "";
       setToken(tok);
-      loadShops(tok, showDeleted);
+      loadShops(tok, false);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -163,30 +155,33 @@ export default function AdminShopsPage() {
   }, [shops]);
 
   const stats = useMemo(() => {
-    const total    = shops.filter(s => !s.deleted_at).length;
-    const healthy  = shops.filter(s => !s.deleted_at && healthMap.get(s.id) === "healthy").length;
-    const attn     = shops.filter(s => !s.deleted_at && healthMap.get(s.id) === "needs_attention").length;
-    const dead     = shops.filter(s => !s.deleted_at && healthMap.get(s.id) === "dead").length;
-    const pending  = shops.filter(s => !s.deleted_at && !s.is_approved && !s.rejected_at).length;
-    const rejected = shops.filter(s => !s.deleted_at && !s.is_approved && !!s.rejected_at).length;
-    const deleted  = shops.filter(s => !!s.deleted_at).length;
-    const noOffer = shops.filter(s => {
-      if (s.deleted_at) return false;
-      const active = s.offers.filter(o => o.is_active && (!o.ends_at || new Date(o.ends_at) > new Date()));
-      return active.length === 0;
-    }).length;
-    return { total, healthy, attn, dead, pending, rejected, deleted, noOffer };
+    const live = shops.filter(s => !s.deleted_at);
+    return {
+      total:    live.length,
+      pending:  live.filter(s => s.approval_status === "pending").length,
+      approved: live.filter(s => s.approval_status === "approved").length,
+      rejected: live.filter(s => s.approval_status === "rejected").length,
+      deleted:  shops.filter(s => !!s.deleted_at).length,
+      healthy:  live.filter(s => healthMap.get(s.id) === "healthy").length,
+      attn:     live.filter(s => healthMap.get(s.id) === "needs_attention").length,
+      dead:     live.filter(s => healthMap.get(s.id) === "dead").length,
+      noOffer:  live.filter(s => {
+        const active = s.offers.filter(o => o.is_active && (!o.ends_at || new Date(o.ends_at) > new Date()));
+        return active.length === 0;
+      }).length,
+    };
   }, [shops, healthMap]);
 
   const filtered = useMemo(() => {
     const q = filters.search.toLowerCase().trim();
     return shops
       .filter(s => {
-        if (filters.status === "deleted"   && !s.deleted_at) return false;
-        if (filters.status !== "deleted"   && s.deleted_at && !showDeleted) return false;
-        if (filters.status === "approved"  && (!s.is_approved || s.deleted_at)) return false;
-        if (filters.status === "pending"   && (s.is_approved || s.deleted_at || !!s.rejected_at)) return false;
-        if (filters.status === "rejected"  && (s.is_approved || s.deleted_at || !s.rejected_at)) return false;
+        const isDeleted = !!s.deleted_at;
+        if (filters.status === "deleted"  && !isDeleted) return false;
+        if (filters.status !== "deleted"  && isDeleted && !showDeleted) return false;
+        if (filters.status === "pending"  && (s.approval_status !== "pending"  || isDeleted)) return false;
+        if (filters.status === "approved" && (s.approval_status !== "approved" || isDeleted)) return false;
+        if (filters.status === "rejected" && (s.approval_status !== "rejected" || isDeleted)) return false;
         if (filters.active === "active"   && !s.is_active)  return false;
         if (filters.active === "inactive" &&  s.is_active)  return false;
         if (filters.health !== "all" && healthMap.get(s.id) !== filters.health) return false;
@@ -200,11 +195,10 @@ export default function AdminShopsPage() {
         }
         if (filters.locality && s.locality?.id !== filters.locality) return false;
         if (filters.category && s.category?.id !== filters.category) return false;
-        // Search: shop name, locality, owner name, vendor mobile, shop phone
         if (q) {
-          const ownerName   = (s.vendor?.owner?.name ?? "").toLowerCase();
-          const ownerPhone  = (s.vendor?.owner?.phone ?? s.vendor?.mobile ?? "").replace(/\D/g, "");
-          const shopPhone   = (s.phone ?? "").replace(/\D/g, "");
+          const ownerName  = (s.vendor?.owner?.name ?? "").toLowerCase();
+          const ownerPhone = (s.vendor?.owner?.phone ?? s.vendor?.mobile ?? "").replace(/\D/g, "");
+          const shopPhone  = (s.phone ?? "").replace(/\D/g, "");
           const match =
             s.name.toLowerCase().includes(q) ||
             (s.locality?.name ?? "").toLowerCase().includes(q) ||
@@ -234,9 +228,6 @@ export default function AdminShopsPage() {
       const { shop: updated } = await res.json();
       if (action === "restore" || action === "approve") {
         loadShops(token, showDeleted);
-      } else if (action === "reject") {
-        // Remove from list immediately — rejected shops don't belong in the pending queue
-        setShops(prev => prev.filter(s => s.id !== shopId));
       } else {
         setShops(prev => prev.map(s => s.id === shopId ? { ...s, ...updated } : s));
       }
@@ -247,24 +238,25 @@ export default function AdminShopsPage() {
     setActing(null);
   }
 
+  async function confirmReject() {
+    if (!rejectModal) return;
+    setRejectModal(null);
+    await handleAction(rejectModal.shopId, "reject", undefined, rejectReason.trim() || undefined);
+    setRejectReason("");
+  }
+
   async function handleSoftDelete() {
     if (!deleteModal) return;
     setActing(deleteModal.shopId);
     const params = new URLSearchParams({ shop_id: deleteModal.shopId });
     if (deleteReason.trim()) params.set("reason", deleteReason.trim());
     if (suspendVendor) params.set("suspend_vendor", "true");
-
     const res = await fetch(`/api/admin/shops?${params.toString()}`, {
       method: "DELETE",
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (res.ok) {
-      if (showDeleted) {
-        // Refresh to show updated deleted state
-        loadShops(token, true);
-      } else {
-        setShops(prev => prev.filter(s => s.id !== deleteModal.shopId));
-      }
+      showDeleted ? loadShops(token, true) : setShops(prev => prev.filter(s => s.id !== deleteModal.shopId));
     }
     setActing(null);
     setDeleteModal(null);
@@ -275,7 +267,6 @@ export default function AdminShopsPage() {
   function setFilter<K extends keyof Filters>(key: K, val: Filters[K]) {
     setFilters(f => ({ ...f, [key]: val }));
   }
-
   function clearFilters() {
     setFilters({ search: "", health: "all", status: "all", offer: "all", active: "all", locality: "", category: "" });
   }
@@ -298,39 +289,36 @@ export default function AdminShopsPage() {
             : { background: "rgba(255,255,255,0.06)", color: "var(--t3)", border: "1px solid rgba(255,255,255,0.09)" }}>
           {showDeleted ? "🗑 Hide Deleted" : "🗑 Show Deleted"}
         </button>
-        <span className="text-xs" style={{ color: "var(--t3)" }}>{shops.filter(s => !s.deleted_at).length} shops</span>
+        <span className="text-xs" style={{ color: "var(--t3)" }}>{stats.total} shops</span>
       </div>
 
       <div className="px-4 pt-4 pb-page space-y-4">
         {/* Auto-approval banner */}
         {autoApproval !== null && (
-          <div className="px-3 py-2.5 rounded-xl flex items-center justify-between"
+          <div className="px-3 py-2.5 rounded-xl"
             style={autoApproval
               ? { background: "rgba(31,187,90,0.07)", border: "1px solid rgba(31,187,90,0.22)" }
               : { background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.22)" }}>
-            <div>
-              <span className="text-xs font-bold" style={{ color: autoApproval ? "#1FBB5A" : "#f87171" }}>
-                {autoApproval ? "✓ Auto-Approval: ON" : "⚠ Auto-Approval: OFF"}
-              </span>
-              <p className="text-[10px] mt-0.5" style={{ color: "var(--t3)" }}>
-                {autoApproval
-                  ? "Qualifying shops go live instantly. Set AUTO_APPROVAL_ENABLED=false in Vercel env to pause."
-                  : "All new shops require manual approval. Set AUTO_APPROVAL_ENABLED=true in Vercel env to re-enable."}
-              </p>
-            </div>
+            <span className="text-xs font-bold" style={{ color: autoApproval ? "#1FBB5A" : "#f87171" }}>
+              {autoApproval ? "✓ Auto-Approval: ON" : "⚠ Auto-Approval: OFF"}
+            </span>
+            <p className="text-[10px] mt-0.5" style={{ color: "var(--t3)" }}>
+              {autoApproval
+                ? "Qualifying shops go live instantly. Set AUTO_APPROVAL_ENABLED=false in Vercel env to pause."
+                : "All new shops require manual approval. Set AUTO_APPROVAL_ENABLED=true in Vercel env to re-enable."}
+            </p>
           </div>
         )}
 
         {/* Stats bar */}
         <div className="grid grid-cols-3 gap-2">
           {[
-            { label: "Total",    val: stats.total,   color: "var(--t1)",  filterKey: null },
-            { label: "Healthy",  val: stats.healthy,  color: "#1FBB5A",   filterKey: "health" as const, filterVal: "healthy"  },
-            { label: "Action",   val: stats.attn,    color: "#E8A800",   filterKey: "health" as const, filterVal: "needs_attention" },
-            { label: "Dead",     val: stats.dead,    color: "#f87171",   filterKey: "health" as const, filterVal: "dead"     },
-            { label: "Pending",   val: stats.pending,   color: "#a78bfa", filterKey: "status" as const, filterVal: "pending"   },
-            { label: "Rejected",  val: stats.rejected,  color: "#f87171", filterKey: "status" as const, filterVal: "rejected"  },
-            { label: "Deleted",   val: stats.deleted,   color: "#64748b", filterKey: "status" as const, filterVal: "deleted"   },
+            { label: "Total",    val: stats.total,    color: "var(--t1)", filterKey: null },
+            { label: "Pending",  val: stats.pending,  color: "#a78bfa",  filterKey: "status" as const, filterVal: "pending"  },
+            { label: "Approved", val: stats.approved, color: "#1FBB5A",  filterKey: "status" as const, filterVal: "approved" },
+            { label: "Rejected", val: stats.rejected, color: "#f87171",  filterKey: "status" as const, filterVal: "rejected" },
+            { label: "Deleted",  val: stats.deleted,  color: "#64748b",  filterKey: "status" as const, filterVal: "deleted"  },
+            { label: "Healthy",  val: stats.healthy,  color: "#1FBB5A",  filterKey: "health" as const, filterVal: "healthy"  },
           ].map(s => (
             <button key={s.label}
               onClick={() => {
@@ -338,12 +326,11 @@ export default function AdminShopsPage() {
                   const next = filters.status === s.filterVal ? "all" : s.filterVal as Filters["status"];
                   setFilter("status", next);
                   if (s.filterVal === "deleted" && !showDeleted) { setShowDeleted(true); loadShops(token, true); }
-                  if (s.filterVal === "rejected" && showDeleted) { setShowDeleted(false); loadShops(token, false); }
                 } else if (s.filterKey === "health") {
                   setFilter("health", filters.health === s.filterVal ? "all" : s.filterVal as Health);
                 }
               }}
-              className="p-2.5 rounded-xl text-left transition-all"
+              className="p-2.5 rounded-xl text-left"
               style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
               <div className="text-xl font-black" style={{ color: s.color }}>{s.val}</div>
               <div className="text-[10px] mt-0.5" style={{ color: "var(--t3)" }}>{s.label}</div>
@@ -364,12 +351,12 @@ export default function AdminShopsPage() {
         {/* Filters */}
         <div className="grid grid-cols-2 gap-2">
           {[
-            { key: "health",   label: "Health",   options: [["all","All Health"],["healthy","Healthy"],["needs_attention","Needs Action"],["dead","Dead"]] },
-            { key: "status",   label: "Status",   options: [["all","All Status"],["pending","Pending"],["rejected","Rejected"],["approved","Approved"],["deleted","Deleted"]] },
-            { key: "active",   label: "Active",   options: [["all","All"],["active","Active"],["inactive","Inactive"]] },
-            { key: "offer",    label: "Offer",    options: [["all","All Offers"],["has_offer","Has Offer"],["no_offer","No Offer"]] },
-            { key: "locality", label: "Locality", options: [["","All Localities"], ...localities] },
-            { key: "category", label: "Category", options: [["","All Categories"], ...categories] },
+            { key: "status",   options: [["all","All Status"],["pending","Pending"],["approved","Approved"],["rejected","Rejected"],["deleted","Deleted"]] },
+            { key: "health",   options: [["all","All Health"],["healthy","Healthy"],["needs_attention","Needs Action"],["dead","Dead"]] },
+            { key: "active",   options: [["all","All"],["active","Active"],["inactive","Inactive"]] },
+            { key: "offer",    options: [["all","All Offers"],["has_offer","Has Offer"],["no_offer","No Offer"]] },
+            { key: "locality", options: [["","All Localities"], ...localities] },
+            { key: "category", options: [["","All Categories"], ...categories] },
           ].map(f => (
             <select key={f.key} value={(filters as any)[f.key]}
               onChange={e => setFilter(f.key as keyof Filters, e.target.value as any)}
@@ -387,10 +374,8 @@ export default function AdminShopsPage() {
           </button>
         )}
 
-        {/* Skeleton */}
         {loading && [1,2,3,4].map(i => <div key={i} className="h-36 rounded-2xl shimmer" />)}
 
-        {/* Empty */}
         {!loading && filtered.length === 0 && (
           <div className="text-center py-16" style={{ color: "var(--t2)" }}>
             <div className="text-4xl mb-3">🔍</div>
@@ -403,20 +388,19 @@ export default function AdminShopsPage() {
           const h          = healthMap.get(shop.id) ?? "needs_attention";
           const hc         = HEALTH[h];
           const isDeleted  = !!shop.deleted_at;
-          const isRejected = !shop.is_approved && !shop.deleted_at && !!shop.rejected_at;
-          const isPending  = !shop.is_approved && !shop.deleted_at && !shop.rejected_at;
-          const isActing  = acting === shop.id;
+          const isPending  = shop.approval_status === "pending"  && !isDeleted;
+          const isRejected = shop.approval_status === "rejected" && !isDeleted;
+          const isApproved = shop.approval_status === "approved" && !isDeleted;
+          const isActing   = acting === shop.id;
 
-          const ownerName  = shop.vendor?.owner?.name ?? null;
-          const ownerPhone = shop.vendor?.owner?.phone ?? shop.vendor?.mobile ?? null;
+          const ownerName       = shop.vendor?.owner?.name ?? null;
+          const ownerPhone      = shop.vendor?.owner?.phone ?? shop.vendor?.mobile ?? null;
           const vendorSuspended = shop.vendor?.owner?.status === "suspended" || shop.vendor?.owner?.status === "deleted";
 
-          const cardBorder = isDeleted
-            ? "rgba(100,116,139,0.35)"
+          const cardBorder = isDeleted  ? "rgba(100,116,139,0.35)"
             : isRejected ? "rgba(239,68,68,0.30)"
             : isPending  ? "rgba(167,139,250,0.30)" : hc.border;
-          const cardBg = isDeleted
-            ? "rgba(100,116,139,0.06)"
+          const cardBg = isDeleted  ? "rgba(100,116,139,0.06)"
             : isRejected ? "rgba(239,68,68,0.06)"
             : isPending  ? "rgba(167,139,250,0.06)" : hc.bg;
 
@@ -426,12 +410,18 @@ export default function AdminShopsPage() {
             <div key={shop.id} className="p-4 rounded-2xl"
               style={{ background: cardBg, border: `1px solid ${cardBorder}`, opacity: isDeleted ? 0.75 : 1 }}>
 
-              {/* Deleted banner */}
               {isDeleted && (
                 <div className="mb-3 px-2.5 py-1.5 rounded-lg text-xs font-semibold"
                   style={{ background: "rgba(239,68,68,0.10)", color: "#f87171", border: "1px solid rgba(239,68,68,0.22)" }}>
                   🗑 Deleted {daysAgo(shop.deleted_at!)}
                   {shop.delete_reason && <span style={{ color: "var(--t3)" }}> · {shop.delete_reason}</span>}
+                </div>
+              )}
+
+              {isRejected && shop.rejection_reason && (
+                <div className="mb-3 px-2.5 py-1.5 rounded-lg text-xs"
+                  style={{ background: "rgba(239,68,68,0.07)", color: "rgba(248,113,113,0.80)", border: "1px solid rgba(239,68,68,0.18)" }}>
+                  Rejection reason: {shop.rejection_reason}
                 </div>
               )}
 
@@ -444,10 +434,8 @@ export default function AdminShopsPage() {
                     <span className="text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-full"
                       style={isDeleted
                         ? { background: "rgba(100,116,139,0.15)", color: "#64748b", border: "1px solid rgba(100,116,139,0.30)" }
-                        : isRejected
-                        ? { background: "rgba(239,68,68,0.15)", color: "#f87171", border: "1px solid rgba(239,68,68,0.30)" }
-                        : isPending
-                        ? { background: "rgba(167,139,250,0.15)", color: "#a78bfa", border: "1px solid rgba(167,139,250,0.30)" }
+                        : isRejected ? { background: "rgba(239,68,68,0.15)",  color: "#f87171", border: "1px solid rgba(239,68,68,0.30)" }
+                        : isPending  ? { background: "rgba(167,139,250,0.15)", color: "#a78bfa", border: "1px solid rgba(167,139,250,0.30)" }
                         : { background: hc.bg, color: hc.color, border: `1px solid ${hc.border}` }}>
                       {isDeleted ? "🗑 Deleted" : isRejected ? "✕ Rejected" : isPending ? "⏳ Pending" : hc.label}
                     </span>
@@ -455,7 +443,6 @@ export default function AdminShopsPage() {
                   <p className="text-xs mt-0.5" style={{ color: "var(--t3)" }}>
                     {shop.category?.name}{shop.locality ? ` · ${shop.locality.name}` : ""}
                   </p>
-                  {/* Owner info */}
                   {(ownerName || ownerPhone) && (
                     <p className="text-[11px] mt-1" style={{ color: "var(--t2)" }}>
                       👤 {ownerName ?? "—"}{ownerPhone ? ` · 📞 ${ownerPhone}` : ""}
@@ -474,33 +461,23 @@ export default function AdminShopsPage() {
                 </div>
               </div>
 
-              {/* Status badges */}
-              {!isDeleted && (
+              {/* Status badges (approved shops only) */}
+              {isApproved && (
                 <div className="flex flex-wrap gap-1.5 mb-3">
-                  {shop.is_approved && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
-                      style={{ background: "rgba(31,187,90,0.12)", color: "#1FBB5A", border: "1px solid rgba(31,187,90,0.25)" }}>✓ Live</span>
-                  )}
-                  {shop.vendor_id && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
-                      style={{ background: "rgba(99,102,241,0.12)", color: "#818cf8", border: "1px solid rgba(99,102,241,0.25)" }}>Claimed</span>
-                  )}
-                  {shop.is_featured && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
-                      style={{ background: "rgba(232,168,0,0.12)", color: "#E8A800", border: "1px solid rgba(232,168,0,0.25)" }}>⭐ Featured</span>
-                  )}
-                  {shop.is_boosted && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
-                      style={{ background: "rgba(255,94,26,0.12)", color: "var(--accent)", border: "1px solid rgba(255,94,26,0.25)" }}>🚀 Boosted</span>
-                  )}
-                  {!shop.is_active && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
-                      style={{ background: "rgba(239,68,68,0.09)", color: "#f87171", border: "1px solid rgba(239,68,68,0.20)" }}>● Inactive</span>
-                  )}
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
+                    style={{ background: "rgba(31,187,90,0.12)", color: "#1FBB5A", border: "1px solid rgba(31,187,90,0.25)" }}>✓ Live</span>
+                  {shop.vendor_id && <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
+                    style={{ background: "rgba(99,102,241,0.12)", color: "#818cf8", border: "1px solid rgba(99,102,241,0.25)" }}>Claimed</span>}
+                  {shop.is_featured && <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
+                    style={{ background: "rgba(232,168,0,0.12)", color: "#E8A800", border: "1px solid rgba(232,168,0,0.25)" }}>⭐ Featured</span>}
+                  {shop.is_boosted && <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
+                    style={{ background: "rgba(255,94,26,0.12)", color: "var(--accent)", border: "1px solid rgba(255,94,26,0.25)" }}>🚀 Boosted</span>}
+                  {!shop.is_active && <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
+                    style={{ background: "rgba(239,68,68,0.09)", color: "#f87171", border: "1px solid rgba(239,68,68,0.20)" }}>● Inactive</span>}
                 </div>
               )}
 
-              {/* Completeness chips (non-deleted only) */}
+              {/* Completeness chips */}
               {!isDeleted && (
                 <div className="flex flex-wrap gap-1.5 mb-3">
                   <Chip ok={activeOffers.length > 0} label={activeOffers.length > 0 ? `${activeOffers.length} offer${activeOffers.length > 1 ? "s" : ""}` : "No offers"} />
@@ -515,54 +492,60 @@ export default function AdminShopsPage() {
                 </div>
               )}
 
-              {/* Actions */}
+              {/* Action buttons */}
               <div className="flex flex-wrap gap-2">
                 {isDeleted ? (
-                  <ActionBtn
-                    label={isActing ? "Restoring…" : "↩ Restore Shop"}
-                    disabled={isActing}
+                  <ActionBtn label={isActing ? "Restoring…" : "↩ Restore Shop"} disabled={isActing}
                     style={{ background: "rgba(31,187,90,0.10)", color: "#1FBB5A", border: "1px solid rgba(31,187,90,0.25)" }}
-                    onClick={() => handleAction(shop.id, "restore", undefined, undefined, true)}
-                  />
-                ) : (
+                    onClick={() => handleAction(shop.id, "restore", undefined, undefined, true)} />
+                ) : isRejected ? (
                   <>
-                    {isRejected ? (
-                      <ActionBtn label={isActing ? "…" : "↩ Re-approve"} disabled={isActing}
-                        style={{ background: "#1FBB5A", color: "#fff" }}
-                        onClick={() => handleAction(shop.id, "approve")} />
-                    ) : !shop.is_approved ? (
-                      <>
-                        <ActionBtn label={isActing ? "…" : "✕ Reject"} disabled={isActing}
-                          style={{ background: "rgba(239,68,68,0.09)", color: "#f87171", border: "1px solid rgba(239,68,68,0.20)" }}
-                          onClick={() => handleAction(shop.id, "reject")} />
-                        <ActionBtn label={isActing ? "…" : "✓ Approve"} disabled={isActing}
-                          style={{ background: "#1FBB5A", color: "#fff" }}
-                          onClick={() => handleAction(shop.id, "approve")} />
-                      </>
-                    ) : (
-                      <>
-                        <ActionBtn
-                          label={shop.is_active ? "Deactivate" : "Activate"} disabled={isActing}
-                          style={{ background: "rgba(255,255,255,0.06)", color: "var(--t2)", border: "1px solid rgba(255,255,255,0.10)" }}
-                          onClick={() => handleAction(shop.id, "toggle_active")} />
-                        <ActionBtn
-                          label={shop.is_featured ? "⭐ Unfeature" : "⭐ Feature"} disabled={isActing}
-                          style={{ background: shop.is_featured ? "rgba(232,168,0,0.18)" : "rgba(232,168,0,0.08)", color: "#E8A800", border: "1px solid rgba(232,168,0,0.25)" }}
-                          onClick={() => handleAction(shop.id, "edit", { is_featured: !shop.is_featured })} />
-                        <ActionBtn
-                          label={shop.is_boosted ? "🚀 Unboost" : "🚀 Boost"} disabled={isActing}
-                          style={{ background: shop.is_boosted ? "rgba(255,94,26,0.18)" : "rgba(255,94,26,0.08)", color: "var(--accent)", border: "1px solid rgba(255,94,26,0.25)" }}
-                          onClick={() => handleAction(shop.id, "edit", { is_boosted: !shop.is_boosted })} />
-                      </>
-                    )}
+                    <ActionBtn label={isActing ? "…" : "↩ Re-approve"} disabled={isActing}
+                      style={{ background: "#1FBB5A", color: "#fff" }}
+                      onClick={() => handleAction(shop.id, "approve")} />
                     <a href={`/shop/${shop.slug}`} target="_blank" rel="noreferrer"
                       className="px-3 py-1.5 rounded-lg text-[11px] font-semibold"
                       style={{ background: "rgba(255,255,255,0.04)", color: "var(--t3)", border: "1px solid rgba(255,255,255,0.08)", textDecoration: "none" }}>
                       ↗ View
                     </a>
-                    {/* Soft delete — opens modal */}
-                    <ActionBtn
-                      label="Delete" disabled={isActing}
+                    <ActionBtn label="Delete" disabled={isActing}
+                      style={{ background: "rgba(239,68,68,0.06)", color: "#f87171", border: "1px solid rgba(239,68,68,0.15)" }}
+                      onClick={() => { setDeleteModal({ shopId: shop.id, shopName: shop.name }); setDeleteReason(""); setSuspendVendor(true); }} />
+                  </>
+                ) : isPending ? (
+                  <>
+                    <ActionBtn label={isActing ? "…" : "✕ Reject"} disabled={isActing}
+                      style={{ background: "rgba(239,68,68,0.09)", color: "#f87171", border: "1px solid rgba(239,68,68,0.20)" }}
+                      onClick={() => { setRejectModal({ shopId: shop.id, shopName: shop.name }); setRejectReason(""); }} />
+                    <ActionBtn label={isActing ? "…" : "✓ Approve"} disabled={isActing}
+                      style={{ background: "#1FBB5A", color: "#fff" }}
+                      onClick={() => handleAction(shop.id, "approve")} />
+                    <a href={`/shop/${shop.slug}`} target="_blank" rel="noreferrer"
+                      className="px-3 py-1.5 rounded-lg text-[11px] font-semibold"
+                      style={{ background: "rgba(255,255,255,0.04)", color: "var(--t3)", border: "1px solid rgba(255,255,255,0.08)", textDecoration: "none" }}>
+                      ↗ View
+                    </a>
+                    <ActionBtn label="Delete" disabled={isActing}
+                      style={{ background: "rgba(239,68,68,0.06)", color: "#f87171", border: "1px solid rgba(239,68,68,0.15)" }}
+                      onClick={() => { setDeleteModal({ shopId: shop.id, shopName: shop.name }); setDeleteReason(""); setSuspendVendor(true); }} />
+                  </>
+                ) : (
+                  <>
+                    <ActionBtn label={shop.is_active ? "Deactivate" : "Activate"} disabled={isActing}
+                      style={{ background: "rgba(255,255,255,0.06)", color: "var(--t2)", border: "1px solid rgba(255,255,255,0.10)" }}
+                      onClick={() => handleAction(shop.id, "toggle_active")} />
+                    <ActionBtn label={shop.is_featured ? "⭐ Unfeature" : "⭐ Feature"} disabled={isActing}
+                      style={{ background: shop.is_featured ? "rgba(232,168,0,0.18)" : "rgba(232,168,0,0.08)", color: "#E8A800", border: "1px solid rgba(232,168,0,0.25)" }}
+                      onClick={() => handleAction(shop.id, "edit", { is_featured: !shop.is_featured })} />
+                    <ActionBtn label={shop.is_boosted ? "🚀 Unboost" : "🚀 Boost"} disabled={isActing}
+                      style={{ background: shop.is_boosted ? "rgba(255,94,26,0.18)" : "rgba(255,94,26,0.08)", color: "var(--accent)", border: "1px solid rgba(255,94,26,0.25)" }}
+                      onClick={() => handleAction(shop.id, "edit", { is_boosted: !shop.is_boosted })} />
+                    <a href={`/shop/${shop.slug}`} target="_blank" rel="noreferrer"
+                      className="px-3 py-1.5 rounded-lg text-[11px] font-semibold"
+                      style={{ background: "rgba(255,255,255,0.04)", color: "var(--t3)", border: "1px solid rgba(255,255,255,0.08)", textDecoration: "none" }}>
+                      ↗ View
+                    </a>
+                    <ActionBtn label="Delete" disabled={isActing}
                       style={{ background: "rgba(239,68,68,0.06)", color: "#f87171", border: "1px solid rgba(239,68,68,0.15)" }}
                       onClick={() => { setDeleteModal({ shopId: shop.id, shopName: shop.name }); setDeleteReason(""); setSuspendVendor(true); }} />
                   </>
@@ -573,51 +556,72 @@ export default function AdminShopsPage() {
         })}
       </div>
 
-      {/* ── Soft-delete modal ── */}
-      {deleteModal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end" }}
-          onClick={() => setDeleteModal(null)}>
-          <div style={{ background: "#0C0F18", borderRadius: "20px 20px 0 0", padding: "20px 18px", width: "100%", boxSizing: "border-box" }}
-            onClick={e => e.stopPropagation()}>
-            <div style={{ width: 40, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.15)", margin: "0 auto 18px" }} />
-            <p style={{ fontFamily: "'Syne',sans-serif", fontSize: 16, fontWeight: 800, color: "#F2F5FF", marginBottom: 4 }}>
-              Delete Shop
-            </p>
-            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.40)", marginBottom: 16 }}>
-              "{deleteModal.shopName}" will be hidden from all public views. You can restore it later.
-            </p>
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.40)", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 6 }}>
-                Reason (optional)
-              </label>
-              <input
-                value={deleteReason}
-                onChange={e => setDeleteReason(e.target.value)}
-                placeholder="e.g. Duplicate shop, owner request, spam…"
-                style={{ width: "100%", padding: "11px 13px", borderRadius: 11, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#F2F5FF", fontSize: 14, outline: "none", fontFamily: "'DM Sans',sans-serif", boxSizing: "border-box" }}
-              />
-            </div>
-            <label style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18, cursor: "pointer" }}>
-              <input type="checkbox" checked={suspendVendor} onChange={e => setSuspendVendor(e.target.checked)} />
-              <span style={{ fontSize: 13, color: suspendVendor ? "#F2F5FF" : "rgba(255,255,255,0.50)" }}>
-                Also suspend vendor account (blocks dashboard access)
-              </span>
-            </label>
-            <p style={{ fontSize: 11, color: "rgba(255,255,255,0.25)", marginBottom: 16 }}>
-              If suspended, the vendor must contact support to re-onboard. Their phone number will not auto-link to the deleted shop.
-            </p>
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => setDeleteModal(null)}
-                style={{ flex: 1, padding: "13px", borderRadius: 12, background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.55)", border: "none", cursor: "pointer", fontSize: 13, fontFamily: "'DM Sans',sans-serif" }}>
-                Cancel
-              </button>
-              <button onClick={handleSoftDelete} disabled={!!acting}
-                style={{ flex: 2, padding: "13px", borderRadius: 12, background: acting ? "rgba(239,68,68,0.30)" : "rgba(239,68,68,0.80)", color: "#fff", border: "none", cursor: acting ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans',sans-serif" }}>
-                {acting ? "Deleting…" : "Confirm Delete"}
-              </button>
-            </div>
+      {/* ── Reject modal ── */}
+      {rejectModal && (
+        <BottomModal onClose={() => setRejectModal(null)}>
+          <p style={{ fontFamily: "'Syne',sans-serif", fontSize: 16, fontWeight: 800, color: "#F2F5FF", marginBottom: 4 }}>
+            Reject Shop
+          </p>
+          <p style={{ fontSize: 12, color: "rgba(255,255,255,0.40)", marginBottom: 16 }}>
+            "{rejectModal.shopName}" will be moved to the Rejected tab.
+          </p>
+          <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.40)", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 6 }}>
+            Reason (optional)
+          </label>
+          <input
+            value={rejectReason}
+            onChange={e => setRejectReason(e.target.value)}
+            placeholder="e.g. Incomplete info, spam, outside service area…"
+            style={{ width: "100%", padding: "11px 13px", borderRadius: 11, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#F2F5FF", fontSize: 14, outline: "none", fontFamily: "'DM Sans',sans-serif", boxSizing: "border-box", marginBottom: 16 }}
+          />
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={() => setRejectModal(null)}
+              style={{ flex: 1, padding: "13px", borderRadius: 12, background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.55)", border: "none", cursor: "pointer", fontSize: 13, fontFamily: "'DM Sans',sans-serif" }}>
+              Cancel
+            </button>
+            <button onClick={confirmReject} disabled={!!acting}
+              style={{ flex: 2, padding: "13px", borderRadius: 12, background: "rgba(239,68,68,0.80)", color: "#fff", border: "none", cursor: acting ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans',sans-serif" }}>
+              Confirm Reject
+            </button>
           </div>
-        </div>
+        </BottomModal>
+      )}
+
+      {/* ── Delete modal ── */}
+      {deleteModal && (
+        <BottomModal onClose={() => setDeleteModal(null)}>
+          <p style={{ fontFamily: "'Syne',sans-serif", fontSize: 16, fontWeight: 800, color: "#F2F5FF", marginBottom: 4 }}>
+            Delete Shop
+          </p>
+          <p style={{ fontSize: 12, color: "rgba(255,255,255,0.40)", marginBottom: 16 }}>
+            "{deleteModal.shopName}" will be hidden from all public views. You can restore it later.
+          </p>
+          <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.40)", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 6 }}>
+            Reason (optional)
+          </label>
+          <input
+            value={deleteReason}
+            onChange={e => setDeleteReason(e.target.value)}
+            placeholder="e.g. Duplicate shop, owner request, spam…"
+            style={{ width: "100%", padding: "11px 13px", borderRadius: 11, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#F2F5FF", fontSize: 14, outline: "none", fontFamily: "'DM Sans',sans-serif", boxSizing: "border-box", marginBottom: 12 }}
+          />
+          <label style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18, cursor: "pointer" }}>
+            <input type="checkbox" checked={suspendVendor} onChange={e => setSuspendVendor(e.target.checked)} />
+            <span style={{ fontSize: 13, color: suspendVendor ? "#F2F5FF" : "rgba(255,255,255,0.50)" }}>
+              Also suspend vendor account (blocks dashboard access)
+            </span>
+          </label>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={() => setDeleteModal(null)}
+              style={{ flex: 1, padding: "13px", borderRadius: 12, background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.55)", border: "none", cursor: "pointer", fontSize: 13, fontFamily: "'DM Sans',sans-serif" }}>
+              Cancel
+            </button>
+            <button onClick={handleSoftDelete} disabled={!!acting}
+              style={{ flex: 2, padding: "13px", borderRadius: 12, background: acting ? "rgba(239,68,68,0.30)" : "rgba(239,68,68,0.80)", color: "#fff", border: "none", cursor: acting ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans',sans-serif" }}>
+              {acting ? "Deleting…" : "Confirm Delete"}
+            </button>
+          </div>
+        </BottomModal>
       )}
     </div>
   );
@@ -646,5 +650,18 @@ function ActionBtn({ label, onClick, disabled, style }: {
       style={{ opacity: disabled ? 0.5 : 1, ...style }}>
       {label}
     </button>
+  );
+}
+
+function BottomModal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end" }}
+      onClick={onClose}>
+      <div style={{ background: "#0C0F18", borderRadius: "20px 20px 0 0", padding: "20px 18px", width: "100%", boxSizing: "border-box" }}
+        onClick={e => e.stopPropagation()}>
+        <div style={{ width: 40, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.15)", margin: "0 auto 18px" }} />
+        {children}
+      </div>
+    </div>
   );
 }
