@@ -71,7 +71,7 @@ export async function PATCH(req: NextRequest) {
   const adminClient = createAdminClient();
 
   const { data: before } = await adminClient
-    .from("profiles").select("role, status, name").eq("id", user_id).single();
+    .from("profiles").select("role, status, name").eq("id", user_id).maybeSingle();
   if (!before) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
   let updates: Record<string, unknown> = {};
@@ -104,12 +104,10 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   }
 
-  const { data, error } = await adminClient
+  const { error } = await adminClient
     .from("profiles")
     .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq("id", user_id)
-    .select("id, name, phone, role, status")
-    .single();
+    .eq("id", user_id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -119,5 +117,5 @@ export async function PATCH(req: NextRequest) {
     reason,
   );
 
-  return NextResponse.json({ user: data });
+  return NextResponse.json({ user: { id: user_id, name: before.name, ...updates } });
 }
