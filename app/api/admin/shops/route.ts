@@ -207,12 +207,13 @@ export async function DELETE(req: NextRequest) {
   const { error: deleteErr } = await adminClient
     .from("shops")
     .update({
-      deleted_at:    now,
-      deleted_by:    admin.id,
-      delete_reason: reason ?? null,
-      is_active:     false,
-      is_approved:   false,
-      updated_at:    now,
+      deleted_at:      now,
+      deleted_by:      admin.id,
+      delete_reason:   reason ?? null,
+      approval_status: "rejected",
+      is_active:       false,
+      is_approved:     false,
+      updated_at:      now,
     })
     .eq("id", shopId);
 

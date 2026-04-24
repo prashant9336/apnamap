@@ -24,8 +24,8 @@ export default async function AdminDashboardPage() {
     const [locRes, catRes, s, p, r, v, u, nu] = await Promise.all([
       admin.from("localities").select("id, name").order("priority"),
       admin.from("categories").select("id, name, icon").order("name"),
-      admin.from("shops").select("*", { count: "exact", head: true }),
-      admin.from("shops").select("*", { count: "exact", head: true }).eq("is_approved", false),
+      admin.from("shops").select("*", { count: "exact", head: true }).is("deleted_at", null),
+      admin.from("shops").select("*", { count: "exact", head: true }).eq("approval_status", "pending").is("deleted_at", null),
       admin.from("vendor_requests").select("*", { count: "exact", head: true }).eq("status", "pending"),
       admin.from("vendors").select("*", { count: "exact", head: true }),
       admin.from("profiles").select("*", { count: "exact", head: true }).eq("role", "customer"),

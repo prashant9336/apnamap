@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   const adminClient = createAdminClient();
 
   const [shops, offers, users, pending] = await Promise.all([
-    adminClient.from("shops").select("id", { count: "exact", head: true }),
+    adminClient.from("shops").select("id", { count: "exact", head: true }).is("deleted_at", null),
     adminClient.from("offers").select("id", { count: "exact", head: true }).eq("is_active", true),
     adminClient.from("profiles").select("id", { count: "exact", head: true }),
     adminClient.from("shops").select("id", { count: "exact", head: true }).eq("approval_status", "pending").is("deleted_at", null),

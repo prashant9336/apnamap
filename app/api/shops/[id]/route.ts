@@ -15,7 +15,9 @@ export async function GET(
       offers(id, title, description, discount_type, discount_value, coupon_code, ends_at, tier, is_active, click_count)
     `)
     .eq("slug", params.id)
-    .eq("is_approved", true)
+    .eq("approval_status", "approved")
+    .eq("is_active", true)
+    .is("deleted_at", null)
     .single();
 
   if (error || !data) return NextResponse.json({ error: "Shop not found" }, { status: 404 });

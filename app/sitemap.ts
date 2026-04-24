@@ -8,7 +8,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const { data: shops } = await supabase
     .from("shops").select("slug, updated_at")
-    .eq("is_approved", true).limit(500);
+    .eq("approval_status", "approved")
+    .eq("is_active", true)
+    .is("deleted_at", null)
+    .limit(500);
 
   const staticRoutes: MetadataRoute.Sitemap = [
     { url: base,           lastModified: new Date(), changeFrequency: "daily",  priority: 1   },

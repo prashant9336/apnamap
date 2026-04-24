@@ -495,8 +495,10 @@ function ShopsTab({ which, localities, categories }: { which: "pending" | "all";
   const [editShop,  setEditShop]  = useState<any | null>(null);
 
   useEffect(() => {
-    const q = sb.from("shops").select("*, category:categories(name,icon), locality:localities(name)").order("created_at", { ascending: false });
-    (which === "pending" ? q.eq("is_approved", false) : q.eq("is_approved", true).limit(80))
+    const base = sb.from("shops").select("*, category:categories(name,icon), locality:localities(name)")
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false });
+    (which === "pending" ? base.eq("approval_status", "pending") : base.eq("approval_status", "approved").limit(80))
       .then(({ data }) => { setShops(data ?? []); setLoading(false); });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [which]);
