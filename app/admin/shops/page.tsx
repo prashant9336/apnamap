@@ -294,7 +294,7 @@ export default function AdminShopsPage() {
     const res = await fetch("/api/admin/bulk", {
       method:  "POST",
       headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body:    JSON.stringify({ action, shop_ids: [...selectedIds], ...extra }),
+      body:    JSON.stringify({ action, shop_ids: Array.from(selectedIds), ...extra }),
     });
     if (res.ok) {
       loadShops(token, showDeleted);
