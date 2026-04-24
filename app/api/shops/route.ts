@@ -40,8 +40,9 @@ export async function GET(req: Request) {
         locality:localities(id,name,slug,lat,lng),
         offers(id,title,tier,is_active,ends_at,discount_type,discount_value,coupon_code)
       `, { count: "exact" })
+      .eq("approval_status", "approved")
       .eq("is_active", true)
-      .eq("is_approved", true)
+      .is("deleted_at", null)
       .gte("lat", lat - latDelta)
       .lte("lat", lat + latDelta)
       .gte("lng", lng - lngDelta)
