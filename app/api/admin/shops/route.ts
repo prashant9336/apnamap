@@ -96,7 +96,7 @@ export async function PATCH(req: NextRequest) {
     .from("shops")
     .select("is_approved, is_active, is_featured, is_boosted, deleted_at, vendor_id")
     .eq("id", shop_id)
-    .single();
+    .maybeSingle();
 
   let updates: Record<string, unknown> = {};
 
@@ -106,7 +106,7 @@ export async function PATCH(req: NextRequest) {
     updates = { is_approved: false, is_active: false };
   } else if (action === "toggle_active") {
     const { data: current } = await adminClient
-      .from("shops").select("is_active").eq("id", shop_id).single();
+      .from("shops").select("is_active").eq("id", shop_id).maybeSingle();
     updates = { is_active: !current?.is_active };
   } else if (action === "restore") {
     // Restore soft-deleted shop back to pending state — admin must re-approve
@@ -137,26 +137,16 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   }
 
-  const { data, error } = await adminClient
+  const { error } = await adminClient
     .from("shops")
     .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq("id", shop_id)
-    .select(`
-      id, name, slug, vendor_id, description, phone, whatsapp, address,
-      lat, lng, open_time, close_time, open_days,
-      is_approved, is_active, is_featured, is_claimed, is_boosted,
-      deleted_at, created_at,
-      category_id, locality_id,
-      category:categories(name, icon),
-      locality:localities(name)
-    `)
-    .single();
+    .eq("id", shop_id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   logAdminAction(adminClient, admin.id, `shop_${action}`, "shop", shop_id, before ?? {}, updates, reason);
 
-  return NextResponse.json({ shop: data });
+  return NextResponse.json({ shop: { id: shop_id, ...before, ...updates } });
 }
 
 /* ── DELETE — soft delete + optional vendor suspension ────────────────── */
@@ -178,7 +168,7 @@ export async function DELETE(req: NextRequest) {
     .from("shops")
     .select("id, name, vendor_id, is_approved, is_active, deleted_at")
     .eq("id", shopId)
-    .single();
+    .maybeSingle();
 
   if (!shopBefore) return NextResponse.json({ error: "Shop not found" }, { status: 404 });
   if (shopBefore.deleted_at) {
