@@ -53,6 +53,11 @@ export async function GET(req: NextRequest) {
 
   if (!showDeleted) query = query.is("deleted_at", null);
 
+  const statusFilter = url.searchParams.get("status");
+  if (statusFilter && ["pending", "approved", "rejected"].includes(statusFilter)) {
+    query = query.eq("approval_status", statusFilter);
+  }
+
   const { data: shops, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

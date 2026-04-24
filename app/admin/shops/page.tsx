@@ -109,6 +109,11 @@ export default function AdminShopsPage() {
   const [filters, setFilters] = useState<Filters>({
     search: "", health: "all", status: "all", offer: "all", active: "all", locality: "", category: "",
   });
+  const [selectedIds,    setSelectedIds]    = useState<Set<string>>(new Set());
+  const [bulkActing,     setBulkActing]     = useState(false);
+  const [bulkModal,      setBulkModal]      = useState<"reject" | "category" | null>(null);
+  const [bulkReason,     setBulkReason]     = useState("");
+  const [bulkCategoryId, setBulkCategoryId] = useState("");
 
   /* ── Load ── */
   function loadShops(tok: string, withDeleted: boolean) {
@@ -271,6 +276,39 @@ export default function AdminShopsPage() {
     setFilters({ search: "", health: "all", status: "all", offer: "all", active: "all", locality: "", category: "" });
   }
 
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+  function selectAllFiltered() {
+    setSelectedIds(new Set(filtered.filter(s => !s.deleted_at).map(s => s.id)));
+  }
+  function clearSelection() { setSelectedIds(new Set()); }
+
+  async function handleBulkAction(action: string, extra: Record<string, unknown> = {}) {
+    if (selectedIds.size === 0) return;
+    setBulkActing(true);
+    const res = await fetch("/api/admin/bulk", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body:    JSON.stringify({ action, shop_ids: [...selectedIds], ...extra }),
+    });
+    if (res.ok) {
+      loadShops(token, showDeleted);
+      setSelectedIds(new Set());
+    } else {
+      const err = await res.json().catch(() => ({ error: "Unknown error" }));
+      alert(`Bulk action failed: ${err.error}`);
+    }
+    setBulkActing(false);
+    setBulkModal(null);
+    setBulkReason("");
+    setBulkCategoryId("");
+  }
+
   const isFiltered = filters.search || filters.health !== "all" || filters.status !== "all" ||
     filters.offer !== "all" || filters.active !== "all" || filters.locality || filters.category;
 
@@ -406,9 +444,11 @@ export default function AdminShopsPage() {
 
           const activeOffers = shop.offers.filter(o => o.is_active && (!o.ends_at || new Date(o.ends_at) > new Date()));
 
+          const isSelected = selectedIds.has(shop.id);
+
           return (
             <div key={shop.id} className="p-4 rounded-2xl"
-              style={{ background: cardBg, border: `1px solid ${cardBorder}`, opacity: isDeleted ? 0.75 : 1 }}>
+              style={{ background: cardBg, border: isSelected ? "1px solid rgba(255,94,26,0.55)" : `1px solid ${cardBorder}`, opacity: isDeleted ? 0.75 : 1, position: "relative" }}>
 
               {isDeleted && (
                 <div className="mb-3 px-2.5 py-1.5 rounded-lg text-xs font-semibold"
@@ -425,8 +465,18 @@ export default function AdminShopsPage() {
                 </div>
               )}
 
+              {/* Selection checkbox */}
+              {!isDeleted && (
+                <label style={{ position: "absolute", top: 14, right: 14, display: "flex", alignItems: "center", gap: 6, cursor: "pointer", zIndex: 2 }}
+                  onClick={e => { e.stopPropagation(); toggleSelect(shop.id); }}>
+                  <div style={{ width: 20, height: 20, borderRadius: 6, border: isSelected ? "none" : "1px solid rgba(255,255,255,0.22)", background: isSelected ? "#FF5E1A" : "rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s ease", flexShrink: 0 }}>
+                    {isSelected && <span style={{ color: "#fff", fontSize: 12, fontWeight: 900, lineHeight: 1 }}>✓</span>}
+                  </div>
+                </label>
+              )}
+
               {/* Top row */}
-              <div className="flex items-start gap-3 mb-3">
+              <div className="flex items-start gap-3 mb-3" style={{ paddingRight: isDeleted ? 0 : 28 }}>
                 <span className="text-2xl flex-shrink-0 mt-0.5">{shop.subcategory?.icon ?? shop.category?.icon ?? "🏪"}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -555,6 +605,73 @@ export default function AdminShopsPage() {
           );
         })}
       </div>
+
+      {/* ── Bulk action bar ── */}
+      {selectedIds.size > 0 && (
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 60, background: "rgba(10,12,22,0.97)", backdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,94,26,0.30)", padding: "12px 16px", paddingBottom: "calc(12px + env(safe-area-inset-bottom,0px))" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#FF5E1A" }}>{selectedIds.size} selected</span>
+            <button onClick={selectAllFiltered} style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", background: "none", border: "none", cursor: "pointer", padding: "3px 8px" }}>
+              Select all ({filtered.filter(s => !s.deleted_at).length})
+            </button>
+            <button onClick={clearSelection} style={{ marginLeft: "auto", fontSize: 11, color: "rgba(255,255,255,0.35)", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 8, cursor: "pointer", padding: "4px 10px" }}>
+              ✕ Clear
+            </button>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button onClick={() => handleBulkAction("approve")} disabled={bulkActing}
+              style={{ flex: 1, minWidth: 80, padding: "11px 8px", borderRadius: 12, background: "#1FBB5A", color: "#fff", fontWeight: 700, fontSize: 12, border: "none", cursor: bulkActing ? "not-allowed" : "pointer", opacity: bulkActing ? 0.6 : 1 }}>
+              {bulkActing ? "…" : "✓ Approve"}
+            </button>
+            <button onClick={() => setBulkModal("reject")} disabled={bulkActing}
+              style={{ flex: 1, minWidth: 80, padding: "11px 8px", borderRadius: 12, background: "rgba(239,68,68,0.12)", color: "#f87171", fontWeight: 700, fontSize: 12, border: "1px solid rgba(239,68,68,0.25)", cursor: bulkActing ? "not-allowed" : "pointer", opacity: bulkActing ? 0.6 : 1 }}>
+              ✕ Reject
+            </button>
+            <button onClick={() => handleBulkAction("add_tags", { tags: ["recommended"] })} disabled={bulkActing}
+              style={{ padding: "11px 12px", borderRadius: 12, background: "rgba(232,168,0,0.10)", color: "#E8A800", fontWeight: 700, fontSize: 12, border: "1px solid rgba(232,168,0,0.22)", cursor: bulkActing ? "not-allowed" : "pointer", opacity: bulkActing ? 0.6 : 1 }}>
+              ⭐ Rec
+            </button>
+            <button onClick={() => handleBulkAction("add_tags", { tags: ["hidden_gem"] })} disabled={bulkActing}
+              style={{ padding: "11px 12px", borderRadius: 12, background: "rgba(59,130,246,0.10)", color: "#60a5fa", fontWeight: 700, fontSize: 12, border: "1px solid rgba(59,130,246,0.22)", cursor: bulkActing ? "not-allowed" : "pointer", opacity: bulkActing ? 0.6 : 1 }}>
+              💎 Gem
+            </button>
+            <button onClick={() => handleBulkAction("add_tags", { tags: ["trending"] })} disabled={bulkActing}
+              style={{ padding: "11px 12px", borderRadius: 12, background: "rgba(255,94,26,0.10)", color: "#FF5E1A", fontWeight: 700, fontSize: 12, border: "1px solid rgba(255,94,26,0.22)", cursor: bulkActing ? "not-allowed" : "pointer", opacity: bulkActing ? 0.6 : 1 }}>
+              🔥 Trend
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Bulk reject modal ── */}
+      {bulkModal === "reject" && (
+        <BottomModal onClose={() => setBulkModal(null)}>
+          <p style={{ fontFamily: "'Syne',sans-serif", fontSize: 16, fontWeight: 800, color: "#F2F5FF", marginBottom: 4 }}>
+            Reject {selectedIds.size} shops
+          </p>
+          <p style={{ fontSize: 12, color: "rgba(255,255,255,0.40)", marginBottom: 16 }}>
+            All selected shops will be moved to Rejected.
+          </p>
+          <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.40)", textTransform: "uppercase" as const, letterSpacing: "0.8px", marginBottom: 6 }}>
+            Reason (applied to all)
+          </label>
+          <input
+            value={bulkReason}
+            onChange={e => setBulkReason(e.target.value)}
+            placeholder="e.g. Incomplete info, outside service area…"
+            style={{ width: "100%", padding: "11px 13px", borderRadius: 11, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#F2F5FF", fontSize: 14, outline: "none", fontFamily: "'DM Sans',sans-serif", boxSizing: "border-box" as const, marginBottom: 16 }}
+          />
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={() => setBulkModal(null)} style={{ flex: 1, padding: "13px", borderRadius: 12, background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.55)", border: "none", cursor: "pointer", fontSize: 13, fontFamily: "'DM Sans',sans-serif" }}>
+              Cancel
+            </button>
+            <button onClick={() => handleBulkAction("reject", { reason: bulkReason.trim() || undefined })} disabled={bulkActing}
+              style={{ flex: 2, padding: "13px", borderRadius: 12, background: "rgba(239,68,68,0.80)", color: "#fff", border: "none", cursor: bulkActing ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans',sans-serif" }}>
+              {bulkActing ? "Rejecting…" : `Reject ${selectedIds.size} shops`}
+            </button>
+          </div>
+        </BottomModal>
+      )}
 
       {/* ── Reject modal ── */}
       {rejectModal && (
