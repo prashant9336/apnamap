@@ -232,12 +232,17 @@ export default function AdminShopsPage() {
     });
     if (res.ok) {
       const { shop: updated } = await res.json();
-      if (action === "restore") {
-        // Re-load to get fresh state
+      if (action === "restore" || action === "approve") {
         loadShops(token, showDeleted);
+      } else if (action === "reject") {
+        // Remove from list immediately — rejected shops don't belong in the pending queue
+        setShops(prev => prev.filter(s => s.id !== shopId));
       } else {
         setShops(prev => prev.map(s => s.id === shopId ? { ...s, ...updated } : s));
       }
+    } else {
+      const err = await res.json().catch(() => ({ error: "Unknown error" }));
+      alert(`Action failed: ${err.error ?? "Unknown error"}`);
     }
     setActing(null);
   }

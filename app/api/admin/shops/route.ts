@@ -101,16 +101,16 @@ export async function PATCH(req: NextRequest) {
   let updates: Record<string, unknown> = {};
 
   if (action === "approve") {
-    updates = { is_approved: true, is_active: true, rejected_at: null };
+    updates = { is_approved: true, is_active: true };
   } else if (action === "reject") {
-    updates = { is_approved: false, is_active: false, rejected_at: new Date().toISOString() };
+    updates = { is_approved: false, is_active: false };
   } else if (action === "toggle_active") {
     const { data: current } = await adminClient
       .from("shops").select("is_active").eq("id", shop_id).maybeSingle();
     updates = { is_active: !current?.is_active };
   } else if (action === "restore") {
     // Restore soft-deleted shop back to pending state — admin must re-approve
-    updates = { deleted_at: null, deleted_by: null, delete_reason: null, is_approved: false, is_active: false, rejected_at: null };
+    updates = { deleted_at: null, deleted_by: null, delete_reason: null, is_approved: false, is_active: false };
     if (reactivate_vendor && before?.vendor_id) {
       await adminClient
         .from("profiles")
@@ -144,9 +144,16 @@ export async function PATCH(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // Best-effort: set/clear rejected_at if column exists (migration 027)
+  if (action === "reject") {
+    await adminClient.from("shops").update({ rejected_at: new Date().toISOString() }).eq("id", shop_id);
+  } else if (action === "approve" || action === "restore") {
+    await adminClient.from("shops").update({ rejected_at: null }).eq("id", shop_id);
+  }
+
   logAdminAction(adminClient, admin.id, `shop_${action}`, "shop", shop_id, before ?? {}, updates, reason);
 
-  return NextResponse.json({ shop: { id: shop_id, ...before, ...updates } });
+  return NextResponse.json({ shop: { id: shop_id, ...before, ...updates, rejected_at: action === "reject" ? new Date().toISOString() : null } });
 }
 
 /* ── DELETE — soft delete + optional vendor suspension ────────────────── */
