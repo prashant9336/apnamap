@@ -3,8 +3,11 @@ import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
-/* ── Types ─────────────────────────────────────────────────────────── */
+/* ── Types ─────────────────────────────────────────────────────────────── */
 interface ShopOffer { id: string; is_active: boolean; ends_at: string | null; }
+interface VendorOwner { name: string | null; phone: string | null; status: string; }
+interface ShopVendor  { id: string; mobile: string | null; is_approved: boolean; owner: VendorOwner | null; }
+
 interface ShopRow {
   id: string;
   name: string;
@@ -23,38 +26,47 @@ interface ShopRow {
   review_count: number;
   updated_at: string;
   created_at: string;
+  deleted_at: string | null;
+  deleted_by: string | null;
+  delete_reason: string | null;
   category:    { id: string; name: string; icon: string } | null;
   subcategory: { id: string; name: string; icon: string } | null;
   locality:    { id: string; name: string } | null;
   offers: ShopOffer[];
+  vendor: ShopVendor | null;
 }
 
 type Health = "healthy" | "needs_attention" | "dead";
 
 interface Filters {
-  search:    string;
-  health:    Health | "all";
-  status:    "all" | "approved" | "pending";
-  claimed:   "all" | "claimed" | "unclaimed";
-  offer:     "all" | "has_offer" | "no_offer";
-  locality:  string;   // id or ""
-  category:  string;   // id or ""
+  search:         string;
+  health:         Health | "all";
+  status:         "all" | "approved" | "pending" | "deleted";
+  offer:          "all" | "has_offer" | "no_offer";
+  active:         "all" | "active" | "inactive";
+  locality:       string;
+  category:       string;
 }
 
-/* ── Health logic ───────────────────────────────────────────────────── */
+interface DeleteModal {
+  shopId: string;
+  shopName: string;
+}
+
+/* ── Health logic ───────────────────────────────────────────────────────── */
 function computeHealth(shop: ShopRow): Health {
-  if (!shop.is_approved) return "dead"; // not yet live — treat as dead for action priority
+  if (!shop.is_approved || shop.deleted_at) return "dead";
 
   const activeOffers = shop.offers.filter(o => {
     if (!o.is_active) return false;
     if (o.ends_at && new Date(o.ends_at) < new Date()) return false;
     return true;
   });
-  const hasOffer     = activeOffers.length > 0;
-  const hasContact   = !!(shop.phone || shop.whatsapp);
-  const hasDesc      = !!shop.description?.trim();
-  const daysSince    = (Date.now() - new Date(shop.updated_at).getTime()) / 86_400_000;
-  const isStale      = daysSince > 30;
+  const hasOffer   = activeOffers.length > 0;
+  const hasContact = !!(shop.phone || shop.whatsapp);
+  const hasDesc    = !!shop.description?.trim();
+  const daysSince  = (Date.now() - new Date(shop.updated_at).getTime()) / 86_400_000;
+  const isStale    = daysSince > 30;
 
   if (hasOffer && hasContact && hasDesc && !isStale) return "healthy";
   if (!hasOffer && isStale && shop.view_count < 10)   return "dead";
@@ -62,24 +74,20 @@ function computeHealth(shop: ShopRow): Health {
 }
 
 const HEALTH: Record<Health, { label: string; color: string; bg: string; border: string }> = {
-  healthy:         { label: "Healthy",      color: "#1FBB5A", bg: "rgba(31,187,90,0.10)",   border: "rgba(31,187,90,0.30)"  },
-  needs_attention: { label: "Needs Action", color: "#E8A800", bg: "rgba(232,168,0,0.10)",   border: "rgba(232,168,0,0.30)"  },
-  dead:            { label: "Dead",         color: "#f87171", bg: "rgba(239,68,68,0.09)",   border: "rgba(239,68,68,0.25)"  },
+  healthy:         { label: "Healthy",      color: "#1FBB5A", bg: "rgba(31,187,90,0.10)",  border: "rgba(31,187,90,0.30)"  },
+  needs_attention: { label: "Needs Action", color: "#E8A800", bg: "rgba(232,168,0,0.10)",  border: "rgba(232,168,0,0.30)"  },
+  dead:            { label: "Dead",         color: "#f87171", bg: "rgba(239,68,68,0.09)",  border: "rgba(239,68,68,0.25)"  },
 };
 
-/* ── Sort weight ────────────────────────────────────────────────────── */
 const SORT_ORDER: Record<string, number> = {
-  pending_approval: 0,   // unapproved shops first
-  dead:             1,
-  needs_attention:  2,
-  healthy:          3,
+  pending_approval: 0, dead: 1, needs_attention: 2, healthy: 3,
 };
 function sortKey(shop: ShopRow, h: Health): number {
+  if (shop.deleted_at) return 99;
   if (!shop.is_approved) return SORT_ORDER["pending_approval"];
   return SORT_ORDER[h];
 }
 
-/* ── Helpers ────────────────────────────────────────────────────────── */
 function daysAgo(iso: string): string {
   const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
   if (d === 0) return "today";
@@ -89,32 +97,52 @@ function daysAgo(iso: string): string {
   return `${Math.floor(d / 365)}y ago`;
 }
 
-/* ── Component ──────────────────────────────────────────────────────── */
+/* ── Component ──────────────────────────────────────────────────────────── */
 export default function AdminShopsPage() {
-  const [shops,      setShops]      = useState<ShopRow[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [token,      setToken]      = useState("");
-  const [acting,     setActing]     = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [autoApproval, setAutoApproval] = useState<boolean | null>(null);
+  const [shops,         setShops]         = useState<ShopRow[]>([]);
+  const [loading,       setLoading]       = useState(true);
+  const [token,         setToken]         = useState("");
+  const [acting,        setActing]        = useState<string | null>(null);
+  const [autoApproval,  setAutoApproval]  = useState<boolean | null>(null);
+  const [showDeleted,   setShowDeleted]   = useState(false);
+  const [deleteModal,   setDeleteModal]   = useState<DeleteModal | null>(null);
+  const [deleteReason,  setDeleteReason]  = useState("");
+  const [suspendVendor, setSuspendVendor] = useState(true);
   const [filters, setFilters] = useState<Filters>({
-    search: "", health: "all", status: "all", claimed: "all",
-    offer: "all", locality: "", category: "",
+    search: "", health: "all", status: "all", offer: "all",
+    active: "all", locality: "", category: "",
   });
 
-  /* ── Load token + data ── */
+  /* ── Load ── */
+  function loadShops(tok: string, withDeleted: boolean) {
+    setLoading(true);
+    const qs = withDeleted ? "?include_deleted=true" : "";
+    fetch(`/api/admin/shops${qs}`, { headers: tok ? { Authorization: `Bearer ${tok}` } : {} })
+      .then(r => r.json())
+      .then(d => {
+        setShops(d.shops ?? []);
+        setAutoApproval(d.auto_approval_enabled ?? true);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }
+
   useEffect(() => {
     createClient().auth.getSession().then(({ data: { session } }) => {
       const tok = session?.access_token ?? "";
       setToken(tok);
-      fetch("/api/admin/shops", { headers: tok ? { Authorization: `Bearer ${tok}` } : {} })
-        .then(r => r.json())
-        .then(d => { setShops(d.shops ?? []); setAutoApproval(d.auto_approval_enabled ?? true); setLoading(false); })
-        .catch(() => setLoading(false));
+      loadShops(tok, showDeleted);
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* ── Derived state ── */
+  function toggleDeleted() {
+    const next = !showDeleted;
+    setShowDeleted(next);
+    loadShops(token, next);
+  }
+
+  /* ── Derived ── */
   const healthMap = useMemo<Map<string, Health>>(() => {
     const m = new Map<string, Health>();
     shops.forEach(s => m.set(s.id, computeHealth(s)));
@@ -134,28 +162,31 @@ export default function AdminShopsPage() {
   }, [shops]);
 
   const stats = useMemo(() => {
-    const total    = shops.length;
-    const healthy  = shops.filter(s => healthMap.get(s.id) === "healthy").length;
-    const attn     = shops.filter(s => healthMap.get(s.id) === "needs_attention").length;
-    const dead     = shops.filter(s => healthMap.get(s.id) === "dead").length;
-    const pending  = shops.filter(s => !s.is_approved).length;
-    const noOffer  = shops.filter(s => {
+    const total   = shops.filter(s => !s.deleted_at).length;
+    const healthy = shops.filter(s => !s.deleted_at && healthMap.get(s.id) === "healthy").length;
+    const attn    = shops.filter(s => !s.deleted_at && healthMap.get(s.id) === "needs_attention").length;
+    const dead    = shops.filter(s => !s.deleted_at && healthMap.get(s.id) === "dead").length;
+    const pending = shops.filter(s => !s.deleted_at && !s.is_approved).length;
+    const deleted = shops.filter(s => !!s.deleted_at).length;
+    const noOffer = shops.filter(s => {
+      if (s.deleted_at) return false;
       const active = s.offers.filter(o => o.is_active && (!o.ends_at || new Date(o.ends_at) > new Date()));
       return active.length === 0;
     }).length;
-    return { total, healthy, attn, dead, pending, noOffer };
+    return { total, healthy, attn, dead, pending, deleted, noOffer };
   }, [shops, healthMap]);
 
   const filtered = useMemo(() => {
-    const q = filters.search.toLowerCase();
+    const q = filters.search.toLowerCase().trim();
     return shops
       .filter(s => {
-        if (q && !s.name.toLowerCase().includes(q) && !s.locality?.name.toLowerCase().includes(q)) return false;
+        if (filters.status === "deleted"  && !s.deleted_at) return false;
+        if (filters.status !== "deleted"  && s.deleted_at && !showDeleted) return false;
+        if (filters.status === "approved" && (!s.is_approved || s.deleted_at)) return false;
+        if (filters.status === "pending"  && (s.is_approved  || s.deleted_at)) return false;
+        if (filters.active === "active"   && !s.is_active)  return false;
+        if (filters.active === "inactive" &&  s.is_active)  return false;
         if (filters.health !== "all" && healthMap.get(s.id) !== filters.health) return false;
-        if (filters.status === "approved" && !s.is_approved) return false;
-        if (filters.status === "pending"  &&  s.is_approved) return false;
-        if (filters.claimed === "claimed"   && !s.vendor_id) return false;
-        if (filters.claimed === "unclaimed" &&  s.vendor_id) return false;
         if (filters.offer === "has_offer") {
           const live = s.offers.filter(o => o.is_active && (!o.ends_at || new Date(o.ends_at) > new Date()));
           if (live.length === 0) return false;
@@ -166,6 +197,19 @@ export default function AdminShopsPage() {
         }
         if (filters.locality && s.locality?.id !== filters.locality) return false;
         if (filters.category && s.category?.id !== filters.category) return false;
+        // Search: shop name, locality, owner name, vendor mobile, shop phone
+        if (q) {
+          const ownerName   = (s.vendor?.owner?.name ?? "").toLowerCase();
+          const ownerPhone  = (s.vendor?.owner?.phone ?? s.vendor?.mobile ?? "").replace(/\D/g, "");
+          const shopPhone   = (s.phone ?? "").replace(/\D/g, "");
+          const match =
+            s.name.toLowerCase().includes(q) ||
+            (s.locality?.name ?? "").toLowerCase().includes(q) ||
+            ownerName.includes(q) ||
+            ownerPhone.includes(q.replace(/\D/g, "")) ||
+            shopPhone.includes(q.replace(/\D/g, ""));
+          if (!match) return false;
+        }
         return true;
       })
       .sort((a, b) => {
@@ -173,34 +217,51 @@ export default function AdminShopsPage() {
         const hb = healthMap.get(b.id) ?? "needs_attention";
         return sortKey(a, ha) - sortKey(b, hb);
       });
-  }, [shops, healthMap, filters]);
+  }, [shops, healthMap, filters, showDeleted]);
 
-  /* ── Action handler ── */
-  async function handleAction(shopId: string, action: string, fields?: Record<string, unknown>) {
+  /* ── Actions ── */
+  async function handleAction(shopId: string, action: string, fields?: Record<string, unknown>, reason?: string, reactivateVendor?: boolean) {
     setActing(shopId);
     const res = await fetch("/api/admin/shops", {
       method: "PATCH",
       headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: JSON.stringify({ shop_id: shopId, action, fields }),
+      body: JSON.stringify({ shop_id: shopId, action, fields, reason, reactivate_vendor: reactivateVendor }),
     });
     if (res.ok) {
       const { shop: updated } = await res.json();
-      setShops(prev => prev.map(s => s.id === shopId ? { ...s, ...updated } : s));
+      if (action === "restore") {
+        // Re-load to get fresh state
+        loadShops(token, showDeleted);
+      } else {
+        setShops(prev => prev.map(s => s.id === shopId ? { ...s, ...updated } : s));
+      }
     }
     setActing(null);
   }
 
-  async function handleDelete(shopId: string) {
-    setActing(shopId);
-    const res = await fetch(`/api/admin/shops?shop_id=${shopId}`, {
+  async function handleSoftDelete() {
+    if (!deleteModal) return;
+    setActing(deleteModal.shopId);
+    const params = new URLSearchParams({ shop_id: deleteModal.shopId });
+    if (deleteReason.trim()) params.set("reason", deleteReason.trim());
+    if (suspendVendor) params.set("suspend_vendor", "true");
+
+    const res = await fetch(`/api/admin/shops?${params.toString()}`, {
       method: "DELETE",
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (res.ok) {
-      setShops(prev => prev.filter(s => s.id !== shopId));
+      if (showDeleted) {
+        // Refresh to show updated deleted state
+        loadShops(token, true);
+      } else {
+        setShops(prev => prev.filter(s => s.id !== deleteModal.shopId));
+      }
     }
     setActing(null);
-    setDeletingId(null);
+    setDeleteModal(null);
+    setDeleteReason("");
+    setSuspendVendor(true);
   }
 
   function setFilter<K extends keyof Filters>(key: K, val: Filters[K]) {
@@ -208,11 +269,11 @@ export default function AdminShopsPage() {
   }
 
   function clearFilters() {
-    setFilters({ search: "", health: "all", status: "all", claimed: "all", offer: "all", locality: "", category: "" });
+    setFilters({ search: "", health: "all", status: "all", offer: "all", active: "all", locality: "", category: "" });
   }
 
   const isFiltered = filters.search || filters.health !== "all" || filters.status !== "all" ||
-    filters.claimed !== "all" || filters.offer !== "all" || filters.locality || filters.category;
+    filters.offer !== "all" || filters.active !== "all" || filters.locality || filters.category;
 
   /* ── Render ── */
   return (
@@ -222,11 +283,18 @@ export default function AdminShopsPage() {
         style={{ background: "rgba(5,7,12,0.96)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(255,255,255,0.06)", paddingTop: "calc(12px + env(safe-area-inset-top, 0px))" }}>
         <Link href="/admin/dashboard" className="text-xl leading-none">←</Link>
         <span className="font-syne font-black text-base flex-1">Shop Intelligence</span>
-        <span className="text-xs" style={{ color: "var(--t3)" }}>{shops.length} shops</span>
+        <button onClick={toggleDeleted}
+          className="text-[10px] font-bold px-2.5 py-1 rounded-full"
+          style={showDeleted
+            ? { background: "rgba(239,68,68,0.14)", color: "#f87171", border: "1px solid rgba(239,68,68,0.28)" }
+            : { background: "rgba(255,255,255,0.06)", color: "var(--t3)", border: "1px solid rgba(255,255,255,0.09)" }}>
+          {showDeleted ? "🗑 Hide Deleted" : "🗑 Show Deleted"}
+        </button>
+        <span className="text-xs" style={{ color: "var(--t3)" }}>{shops.filter(s => !s.deleted_at).length} shops</span>
       </div>
 
       <div className="px-4 pt-4 pb-page space-y-4">
-        {/* ── Auto-approval status banner ── */}
+        {/* Auto-approval banner */}
         {autoApproval !== null && (
           <div className="px-3 py-2.5 rounded-xl flex items-center justify-between"
             style={autoApproval
@@ -239,26 +307,31 @@ export default function AdminShopsPage() {
               <p className="text-[10px] mt-0.5" style={{ color: "var(--t3)" }}>
                 {autoApproval
                   ? "Qualifying shops go live instantly. Set AUTO_APPROVAL_ENABLED=false in Vercel env to pause."
-                  : "All new shops go to pending review. Set AUTO_APPROVAL_ENABLED=true in Vercel env to re-enable."}
+                  : "All new shops require manual approval. Set AUTO_APPROVAL_ENABLED=true in Vercel env to re-enable."}
               </p>
             </div>
           </div>
         )}
 
-        {/* ── Stats bar ── */}
+        {/* Stats bar */}
         <div className="grid grid-cols-3 gap-2">
           {[
-            { label: "Total",    val: stats.total,   key: null,              color: "var(--t1)" },
-            { label: "Healthy",  val: stats.healthy,  key: "healthy" as Health, color: "#1FBB5A" },
-            { label: "Action",   val: stats.attn,    key: "needs_attention" as Health, color: "#E8A800" },
-            { label: "Dead",     val: stats.dead,    key: "dead" as Health,  color: "#f87171" },
-            { label: "Pending",  val: stats.pending, key: null,              color: "#a78bfa", filterKey: "status" as const, filterVal: "pending" },
-            { label: "No Offer", val: stats.noOffer, key: null,              color: "var(--t2)", filterKey: "offer" as const, filterVal: "no_offer" },
-          ].map((s) => (
+            { label: "Total",    val: stats.total,   color: "var(--t1)",  filterKey: null },
+            { label: "Healthy",  val: stats.healthy,  color: "#1FBB5A",   filterKey: "health" as const, filterVal: "healthy"  },
+            { label: "Action",   val: stats.attn,    color: "#E8A800",   filterKey: "health" as const, filterVal: "needs_attention" },
+            { label: "Dead",     val: stats.dead,    color: "#f87171",   filterKey: "health" as const, filterVal: "dead"     },
+            { label: "Pending",  val: stats.pending, color: "#a78bfa",   filterKey: "status" as const, filterVal: "pending"  },
+            { label: "Deleted",  val: stats.deleted, color: "#64748b",   filterKey: "status" as const, filterVal: "deleted"  },
+          ].map(s => (
             <button key={s.label}
               onClick={() => {
-                if (s.key) setFilter("health", filters.health === s.key ? "all" : s.key);
-                else if (s.filterKey && s.filterVal) setFilter(s.filterKey as any, (filters as any)[s.filterKey!] === s.filterVal ? "all" : s.filterVal);
+                if (s.filterKey === "status") {
+                  const next = filters.status === s.filterVal ? "all" : s.filterVal as Filters["status"];
+                  setFilter("status", next);
+                  if (s.filterVal === "deleted" && !showDeleted) { setShowDeleted(true); loadShops(token, true); }
+                } else if (s.filterKey === "health") {
+                  setFilter("health", filters.health === s.filterVal ? "all" : s.filterVal as Health);
+                }
               }}
               className="p-2.5 rounded-xl text-left transition-all"
               style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
@@ -268,26 +341,26 @@ export default function AdminShopsPage() {
           ))}
         </div>
 
-        {/* ── Search ── */}
+        {/* Search */}
         <input
           type="text"
-          placeholder="Search shops or localities…"
+          placeholder="Search by shop name, owner, phone, locality…"
           value={filters.search}
           onChange={e => setFilter("search", e.target.value)}
           className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none"
           style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)", color: "var(--t1)" }}
         />
 
-        {/* ── Filters ── */}
+        {/* Filters */}
         <div className="grid grid-cols-2 gap-2">
           {[
             { key: "health",   label: "Health",   options: [["all","All Health"],["healthy","Healthy"],["needs_attention","Needs Action"],["dead","Dead"]] },
-            { key: "status",   label: "Status",   options: [["all","All Status"],["pending","Pending"],["approved","Approved"]] },
-            { key: "claimed",  label: "Claimed",  options: [["all","All"],["claimed","Claimed"],["unclaimed","Unclaimed"]] },
+            { key: "status",   label: "Status",   options: [["all","All Status"],["pending","Pending"],["approved","Approved"],["deleted","Deleted"]] },
+            { key: "active",   label: "Active",   options: [["all","All"],["active","Active"],["inactive","Inactive"]] },
             { key: "offer",    label: "Offer",    options: [["all","All Offers"],["has_offer","Has Offer"],["no_offer","No Offer"]] },
             { key: "locality", label: "Locality", options: [["","All Localities"], ...localities] },
             { key: "category", label: "Category", options: [["","All Categories"], ...categories] },
-          ].map((f) => (
+          ].map(f => (
             <select key={f.key} value={(filters as any)[f.key]}
               onChange={e => setFilter(f.key as keyof Filters, e.target.value as any)}
               className="px-2.5 py-2 rounded-xl text-xs outline-none"
@@ -304,10 +377,10 @@ export default function AdminShopsPage() {
           </button>
         )}
 
-        {/* ── Skeleton ── */}
+        {/* Skeleton */}
         {loading && [1,2,3,4].map(i => <div key={i} className="h-36 rounded-2xl shimmer" />)}
 
-        {/* ── Empty ── */}
+        {/* Empty */}
         {!loading && filtered.length === 0 && (
           <div className="text-center py-16" style={{ color: "var(--t2)" }}>
             <div className="text-4xl mb-3">🔍</div>
@@ -315,24 +388,39 @@ export default function AdminShopsPage() {
           </div>
         )}
 
-        {/* ── Shop cards ── */}
+        {/* Shop cards */}
         {!loading && filtered.map(shop => {
-          const h = healthMap.get(shop.id) ?? "needs_attention";
-          const hc = HEALTH[h];
-          const isPending = !shop.is_approved;
-          const activeOffers = shop.offers.filter(o => o.is_active && (!o.ends_at || new Date(o.ends_at) > new Date()));
-          const isActing = acting === shop.id;
+          const h         = healthMap.get(shop.id) ?? "needs_attention";
+          const hc        = HEALTH[h];
+          const isPending = !shop.is_approved && !shop.deleted_at;
+          const isDeleted = !!shop.deleted_at;
+          const isActing  = acting === shop.id;
 
-          const cardBorder = isPending
-            ? "rgba(167,139,250,0.30)"
-            : hc.border;
-          const cardBg = isPending
-            ? "rgba(167,139,250,0.06)"
-            : hc.bg;
+          const ownerName  = shop.vendor?.owner?.name ?? null;
+          const ownerPhone = shop.vendor?.owner?.phone ?? shop.vendor?.mobile ?? null;
+          const vendorSuspended = shop.vendor?.owner?.status === "suspended" || shop.vendor?.owner?.status === "deleted";
+
+          const cardBorder = isDeleted
+            ? "rgba(100,116,139,0.35)"
+            : isPending ? "rgba(167,139,250,0.30)" : hc.border;
+          const cardBg = isDeleted
+            ? "rgba(100,116,139,0.06)"
+            : isPending ? "rgba(167,139,250,0.06)" : hc.bg;
+
+          const activeOffers = shop.offers.filter(o => o.is_active && (!o.ends_at || new Date(o.ends_at) > new Date()));
 
           return (
             <div key={shop.id} className="p-4 rounded-2xl"
-              style={{ background: cardBg, border: `1px solid ${cardBorder}` }}>
+              style={{ background: cardBg, border: `1px solid ${cardBorder}`, opacity: isDeleted ? 0.75 : 1 }}>
+
+              {/* Deleted banner */}
+              {isDeleted && (
+                <div className="mb-3 px-2.5 py-1.5 rounded-lg text-xs font-semibold"
+                  style={{ background: "rgba(239,68,68,0.10)", color: "#f87171", border: "1px solid rgba(239,68,68,0.22)" }}>
+                  🗑 Deleted {daysAgo(shop.deleted_at!)}
+                  {shop.delete_reason && <span style={{ color: "var(--t3)" }}> · {shop.delete_reason}</span>}
+                </div>
+              )}
 
               {/* Top row */}
               <div className="flex items-start gap-3 mb-3">
@@ -340,19 +428,31 @@ export default function AdminShopsPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-syne font-bold text-sm leading-tight">{shop.name}</p>
-                    {/* Health badge */}
                     <span className="text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-full"
-                      style={{ background: isPending ? "rgba(167,139,250,0.15)" : hc.bg,
-                               color: isPending ? "#a78bfa" : hc.color,
-                               border: `1px solid ${isPending ? "rgba(167,139,250,0.30)" : hc.border}` }}>
-                      {isPending ? "⏳ Pending" : hc.label}
+                      style={isDeleted
+                        ? { background: "rgba(100,116,139,0.15)", color: "#64748b", border: "1px solid rgba(100,116,139,0.30)" }
+                        : { background: isPending ? "rgba(167,139,250,0.15)" : hc.bg,
+                            color: isPending ? "#a78bfa" : hc.color,
+                            border: `1px solid ${isPending ? "rgba(167,139,250,0.30)" : hc.border}` }}>
+                      {isDeleted ? "🗑 Deleted" : isPending ? "⏳ Pending" : hc.label}
                     </span>
                   </div>
                   <p className="text-xs mt-0.5" style={{ color: "var(--t3)" }}>
                     {shop.category?.name}{shop.locality ? ` · ${shop.locality.name}` : ""}
                   </p>
+                  {/* Owner info */}
+                  {(ownerName || ownerPhone) && (
+                    <p className="text-[11px] mt-1" style={{ color: "var(--t2)" }}>
+                      👤 {ownerName ?? "—"}{ownerPhone ? ` · 📞 ${ownerPhone}` : ""}
+                      {vendorSuspended && (
+                        <span className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+                          style={{ background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.25)" }}>
+                          ⛔ Suspended
+                        </span>
+                      )}
+                    </p>
+                  )}
                 </div>
-                {/* Views */}
                 <div className="text-right flex-shrink-0">
                   <p className="text-xs font-semibold" style={{ color: "var(--t2)" }}>👀 {shop.view_count}</p>
                   <p className="text-[10px]" style={{ color: "var(--t3)" }}>{daysAgo(shop.updated_at)}</p>
@@ -360,123 +460,151 @@ export default function AdminShopsPage() {
               </div>
 
               {/* Status badges */}
-              <div className="flex flex-wrap gap-1.5 mb-3">
-                {shop.is_approved && (
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
-                    style={{ background: "rgba(31,187,90,0.12)", color: "#1FBB5A", border: "1px solid rgba(31,187,90,0.25)" }}>
-                    ✓ Live
-                  </span>
-                )}
-                {shop.vendor_id && (
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
-                    style={{ background: "rgba(99,102,241,0.12)", color: "#818cf8", border: "1px solid rgba(99,102,241,0.25)" }}>
-                    Claimed
-                  </span>
-                )}
-                {shop.is_featured && (
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
-                    style={{ background: "rgba(232,168,0,0.12)", color: "#E8A800", border: "1px solid rgba(232,168,0,0.25)" }}>
-                    ⭐ Featured
-                  </span>
-                )}
-                {shop.is_boosted && (
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
-                    style={{ background: "rgba(255,94,26,0.12)", color: "var(--accent)", border: "1px solid rgba(255,94,26,0.25)" }}>
-                    🚀 Boosted
-                  </span>
-                )}
-              </div>
+              {!isDeleted && (
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {shop.is_approved && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
+                      style={{ background: "rgba(31,187,90,0.12)", color: "#1FBB5A", border: "1px solid rgba(31,187,90,0.25)" }}>✓ Live</span>
+                  )}
+                  {shop.vendor_id && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
+                      style={{ background: "rgba(99,102,241,0.12)", color: "#818cf8", border: "1px solid rgba(99,102,241,0.25)" }}>Claimed</span>
+                  )}
+                  {shop.is_featured && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
+                      style={{ background: "rgba(232,168,0,0.12)", color: "#E8A800", border: "1px solid rgba(232,168,0,0.25)" }}>⭐ Featured</span>
+                  )}
+                  {shop.is_boosted && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
+                      style={{ background: "rgba(255,94,26,0.12)", color: "var(--accent)", border: "1px solid rgba(255,94,26,0.25)" }}>🚀 Boosted</span>
+                  )}
+                  {!shop.is_active && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
+                      style={{ background: "rgba(239,68,68,0.09)", color: "#f87171", border: "1px solid rgba(239,68,68,0.20)" }}>● Inactive</span>
+                  )}
+                </div>
+              )}
 
-              {/* Completeness chips */}
-              <div className="flex flex-wrap gap-1.5 mb-3">
-                <Chip ok={activeOffers.length > 0}  label={activeOffers.length > 0 ? `${activeOffers.length} offer${activeOffers.length > 1 ? "s" : ""}` : "No offers"} />
-                <Chip ok={!!shop.description?.trim()} label={shop.description?.trim() ? "Has description" : "No description"} />
-                <Chip ok={!!(shop.phone || shop.whatsapp)} label={(shop.phone || shop.whatsapp) ? "Has contact" : "No contact"} />
-                {shop.avg_rating > 0 && (
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-full"
-                    style={{ background: "rgba(232,168,0,0.10)", color: "#E8A800", border: "1px solid rgba(232,168,0,0.20)" }}>
-                    ★ {shop.avg_rating.toFixed(1)} ({shop.review_count})
-                  </span>
-                )}
-              </div>
+              {/* Completeness chips (non-deleted only) */}
+              {!isDeleted && (
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  <Chip ok={activeOffers.length > 0} label={activeOffers.length > 0 ? `${activeOffers.length} offer${activeOffers.length > 1 ? "s" : ""}` : "No offers"} />
+                  <Chip ok={!!shop.description?.trim()} label={shop.description?.trim() ? "Has description" : "No description"} />
+                  <Chip ok={!!(shop.phone || shop.whatsapp)} label={(shop.phone || shop.whatsapp) ? "Has contact" : "No contact"} />
+                  {shop.avg_rating > 0 && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full"
+                      style={{ background: "rgba(232,168,0,0.10)", color: "#E8A800", border: "1px solid rgba(232,168,0,0.20)" }}>
+                      ★ {shop.avg_rating.toFixed(1)} ({shop.review_count})
+                    </span>
+                  )}
+                </div>
+              )}
 
               {/* Actions */}
               <div className="flex flex-wrap gap-2">
-                {!shop.is_approved ? (
-                  <>
-                    <ActionBtn
-                      label="✕ Reject" disabled={isActing}
-                      style={{ background: "rgba(239,68,68,0.09)", color: "#f87171", border: "1px solid rgba(239,68,68,0.20)" }}
-                      onClick={() => handleAction(shop.id, "reject")}
-                    />
-                    <ActionBtn
-                      label={isActing ? "…" : "✓ Approve"} disabled={isActing}
-                      style={{ background: "#1FBB5A", color: "#fff" }}
-                      onClick={() => handleAction(shop.id, "approve")}
-                    />
-                  </>
-                ) : (
-                  <>
-                    <ActionBtn
-                      label={shop.is_active ? "Deactivate" : "Activate"} disabled={isActing}
-                      style={{ background: "rgba(255,255,255,0.06)", color: "var(--t2)", border: "1px solid rgba(255,255,255,0.10)" }}
-                      onClick={() => handleAction(shop.id, "toggle_active")}
-                    />
-                    <ActionBtn
-                      label={shop.is_featured ? "⭐ Unfeature" : "⭐ Feature"} disabled={isActing}
-                      style={{
-                        background: shop.is_featured ? "rgba(232,168,0,0.18)" : "rgba(232,168,0,0.08)",
-                        color: "#E8A800", border: "1px solid rgba(232,168,0,0.25)"
-                      }}
-                      onClick={() => handleAction(shop.id, "edit", { is_featured: !shop.is_featured })}
-                    />
-                    <ActionBtn
-                      label={shop.is_boosted ? "🚀 Unboost" : "🚀 Boost"} disabled={isActing}
-                      style={{
-                        background: shop.is_boosted ? "rgba(255,94,26,0.18)" : "rgba(255,94,26,0.08)",
-                        color: "var(--accent)", border: "1px solid rgba(255,94,26,0.25)"
-                      }}
-                      onClick={() => handleAction(shop.id, "edit", { is_boosted: !shop.is_boosted })}
-                    />
-                  </>
-                )}
-                <a href={`/shop/${shop.slug}`} target="_blank" rel="noreferrer"
-                  className="px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all"
-                  style={{ background: "rgba(255,255,255,0.04)", color: "var(--t3)", border: "1px solid rgba(255,255,255,0.08)", textDecoration: "none" }}>
-                  ↗ View
-                </a>
-
-                {/* Delete — two-step confirm to prevent accidental deletion */}
-                {deletingId === shop.id ? (
-                  <>
-                    <ActionBtn
-                      label="Cancel" disabled={!!acting}
-                      style={{ background: "rgba(255,255,255,0.05)", color: "var(--t2)", border: "1px solid rgba(255,255,255,0.10)" }}
-                      onClick={() => setDeletingId(null)}
-                    />
-                    <ActionBtn
-                      label={acting === shop.id ? "Deleting…" : "Confirm Delete"} disabled={!!acting}
-                      style={{ background: "rgba(239,68,68,0.18)", color: "#f87171", border: "1px solid rgba(239,68,68,0.35)" }}
-                      onClick={() => handleDelete(shop.id)}
-                    />
-                  </>
-                ) : (
+                {isDeleted ? (
                   <ActionBtn
-                    label="Delete" disabled={!!acting}
-                    style={{ background: "rgba(239,68,68,0.06)", color: "#f87171", border: "1px solid rgba(239,68,68,0.15)" }}
-                    onClick={() => setDeletingId(shop.id)}
+                    label={isActing ? "Restoring…" : "↩ Restore Shop"}
+                    disabled={isActing}
+                    style={{ background: "rgba(31,187,90,0.10)", color: "#1FBB5A", border: "1px solid rgba(31,187,90,0.25)" }}
+                    onClick={() => handleAction(shop.id, "restore", undefined, undefined, true)}
                   />
+                ) : (
+                  <>
+                    {!shop.is_approved ? (
+                      <>
+                        <ActionBtn label="✕ Reject" disabled={isActing}
+                          style={{ background: "rgba(239,68,68,0.09)", color: "#f87171", border: "1px solid rgba(239,68,68,0.20)" }}
+                          onClick={() => handleAction(shop.id, "reject")} />
+                        <ActionBtn label={isActing ? "…" : "✓ Approve"} disabled={isActing}
+                          style={{ background: "#1FBB5A", color: "#fff" }}
+                          onClick={() => handleAction(shop.id, "approve")} />
+                      </>
+                    ) : (
+                      <>
+                        <ActionBtn
+                          label={shop.is_active ? "Deactivate" : "Activate"} disabled={isActing}
+                          style={{ background: "rgba(255,255,255,0.06)", color: "var(--t2)", border: "1px solid rgba(255,255,255,0.10)" }}
+                          onClick={() => handleAction(shop.id, "toggle_active")} />
+                        <ActionBtn
+                          label={shop.is_featured ? "⭐ Unfeature" : "⭐ Feature"} disabled={isActing}
+                          style={{ background: shop.is_featured ? "rgba(232,168,0,0.18)" : "rgba(232,168,0,0.08)", color: "#E8A800", border: "1px solid rgba(232,168,0,0.25)" }}
+                          onClick={() => handleAction(shop.id, "edit", { is_featured: !shop.is_featured })} />
+                        <ActionBtn
+                          label={shop.is_boosted ? "🚀 Unboost" : "🚀 Boost"} disabled={isActing}
+                          style={{ background: shop.is_boosted ? "rgba(255,94,26,0.18)" : "rgba(255,94,26,0.08)", color: "var(--accent)", border: "1px solid rgba(255,94,26,0.25)" }}
+                          onClick={() => handleAction(shop.id, "edit", { is_boosted: !shop.is_boosted })} />
+                      </>
+                    )}
+                    <a href={`/shop/${shop.slug}`} target="_blank" rel="noreferrer"
+                      className="px-3 py-1.5 rounded-lg text-[11px] font-semibold"
+                      style={{ background: "rgba(255,255,255,0.04)", color: "var(--t3)", border: "1px solid rgba(255,255,255,0.08)", textDecoration: "none" }}>
+                      ↗ View
+                    </a>
+                    {/* Soft delete — opens modal */}
+                    <ActionBtn
+                      label="Delete" disabled={isActing}
+                      style={{ background: "rgba(239,68,68,0.06)", color: "#f87171", border: "1px solid rgba(239,68,68,0.15)" }}
+                      onClick={() => { setDeleteModal({ shopId: shop.id, shopName: shop.name }); setDeleteReason(""); setSuspendVendor(true); }} />
+                  </>
                 )}
               </div>
             </div>
           );
         })}
       </div>
+
+      {/* ── Soft-delete modal ── */}
+      {deleteModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end" }}
+          onClick={() => setDeleteModal(null)}>
+          <div style={{ background: "#0C0F18", borderRadius: "20px 20px 0 0", padding: "20px 18px", width: "100%", boxSizing: "border-box" }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ width: 40, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.15)", margin: "0 auto 18px" }} />
+            <p style={{ fontFamily: "'Syne',sans-serif", fontSize: 16, fontWeight: 800, color: "#F2F5FF", marginBottom: 4 }}>
+              Delete Shop
+            </p>
+            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.40)", marginBottom: 16 }}>
+              "{deleteModal.shopName}" will be hidden from all public views. You can restore it later.
+            </p>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.40)", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 6 }}>
+                Reason (optional)
+              </label>
+              <input
+                value={deleteReason}
+                onChange={e => setDeleteReason(e.target.value)}
+                placeholder="e.g. Duplicate shop, owner request, spam…"
+                style={{ width: "100%", padding: "11px 13px", borderRadius: 11, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#F2F5FF", fontSize: 14, outline: "none", fontFamily: "'DM Sans',sans-serif", boxSizing: "border-box" }}
+              />
+            </div>
+            <label style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18, cursor: "pointer" }}>
+              <input type="checkbox" checked={suspendVendor} onChange={e => setSuspendVendor(e.target.checked)} />
+              <span style={{ fontSize: 13, color: suspendVendor ? "#F2F5FF" : "rgba(255,255,255,0.50)" }}>
+                Also suspend vendor account (blocks dashboard access)
+              </span>
+            </label>
+            <p style={{ fontSize: 11, color: "rgba(255,255,255,0.25)", marginBottom: 16 }}>
+              If suspended, the vendor must contact support to re-onboard. Their phone number will not auto-link to the deleted shop.
+            </p>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => setDeleteModal(null)}
+                style={{ flex: 1, padding: "13px", borderRadius: 12, background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.55)", border: "none", cursor: "pointer", fontSize: 13, fontFamily: "'DM Sans',sans-serif" }}>
+                Cancel
+              </button>
+              <button onClick={handleSoftDelete} disabled={!!acting}
+                style={{ flex: 2, padding: "13px", borderRadius: 12, background: acting ? "rgba(239,68,68,0.30)" : "rgba(239,68,68,0.80)", color: "#fff", border: "none", cursor: acting ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 700, fontFamily: "'DM Sans',sans-serif" }}>
+                {acting ? "Deleting…" : "Confirm Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-/* ── Sub-components ─────────────────────────────────────────────────── */
+/* ── Sub-components ─────────────────────────────────────────────────────── */
 function Chip({ ok, label }: { ok: boolean; label: string }) {
   return (
     <span className="text-[9px] px-1.5 py-0.5 rounded-full"
@@ -491,8 +619,7 @@ function Chip({ ok, label }: { ok: boolean; label: string }) {
 }
 
 function ActionBtn({ label, onClick, disabled, style }: {
-  label: string; onClick: () => void; disabled: boolean;
-  style: React.CSSProperties;
+  label: string; onClick: () => void; disabled: boolean; style: React.CSSProperties;
 }) {
   return (
     <button onClick={onClick} disabled={disabled}

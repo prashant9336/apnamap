@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 /* ═══════════════════════════════════════════════════════════
    TYPES
 ═══════════════════════════════════════════════════════════ */
-type Tab = "onboard" | "requests" | "pending" | "claims" | "shops" | "offers" | "vendors" | "rewards";
+type Tab = "onboard" | "requests" | "pending" | "claims" | "shops" | "offers" | "vendors" | "rewards" | "analytics";
 
 type Meta = { id: string; name: string; icon?: string };
 
@@ -1074,6 +1074,103 @@ function ShopEditModal({ shop, localities, categories, onClose, onSaved }:
 }
 
 /* ═══════════════════════════════════════════════════════════
+   ANALYTICS TAB
+═══════════════════════════════════════════════════════════ */
+function AnalyticsTab() {
+  const sb = createClient();
+  const [data,    setData]    = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [days,    setDays]    = useState(1);
+
+  useEffect(() => {
+    sb.auth.getSession().then(async ({ data: { session } }) => {
+      const tok = session?.access_token ?? "";
+      const res = await fetch(`/api/admin/analytics?days=${days}`, {
+        headers: tok ? { Authorization: `Bearer ${tok}` } : {},
+      });
+      if (res.ok) setData(await res.json());
+      setLoading(false);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [days]);
+
+  const ec = data?.event_counts ?? {};
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {/* Period selector */}
+      <div style={{ display: "flex", gap: 7 }}>
+        {([1, 7, 30] as const).map(d => (
+          <button key={d} onClick={() => { setDays(d); setLoading(true); }}
+            style={{ padding: "7px 14px", borderRadius: 100, fontSize: 12, fontWeight: 700, cursor: "pointer", border: "none", fontFamily: "'DM Sans',sans-serif", flexShrink: 0, background: days === d ? "#FF5E1A" : "rgba(255,255,255,0.06)", color: days === d ? "#fff" : "rgba(255,255,255,0.40)" }}>
+            {d === 1 ? "Today" : `${d}d`}
+          </button>
+        ))}
+      </div>
+
+      {loading && <Skel rows={4} />}
+
+      {!loading && data && (
+        <>
+          {/* Key metrics */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+            {[
+              { label: "Visitors",     value: data.unique_visitors, color: "#a78bfa" },
+              { label: "App Opens",    value: ec.app_open    ?? 0,  color: "#FF5E1A" },
+              { label: "Shop Views",   value: (ec.view ?? 0) + (ec.shop_view ?? 0), color: "#3B82F6" },
+              { label: "Directions",   value: ec.direction   ?? 0,  color: "#1FBB5A" },
+              { label: "WhatsApp",     value: ec.whatsapp    ?? 0,  color: "#25D366" },
+              { label: "Searches",     value: ec.search      ?? 0,  color: "#E8A800" },
+            ].map(s => (
+              <div key={s.label} style={{ padding: "10px 12px", borderRadius: 12, background: "rgba(255,255,255,0.034)", border: `1px solid ${s.color}22` }}>
+                <div style={{ fontFamily: "'Syne',sans-serif", fontSize: 20, fontWeight: 900, color: s.color }}>{s.value}</div>
+                <div style={{ fontSize: 9, color: "rgba(255,255,255,0.30)", textTransform: "uppercase" as const, letterSpacing: "0.8px", fontWeight: 700 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Top shops */}
+          {data.top_shops?.length > 0 && (
+            <div style={CARD}>
+              <p style={{ fontSize: 11, fontWeight: 800, color: "rgba(255,255,255,0.30)", textTransform: "uppercase" as const, letterSpacing: "0.8px", marginBottom: 10 }}>Top Shops</p>
+              {data.top_shops.map((s: any, i: number) => (
+                <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: i < data.top_shops.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: "rgba(255,255,255,0.25)", width: 18 }}>{i + 1}</span>
+                  <p style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#F2F5FF" }}>{s.name}</p>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#3B82F6" }}>{s.views} views</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Top localities */}
+          {data.top_localities?.length > 0 && (
+            <div style={CARD}>
+              <p style={{ fontSize: 11, fontWeight: 800, color: "rgba(255,255,255,0.30)", textTransform: "uppercase" as const, letterSpacing: "0.8px", marginBottom: 10 }}>Top Localities</p>
+              {data.top_localities.map((l: any, i: number) => (
+                <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: i < data.top_localities.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: "rgba(255,255,255,0.25)", width: 18 }}>{i + 1}</span>
+                  <p style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#F2F5FF" }}>📍 {l.name}</p>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#a78bfa" }}>{l.views} views</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {data.top_shops?.length === 0 && data.top_localities?.length === 0 && (
+            <div style={{ ...CARD, textAlign: "center", padding: "32px" }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>📊</div>
+              <p style={{ fontFamily: "'Syne',sans-serif", fontSize: 14, fontWeight: 800, color: "#F2F5FF" }}>No analytics yet</p>
+              <p style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginTop: 4 }}>Events will appear here once users start visiting.</p>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
    HELPERS
 ═══════════════════════════════════════════════════════════ */
 function Pill({ children }: { children: React.ReactNode }) {
@@ -1107,13 +1204,14 @@ export default function DashboardShell({ localities: initLocalities, categories:
   }
 
   const TABS: { id: Tab; label: string }[] = [
-    { id: "onboard",  label: "⚡ Onboard" },
-    { id: "requests", label: `📋 Requests${stats.requests > 0 ? ` (${stats.requests})` : ""}` },
-    { id: "pending",  label: `⏳ Pending${stats.pending > 0 ? ` (${stats.pending})` : ""}` },
-    { id: "shops",    label: "✅ Shops" },
-    { id: "offers",   label: "🎯 Offers" },
-    { id: "vendors",  label: `👔 Vendors${stats.vendors > 0 ? ` (${stats.vendors})` : ""}` },
-    { id: "rewards",  label: "🎁 Rewards" },
+    { id: "onboard",   label: "⚡ Onboard" },
+    { id: "requests",  label: `📋 Requests${stats.requests > 0 ? ` (${stats.requests})` : ""}` },
+    { id: "pending",   label: `⏳ Pending${stats.pending > 0 ? ` (${stats.pending})` : ""}` },
+    { id: "shops",     label: "✅ Shops" },
+    { id: "offers",    label: "🎯 Offers" },
+    { id: "vendors",   label: `👔 Vendors${stats.vendors > 0 ? ` (${stats.vendors})` : ""}` },
+    { id: "analytics", label: "📊 Analytics" },
+    { id: "rewards",   label: "🎁 Rewards" },
   ];
 
   return (
@@ -1171,12 +1269,27 @@ export default function DashboardShell({ localities: initLocalities, categories:
           )}
         </div>
 
+        {/* Quick links row */}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const }}>
+          {[
+            { label: "🗂 Categories",  href: "/admin/categories" },
+            { label: "👥 Users",       href: "/admin/users" },
+            { label: "📋 Audit Log",   href: "/admin/audit-log" },
+          ].map(l => (
+            <a key={l.href} href={l.href}
+              style={{ padding: "6px 12px", borderRadius: 10, fontSize: 12, fontWeight: 600, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)", color: "rgba(255,255,255,0.50)", textDecoration: "none", fontFamily: "'DM Sans',sans-serif" }}>
+              {l.label}
+            </a>
+          ))}
+        </div>
+
         {/* Tab content */}
-        {tab === "onboard"  && <OnboardTab localities={localities} categories={categories} />}
-        {tab === "requests" && <RequestsTab />}
-        {tab === "pending"  && <ShopsTab which="pending" localities={localities} categories={categories} />}
-        {tab === "offers"   && <AdminOffersTab categories={categories} />}
-        {tab === "vendors"  && <VendorsTab />}
+        {tab === "onboard"   && <OnboardTab localities={localities} categories={categories} />}
+        {tab === "requests"  && <RequestsTab />}
+        {tab === "pending"   && <ShopsTab which="pending" localities={localities} categories={categories} />}
+        {tab === "offers"    && <AdminOffersTab categories={categories} />}
+        {tab === "vendors"   && <VendorsTab />}
+        {tab === "analytics" && <AnalyticsTab />}
       </div>
     </div>
   );

@@ -19,12 +19,20 @@ export default function MyShopPage() {
         if (!mounted) return;
         if (!user) { router.replace("/auth/login?redirect=/my-shop"); return; }
 
-        // Always read role from profiles table (authoritative); user_metadata can be stale
+        // Always read role and status from profiles table (authoritative)
         const { data: profile } = await sb
-          .from("profiles").select("role").eq("id", user.id).maybeSingle();
+          .from("profiles").select("role, status").eq("id", user.id).maybeSingle();
         if (!mounted) return;
 
-        const role = profile?.role ?? "customer";
+        const role   = profile?.role   ?? "customer";
+        const status = profile?.status ?? "active";
+
+        // Block suspended / deleted accounts from accessing vendor dashboard
+        if (status === "suspended" || status === "deleted") {
+          router.replace("/vendor/suspended");
+          return;
+        }
+
         if (role !== "vendor" && role !== "admin") {
           router.replace("/vendor/onboarding");
           return;

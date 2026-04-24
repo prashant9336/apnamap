@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { logAdminAction } from "@/lib/audit";
 
 async function requireAdmin(req: NextRequest) {
   const adminSb = createAdminClient();
-  const authHeader = req.headers.get("Authorization") ?? "";
-  const token = authHeader.replace("Bearer ", "").trim();
+  const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "").trim();
 
   let user = null;
   if (token) {
@@ -16,49 +16,63 @@ async function requireAdmin(req: NextRequest) {
   }
   if (!user) return null;
 
-  const { data: profile } = await adminSb.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  // ONLY trust the server-managed profiles.role column.
-  // user_metadata is user-settable via supabase.auth.updateUser() — never use it for privilege checks.
-  // app_metadata is service-role-only but profiles.role is the canonical source here.
-  const role = profile?.role ?? "customer";
-  return role === "admin" ? user : null;
+  const { data: profile } = await adminSb
+    .from("profiles").select("role").eq("id", user.id).maybeSingle();
+  // Only trust profiles.role — never user_metadata
+  return (profile?.role ?? "customer") === "admin" ? user : null;
 }
 
+/* ── GET — list all shops (admin) ─────────────────────────────────────── */
 export async function GET(req: NextRequest) {
   const admin = await requireAdmin(req);
   if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const adminSb = createAdminClient();
-  const { data: shops, error } = await adminSb
+  const showDeleted = new URL(req.url).searchParams.get("include_deleted") === "true";
+
+  let query = adminSb
     .from("shops")
     .select(`
       id, name, slug, description, phone, whatsapp, address,
-      vendor_id, is_approved, is_active, is_featured, is_boosted,
+      lat, lng, vendor_id, is_approved, is_active, is_featured, is_boosted,
+      is_recommended, is_hidden_gem, is_trending, manual_priority,
       view_count, avg_rating, review_count,
+      open_time, close_time, open_days,
+      deleted_at, deleted_by, delete_reason,
       updated_at, created_at,
       category:categories(id, name, icon),
       subcategory:subcategories(id, name, icon),
       locality:localities(id, name),
-      offers(id, is_active, ends_at)
+      offers(id, is_active, ends_at),
+      vendor:vendors(
+        id, mobile, is_approved,
+        owner:profiles(name, phone, status)
+      )
     `)
     .order("created_at", { ascending: false });
 
+  if (!showDeleted) {
+    query = query.is("deleted_at", null);
+  }
+
+  const { data: shops, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const safeShops = shops ?? [];
-  const stats = {
-    total:    safeShops.length,
-    approved: safeShops.filter((s: any) => s.is_approved).length,
-    pending:  safeShops.filter((s: any) => !s.is_approved).length,
-    active:   safeShops.filter((s: any) => s.is_active).length,
-  };
   return NextResponse.json({
     shops: safeShops,
-    stats,
+    stats: {
+      total:    safeShops.length,
+      approved: safeShops.filter((s: any) => s.is_approved).length,
+      pending:  safeShops.filter((s: any) => !s.is_approved && !s.deleted_at).length,
+      active:   safeShops.filter((s: any) => s.is_active).length,
+      deleted:  safeShops.filter((s: any) => !!s.deleted_at).length,
+    },
     auto_approval_enabled: process.env.AUTO_APPROVAL_ENABLED !== "false",
   });
 }
 
+/* ── PATCH — approve / reject / edit / restore shop ──────────────────── */
 export async function PATCH(req: NextRequest) {
   const admin = await requireAdmin(req);
   if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -67,11 +81,23 @@ export async function PATCH(req: NextRequest) {
     shop_id: string;
     action: string;
     fields?: Record<string, unknown>;
+    reason?: string;
+    reactivate_vendor?: boolean;
   };
-  const { shop_id, action, fields } = body;
-  if (!shop_id || !action) return NextResponse.json({ error: "Missing shop_id or action" }, { status: 400 });
+  const { shop_id, action, fields, reason, reactivate_vendor } = body;
+  if (!shop_id || !action) {
+    return NextResponse.json({ error: "Missing shop_id or action" }, { status: 400 });
+  }
 
   const adminClient = createAdminClient();
+
+  // Snapshot before state for audit
+  const { data: before } = await adminClient
+    .from("shops")
+    .select("is_approved, is_active, is_featured, is_boosted, deleted_at, vendor_id")
+    .eq("id", shop_id)
+    .single();
+
   let updates: Record<string, unknown> = {};
 
   if (action === "approve") {
@@ -82,14 +108,24 @@ export async function PATCH(req: NextRequest) {
     const { data: current } = await adminClient
       .from("shops").select("is_active").eq("id", shop_id).single();
     updates = { is_active: !current?.is_active };
+  } else if (action === "restore") {
+    // Restore soft-deleted shop back to pending state — admin must re-approve
+    updates = { deleted_at: null, deleted_by: null, delete_reason: null, is_approved: false, is_active: false };
+    if (reactivate_vendor && before?.vendor_id) {
+      await adminClient
+        .from("profiles")
+        .update({ status: "active", updated_at: new Date().toISOString() })
+        .eq("id", before.vendor_id);
+      logAdminAction(adminClient, admin.id, "vendor_reactivate", "profile", before.vendor_id, {}, { status: "active" }, `Reactivated via shop restore: ${shop_id}`);
+    }
   } else if (action === "edit" && fields) {
     const allowed = [
-      "name","description","phone","whatsapp","address",
-      "category_id","locality_id","lat","lng",
-      "open_time","close_time","open_days",
-      "is_active","is_featured","logo_url","cover_url",
-      "is_boosted","is_recommended","is_hidden_gem","is_trending",
-      "manual_priority","display_rating","display_rating_count",
+      "name", "description", "phone", "whatsapp", "address",
+      "category_id", "locality_id", "lat", "lng",
+      "open_time", "close_time", "open_days",
+      "is_active", "is_featured", "logo_url", "cover_url",
+      "is_boosted", "is_recommended", "is_hidden_gem", "is_trending",
+      "manual_priority", "display_rating", "display_rating_count",
     ] as const;
     for (const key of allowed) {
       if (key in fields) updates[key] = fields[key];
@@ -108,7 +144,8 @@ export async function PATCH(req: NextRequest) {
     .select(`
       id, name, slug, vendor_id, description, phone, whatsapp, address,
       lat, lng, open_time, close_time, open_days,
-      is_approved, is_active, is_featured, is_claimed, created_at,
+      is_approved, is_active, is_featured, is_claimed, is_boosted,
+      deleted_at, created_at,
       category_id, locality_id,
       category:categories(name, icon),
       locality:localities(name)
@@ -116,25 +153,78 @@ export async function PATCH(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  logAdminAction(adminClient, admin.id, `shop_${action}`, "shop", shop_id, before ?? {}, updates, reason);
+
   return NextResponse.json({ shop: data });
 }
 
-/* ── DELETE — permanent shop removal (admin only) ──────────────── */
+/* ── DELETE — soft delete + optional vendor suspension ────────────────── */
 export async function DELETE(req: NextRequest) {
   const admin = await requireAdmin(req);
   if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const shopId = new URL(req.url).searchParams.get("shop_id");
+  const url = new URL(req.url);
+  const shopId         = url.searchParams.get("shop_id");
+  const reason         = url.searchParams.get("reason") ?? undefined;
+  const suspendVendor  = url.searchParams.get("suspend_vendor") === "true";
+
   if (!shopId) return NextResponse.json({ error: "shop_id required" }, { status: 400 });
 
   const adminClient = createAdminClient();
 
-  // Remove child records before deleting the shop to avoid FK constraint errors
-  // (cascade may not be configured on all deployments)
-  await adminClient.from("offers").delete().eq("shop_id", shopId);
+  // Fetch before-state for audit + vendor info
+  const { data: shopBefore } = await adminClient
+    .from("shops")
+    .select("id, name, vendor_id, is_approved, is_active, deleted_at")
+    .eq("id", shopId)
+    .single();
 
-  const { error } = await adminClient.from("shops").delete().eq("id", shopId);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!shopBefore) return NextResponse.json({ error: "Shop not found" }, { status: 404 });
+  if (shopBefore.deleted_at) {
+    return NextResponse.json({ error: "Shop is already deleted" }, { status: 409 });
+  }
 
-  return NextResponse.json({ deleted: true });
+  const now = new Date().toISOString();
+
+  // Soft delete
+  const { error: deleteErr } = await adminClient
+    .from("shops")
+    .update({
+      deleted_at:    now,
+      deleted_by:    admin.id,
+      delete_reason: reason ?? null,
+      is_active:     false,
+      is_approved:   false,
+      updated_at:    now,
+    })
+    .eq("id", shopId);
+
+  if (deleteErr) return NextResponse.json({ error: deleteErr.message }, { status: 500 });
+
+  // Optionally suspend the vendor profile
+  if (suspendVendor && shopBefore.vendor_id) {
+    await adminClient
+      .from("profiles")
+      .update({ status: "suspended", updated_at: now })
+      .eq("id", shopBefore.vendor_id);
+
+    logAdminAction(
+      adminClient, admin.id,
+      "vendor_suspend", "profile",
+      shopBefore.vendor_id, {}, { status: "suspended" },
+      `Auto-suspended: shop ${shopId} deleted`,
+    );
+  }
+
+  logAdminAction(
+    adminClient, admin.id,
+    "shop_delete", "shop",
+    shopId,
+    { is_approved: shopBefore.is_approved, is_active: shopBefore.is_active },
+    { deleted_at: now, delete_reason: reason ?? null, suspend_vendor: suspendVendor },
+    reason,
+  );
+
+  return NextResponse.json({ deleted: true, soft: true });
 }
