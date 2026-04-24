@@ -127,7 +127,8 @@ export async function POST(req: NextRequest) {
   const { count: shopCount } = await adminSb
     .from("shops")
     .select("*", { count: "exact", head: true })
-    .eq("vendor_id", user.id);
+    .eq("vendor_id", user.id)
+    .is("deleted_at", null);
 
   if ((shopCount ?? 0) >= MAX_SHOPS_PER_VENDOR) {
     return NextResponse.json(

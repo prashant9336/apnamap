@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     adminClient.from("shops").select("id", { count: "exact", head: true }),
     adminClient.from("offers").select("id", { count: "exact", head: true }).eq("is_active", true),
     adminClient.from("profiles").select("id", { count: "exact", head: true }),
-    adminClient.from("shops").select("id", { count: "exact", head: true }).eq("is_approved", false),
+    adminClient.from("shops").select("id", { count: "exact", head: true }).eq("approval_status", "pending").is("deleted_at", null),
   ]);
 
   return NextResponse.json({
@@ -40,9 +40,9 @@ export async function PATCH(req: NextRequest) {
   const adminClient = createAdminClient();
 
   if (action === "approve") {
-    await adminClient.from("shops").update({ is_approved: true, is_active: true }).eq("id", shop_id);
+    await adminClient.from("shops").update({ approval_status: "approved", is_approved: true, is_active: true }).eq("id", shop_id);
   } else if (action === "reject") {
-    await adminClient.from("shops").update({ is_approved: false, is_active: false }).eq("id", shop_id);
+    await adminClient.from("shops").update({ approval_status: "rejected", is_approved: false, is_active: false }).eq("id", shop_id);
   }
 
   return NextResponse.json({ ok: true });

@@ -229,6 +229,7 @@ export default function VendorHome() {
       .from("shops")
       .select("id, name, is_approved, approval_status, rejection_reason, avg_rating, review_count, category:categories(icon), locality:localities(name), offers(id, is_active, ends_at)")
       .eq("vendor_id", user.id)
+      .is("deleted_at", null)
       .order("created_at", { ascending: false });
 
     const rows = (shopData ?? []) as unknown as ShopRow[];

@@ -133,9 +133,10 @@ export async function POST(req: NextRequest) {
       open_time:   "09:00",
       close_time:  "21:00",
       open_days:   ["mon","tue","wed","thu","fri","sat"],
-      is_approved: true,
-      is_active:   true,
-      is_featured: false,
+      approval_status: "approved",
+      is_approved:     true,
+      is_active:       true,
+      is_featured:     false,
     }).select().single();
 
     if (shopErr || !shop) {
