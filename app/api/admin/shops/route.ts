@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
       is_recommended, is_hidden_gem, is_trending, manual_priority,
       view_count, avg_rating, review_count,
       open_time, close_time, open_days,
-      deleted_at, deleted_by, delete_reason,
+      deleted_at, deleted_by, delete_reason, rejected_at,
       updated_at, created_at,
       category:categories(id, name, icon),
       subcategory:subcategories(id, name, icon),
@@ -101,16 +101,16 @@ export async function PATCH(req: NextRequest) {
   let updates: Record<string, unknown> = {};
 
   if (action === "approve") {
-    updates = { is_approved: true, is_active: true };
+    updates = { is_approved: true, is_active: true, rejected_at: null };
   } else if (action === "reject") {
-    updates = { is_approved: false, is_active: false };
+    updates = { is_approved: false, is_active: false, rejected_at: new Date().toISOString() };
   } else if (action === "toggle_active") {
     const { data: current } = await adminClient
       .from("shops").select("is_active").eq("id", shop_id).maybeSingle();
     updates = { is_active: !current?.is_active };
   } else if (action === "restore") {
     // Restore soft-deleted shop back to pending state — admin must re-approve
-    updates = { deleted_at: null, deleted_by: null, delete_reason: null, is_approved: false, is_active: false };
+    updates = { deleted_at: null, deleted_by: null, delete_reason: null, is_approved: false, is_active: false, rejected_at: null };
     if (reactivate_vendor && before?.vendor_id) {
       await adminClient
         .from("profiles")

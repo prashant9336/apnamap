@@ -29,6 +29,7 @@ interface ShopRow {
   deleted_at: string | null;
   deleted_by: string | null;
   delete_reason: string | null;
+  rejected_at: string | null;
   category:    { id: string; name: string; icon: string } | null;
   subcategory: { id: string; name: string; icon: string } | null;
   locality:    { id: string; name: string } | null;
@@ -41,7 +42,7 @@ type Health = "healthy" | "needs_attention" | "dead";
 interface Filters {
   search:         string;
   health:         Health | "all";
-  status:         "all" | "approved" | "pending" | "deleted";
+  status:         "all" | "approved" | "pending" | "rejected" | "deleted";
   offer:          "all" | "has_offer" | "no_offer";
   active:         "all" | "active" | "inactive";
   locality:       string;
@@ -162,28 +163,30 @@ export default function AdminShopsPage() {
   }, [shops]);
 
   const stats = useMemo(() => {
-    const total   = shops.filter(s => !s.deleted_at).length;
-    const healthy = shops.filter(s => !s.deleted_at && healthMap.get(s.id) === "healthy").length;
-    const attn    = shops.filter(s => !s.deleted_at && healthMap.get(s.id) === "needs_attention").length;
-    const dead    = shops.filter(s => !s.deleted_at && healthMap.get(s.id) === "dead").length;
-    const pending = shops.filter(s => !s.deleted_at && !s.is_approved).length;
-    const deleted = shops.filter(s => !!s.deleted_at).length;
+    const total    = shops.filter(s => !s.deleted_at).length;
+    const healthy  = shops.filter(s => !s.deleted_at && healthMap.get(s.id) === "healthy").length;
+    const attn     = shops.filter(s => !s.deleted_at && healthMap.get(s.id) === "needs_attention").length;
+    const dead     = shops.filter(s => !s.deleted_at && healthMap.get(s.id) === "dead").length;
+    const pending  = shops.filter(s => !s.deleted_at && !s.is_approved && !s.rejected_at).length;
+    const rejected = shops.filter(s => !s.deleted_at && !s.is_approved && !!s.rejected_at).length;
+    const deleted  = shops.filter(s => !!s.deleted_at).length;
     const noOffer = shops.filter(s => {
       if (s.deleted_at) return false;
       const active = s.offers.filter(o => o.is_active && (!o.ends_at || new Date(o.ends_at) > new Date()));
       return active.length === 0;
     }).length;
-    return { total, healthy, attn, dead, pending, deleted, noOffer };
+    return { total, healthy, attn, dead, pending, rejected, deleted, noOffer };
   }, [shops, healthMap]);
 
   const filtered = useMemo(() => {
     const q = filters.search.toLowerCase().trim();
     return shops
       .filter(s => {
-        if (filters.status === "deleted"  && !s.deleted_at) return false;
-        if (filters.status !== "deleted"  && s.deleted_at && !showDeleted) return false;
-        if (filters.status === "approved" && (!s.is_approved || s.deleted_at)) return false;
-        if (filters.status === "pending"  && (s.is_approved  || s.deleted_at)) return false;
+        if (filters.status === "deleted"   && !s.deleted_at) return false;
+        if (filters.status !== "deleted"   && s.deleted_at && !showDeleted) return false;
+        if (filters.status === "approved"  && (!s.is_approved || s.deleted_at)) return false;
+        if (filters.status === "pending"   && (s.is_approved || s.deleted_at || !!s.rejected_at)) return false;
+        if (filters.status === "rejected"  && (s.is_approved || s.deleted_at || !s.rejected_at)) return false;
         if (filters.active === "active"   && !s.is_active)  return false;
         if (filters.active === "inactive" &&  s.is_active)  return false;
         if (filters.health !== "all" && healthMap.get(s.id) !== filters.health) return false;
@@ -320,8 +323,9 @@ export default function AdminShopsPage() {
             { label: "Healthy",  val: stats.healthy,  color: "#1FBB5A",   filterKey: "health" as const, filterVal: "healthy"  },
             { label: "Action",   val: stats.attn,    color: "#E8A800",   filterKey: "health" as const, filterVal: "needs_attention" },
             { label: "Dead",     val: stats.dead,    color: "#f87171",   filterKey: "health" as const, filterVal: "dead"     },
-            { label: "Pending",  val: stats.pending, color: "#a78bfa",   filterKey: "status" as const, filterVal: "pending"  },
-            { label: "Deleted",  val: stats.deleted, color: "#64748b",   filterKey: "status" as const, filterVal: "deleted"  },
+            { label: "Pending",   val: stats.pending,   color: "#a78bfa", filterKey: "status" as const, filterVal: "pending"   },
+            { label: "Rejected",  val: stats.rejected,  color: "#f87171", filterKey: "status" as const, filterVal: "rejected"  },
+            { label: "Deleted",   val: stats.deleted,   color: "#64748b", filterKey: "status" as const, filterVal: "deleted"   },
           ].map(s => (
             <button key={s.label}
               onClick={() => {
@@ -329,6 +333,7 @@ export default function AdminShopsPage() {
                   const next = filters.status === s.filterVal ? "all" : s.filterVal as Filters["status"];
                   setFilter("status", next);
                   if (s.filterVal === "deleted" && !showDeleted) { setShowDeleted(true); loadShops(token, true); }
+                  if (s.filterVal === "rejected" && showDeleted) { setShowDeleted(false); loadShops(token, false); }
                 } else if (s.filterKey === "health") {
                   setFilter("health", filters.health === s.filterVal ? "all" : s.filterVal as Health);
                 }
@@ -355,7 +360,7 @@ export default function AdminShopsPage() {
         <div className="grid grid-cols-2 gap-2">
           {[
             { key: "health",   label: "Health",   options: [["all","All Health"],["healthy","Healthy"],["needs_attention","Needs Action"],["dead","Dead"]] },
-            { key: "status",   label: "Status",   options: [["all","All Status"],["pending","Pending"],["approved","Approved"],["deleted","Deleted"]] },
+            { key: "status",   label: "Status",   options: [["all","All Status"],["pending","Pending"],["rejected","Rejected"],["approved","Approved"],["deleted","Deleted"]] },
             { key: "active",   label: "Active",   options: [["all","All"],["active","Active"],["inactive","Inactive"]] },
             { key: "offer",    label: "Offer",    options: [["all","All Offers"],["has_offer","Has Offer"],["no_offer","No Offer"]] },
             { key: "locality", label: "Locality", options: [["","All Localities"], ...localities] },
@@ -390,10 +395,11 @@ export default function AdminShopsPage() {
 
         {/* Shop cards */}
         {!loading && filtered.map(shop => {
-          const h         = healthMap.get(shop.id) ?? "needs_attention";
-          const hc        = HEALTH[h];
-          const isPending = !shop.is_approved && !shop.deleted_at;
-          const isDeleted = !!shop.deleted_at;
+          const h          = healthMap.get(shop.id) ?? "needs_attention";
+          const hc         = HEALTH[h];
+          const isDeleted  = !!shop.deleted_at;
+          const isRejected = !shop.is_approved && !shop.deleted_at && !!shop.rejected_at;
+          const isPending  = !shop.is_approved && !shop.deleted_at && !shop.rejected_at;
           const isActing  = acting === shop.id;
 
           const ownerName  = shop.vendor?.owner?.name ?? null;
@@ -402,10 +408,12 @@ export default function AdminShopsPage() {
 
           const cardBorder = isDeleted
             ? "rgba(100,116,139,0.35)"
-            : isPending ? "rgba(167,139,250,0.30)" : hc.border;
+            : isRejected ? "rgba(239,68,68,0.30)"
+            : isPending  ? "rgba(167,139,250,0.30)" : hc.border;
           const cardBg = isDeleted
             ? "rgba(100,116,139,0.06)"
-            : isPending ? "rgba(167,139,250,0.06)" : hc.bg;
+            : isRejected ? "rgba(239,68,68,0.06)"
+            : isPending  ? "rgba(167,139,250,0.06)" : hc.bg;
 
           const activeOffers = shop.offers.filter(o => o.is_active && (!o.ends_at || new Date(o.ends_at) > new Date()));
 
@@ -431,10 +439,12 @@ export default function AdminShopsPage() {
                     <span className="text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-full"
                       style={isDeleted
                         ? { background: "rgba(100,116,139,0.15)", color: "#64748b", border: "1px solid rgba(100,116,139,0.30)" }
-                        : { background: isPending ? "rgba(167,139,250,0.15)" : hc.bg,
-                            color: isPending ? "#a78bfa" : hc.color,
-                            border: `1px solid ${isPending ? "rgba(167,139,250,0.30)" : hc.border}` }}>
-                      {isDeleted ? "🗑 Deleted" : isPending ? "⏳ Pending" : hc.label}
+                        : isRejected
+                        ? { background: "rgba(239,68,68,0.15)", color: "#f87171", border: "1px solid rgba(239,68,68,0.30)" }
+                        : isPending
+                        ? { background: "rgba(167,139,250,0.15)", color: "#a78bfa", border: "1px solid rgba(167,139,250,0.30)" }
+                        : { background: hc.bg, color: hc.color, border: `1px solid ${hc.border}` }}>
+                      {isDeleted ? "🗑 Deleted" : isRejected ? "✕ Rejected" : isPending ? "⏳ Pending" : hc.label}
                     </span>
                   </div>
                   <p className="text-xs mt-0.5" style={{ color: "var(--t3)" }}>
@@ -511,9 +521,13 @@ export default function AdminShopsPage() {
                   />
                 ) : (
                   <>
-                    {!shop.is_approved ? (
+                    {isRejected ? (
+                      <ActionBtn label={isActing ? "…" : "↩ Re-approve"} disabled={isActing}
+                        style={{ background: "#1FBB5A", color: "#fff" }}
+                        onClick={() => handleAction(shop.id, "approve")} />
+                    ) : !shop.is_approved ? (
                       <>
-                        <ActionBtn label="✕ Reject" disabled={isActing}
+                        <ActionBtn label={isActing ? "…" : "✕ Reject"} disabled={isActing}
                           style={{ background: "rgba(239,68,68,0.09)", color: "#f87171", border: "1px solid rgba(239,68,68,0.20)" }}
                           onClick={() => handleAction(shop.id, "reject")} />
                         <ActionBtn label={isActing ? "…" : "✓ Approve"} disabled={isActing}
