@@ -3,8 +3,6 @@
   "target": {
     "namespace": "android_app",
     "package_name": "in.apnamap.app",
-    "sha256_cert_fingerprints": [
-      "65:24:83:A8:E8:99:81:DD:9D:54:51:9D:7E:D8:ED:5D:28:FC:69:75:1F:BE:88:D8:AF:4F:D6:09:A3:AD:C6:70"
-    ]
+    "sha256_cert_fingerprints": ["46:76:B8:7C:20:3C:E3:BE:B2:06:2E:71:D2:2B:E3:21:A4:26:D4:61:B1:21:22:50:36:13:98:AF:FB:94:CF:D7"]
   }
 }]
